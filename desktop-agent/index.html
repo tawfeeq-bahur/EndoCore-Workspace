@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tokyo Activity Agent</title>
+  <style>
+    body {
+      background-color: #09090b;
+      color: #e4e4e7;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      box-sizing: border-box;
+      justify-content: center;
+    }
+    h1 {
+      font-family: Georgia, serif;
+      font-style: italic;
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 2px;
+      font-size: 36px;
+      letter-spacing: -0.5px;
+      color: white;
+    }
+    p.subtitle {
+      text-align: center;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: #71717a;
+      margin-top: 0;
+      margin-bottom: 32px;
+      font-weight: bold;
+    }
+    .form-group {
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #71717a;
+      margin-bottom: 8px;
+      font-weight: 650;
+    }
+    input {
+      background-color: #121215;
+      border: 1px solid #222227;
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: white;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+    input:focus {
+      border-color: #52525b;
+      background-color: #16161a;
+    }
+    button {
+      background-color: #e4e4e7;
+      color: #09090b;
+      border: none;
+      border-radius: 10px;
+      padding: 14px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      transition: background-color 0.2s, transform 0.1s;
+      margin-top: 12px;
+    }
+    button:hover {
+      background-color: #d4d4d8;
+    }
+    button:active {
+      transform: scale(0.98);
+    }
+    button.stop {
+      background-color: #7f1d1d;
+      color: #fca5a5;
+      border: 1px solid #b91c1c;
+    }
+    button.stop:hover {
+      background-color: #991b1b;
+    }
+    .status-card {
+      background-color: #121215;
+      border: 1px solid #222227;
+      border-radius: 16px;
+      padding: 20px;
+      margin-top: 10px;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-family: monospace;
+      color: #a1a1aa;
+      border-b: 1px solid #222227;
+      padding-bottom: 8px;
+    }
+    .status-value {
+      color: white;
+      font-weight: bold;
+    }
+    .error-msg {
+      color: #ef4444;
+      font-size: 11px;
+      text-align: center;
+      margin-top: 12px;
+      font-family: monospace;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Tokyo.</h1>
+  <p class="subtitle">Agent Pipeline</p>
+
+  <div id="auth-section">
+    <div class="form-group">
+      <label>Backend API URL</label>
+      <input type="text" id="backend-url" value="http://localhost:3000">
+    </div>
+    <div class="form-group">
+      <label>Workspace Email</label>
+      <input type="email" id="email" placeholder="name@email.com">
+    </div>
+    <div class="form-group">
+      <label>Workspace Password</label>
+      <input type="password" id="password" placeholder="••••••••">
+    </div>
+    <button id="login-btn">Connect Pipeline</button>
+    <div class="error-msg" id="error-box"></div>
+  </div>
+
+  <div class="status-card" id="status-section">
+    <div class="status-row" style="border-bottom: 1px solid #222227; padding-bottom: 10px;">
+      <span>Connected As</span>
+      <span class="status-value" id="user-display">-</span>
+    </div>
+    <div class="status-row" style="border-bottom: 1px solid #222227; padding-bottom: 10px; margin-top: 4px;">
+      <span>Pipeline Status</span>
+      <span class="status-value" id="tracking-status" style="color: #ef4444;">IDLE</span>
+    </div>
+    
+    <div style="margin-top: 4px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid #222227; padding-bottom: 14px;">
+      <label style="font-size: 8px; color: #71717a; letter-spacing: 1px; font-weight: bold; margin-bottom: 4px;">BROADCAST TARGETS</label>
+      <div id="rooms-container" style="display: flex; flex-direction: column; gap: 6px; font-size: 11px; font-family: monospace;">
+        <!-- Checkboxes will be injected dynamically -->
+      </div>
+    </div>
+
+    <button id="track-btn">Start Live Tracking</button>
+    <button id="disconnect-btn" style="background-color: transparent; border: 1px solid #222227; color: #a1a1aa; margin-top: 8px;">Disconnect</button>
+  </div>
+
+  <script>
+    const backendUrlInput = document.getElementById('backend-url');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+    const errorBox = document.getElementById('error-box');
+
+    const authSection = document.getElementById('auth-section');
+    const statusSection = document.getElementById('status-section');
+    
+    const userDisplay = document.getElementById('user-display');
+    const trackingStatus = document.getElementById('tracking-status');
+    const trackBtn = document.getElementById('track-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+
+    let token = '';
+    let email = '';
+    let isTracking = false;
+
+    async function loadRooms(backendUrl, token, userId, broadcastGroupsStr) {
+      const roomsContainer = document.getElementById('rooms-container');
+      roomsContainer.innerHTML = '<span style="color: #71717a;">Loading rooms...</span>';
+      
+      try {
+        const res = await fetch(`${backendUrl}/api/groups`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to load rooms');
+        
+        const groups = await res.json();
+        
+        // Filter groups where user is a member
+        const myGroups = groups.filter(g => g.members.includes(userId));
+        
+        if (myGroups.length === 0) {
+          roomsContainer.innerHTML = '<span style="color: #71717a;">No rooms joined</span>';
+          return;
+        }
+
+        const activeBroadcasts = broadcastGroupsStr ? broadcastGroupsStr.split(',').map(g => g.trim()) : [];
+        
+        roomsContainer.innerHTML = '';
+        myGroups.forEach(g => {
+          const isChecked = activeBroadcasts.includes(g.name) || activeBroadcasts.length === 0;
+          
+          const label = document.createElement('label');
+          label.style.display = 'flex';
+          label.style.alignItems = 'center';
+          label.style.gap = '8px';
+          label.style.cursor = 'pointer';
+          label.style.textTransform = 'none';
+          label.style.letterSpacing = 'normal';
+          label.style.color = '#e4e4e7';
+          label.style.fontSize = '12px';
+          
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = g.name;
+          checkbox.checked = isChecked;
+          checkbox.style.width = '14px';
+          checkbox.style.height = '14px';
+          checkbox.style.cursor = 'pointer';
+          
+          checkbox.style.backgroundColor = '#121215';
+          checkbox.style.border = '1px solid #222227';
+          checkbox.style.borderRadius = '3px';
+          
+          checkbox.addEventListener('change', async () => {
+            // Collect checked rooms
+            const checkedBoxes = roomsContainer.querySelectorAll('input[type="checkbox"]:checked');
+            const selectedRooms = Array.from(checkedBoxes).map(cb => cb.value);
+            
+            try {
+              await fetch(`${backendUrl}/api/user/broadcast-groups`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ groups: selectedRooms })
+              });
+            } catch (err) {
+              console.error('Failed to update broadcast groups:', err.message);
+            }
+          });
+          
+          label.appendChild(checkbox);
+          label.appendChild(document.createTextNode(g.name));
+          roomsContainer.appendChild(label);
+        });
+
+      } catch (err) {
+        roomsContainer.innerHTML = `<span style="color: #ef4444;">Error: ${err.message}</span>`;
+      }
+    }
+
+    loginBtn.addEventListener('click', async () => {
+      const backendUrl = backendUrlInput.value.trim();
+      const emailVal = emailInput.value.trim();
+      const passwordVal = passwordInput.value;
+
+      errorBox.textContent = '';
+
+      if (!backendUrl || !emailVal || !passwordVal) {
+        errorBox.textContent = 'All fields are required';
+        return;
+      }
+
+      try {
+        loginBtn.textContent = 'Verifying Clearance...';
+        const res = await fetch(`${backendUrl}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailVal, password: passwordVal })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Connection failed');
+
+        token = data.token;
+        email = emailVal;
+
+        window.electronAPI.saveConfig({
+          backendUrl,
+          token,
+          email
+        });
+
+        authSection.style.display = 'none';
+        statusSection.style.display = 'flex';
+        userDisplay.textContent = data.user.name;
+
+        // Load the joined rooms for checkbox selection
+        await loadRooms(backendUrl, token, data.user.id, data.user.broadcastGroups);
+
+      } catch (err) {
+        errorBox.textContent = err.message;
+      } finally {
+        loginBtn.textContent = 'Connect Pipeline';
+      }
+    });
+
+    trackBtn.addEventListener('click', () => {
+      if (!isTracking) {
+        window.electronAPI.startTracking();
+      } else {
+        window.electronAPI.stopTracking();
+      }
+    });
+
+    disconnectBtn.addEventListener('click', () => {
+      window.electronAPI.stopTracking();
+      token = '';
+      email = '';
+      authSection.style.display = 'block';
+      statusSection.style.display = 'none';
+      emailInput.value = '';
+      passwordInput.value = '';
+    });
+
+    window.electronAPI.onTrackingState((state) => {
+      isTracking = state.isTracking;
+      if (isTracking) {
+        trackingStatus.textContent = 'STREAMING 🟢';
+        trackingStatus.style.color = '#10b981';
+        trackBtn.textContent = 'Pause Stream';
+        trackBtn.classList.add('stop');
+      } else {
+        trackingStatus.textContent = 'IDLE ⏸';
+        trackingStatus.style.color = '#ef4444';
+        trackBtn.textContent = 'Resume Stream';
+        trackBtn.classList.remove('stop');
+      }
+    });
+  </script>
+</body>
+</html>

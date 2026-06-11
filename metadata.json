@@ -1,0 +1,6 @@
+{
+  "name": "EndoCore Workspace",
+  "description": "A real-time developer activity dashboard showcasing friends' current projects, apps, and statuses with smart AI-powered productivity summaries and insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

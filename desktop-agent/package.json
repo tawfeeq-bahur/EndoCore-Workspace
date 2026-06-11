@@ -1,0 +1,16 @@
+{
+  "name": "endocore-agent",
+  "version": "1.0.0",
+  "description": "Background active window tracking agent for EndoCore Workspace",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "active-win": "^8.2.1",
+    "axios": "^1.17.0"
+  },
+  "devDependencies": {
+    "electron": "^42.4.0"
+  }
+}

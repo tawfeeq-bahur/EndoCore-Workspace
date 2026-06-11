@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                         String         @id @default(uuid())
+  name                       String
+  email                      String         @unique
+  passwordHash               String
+  avatarUrl                  String         @default("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80")
+  activeGroup                String         @default("Engineering Group")
+  privacyMode                String         @default("Public")
+  deviceConnected            String         @default("WS-WORKSTATION-11")
+  productivityGoal           Int            @default(6)
+  customStatus               String         @default("")
+  theme                      String         @default("endocore-dark")
+  friendUpdatesNotification  Boolean        @default(true)
+  breakRemindersNotification Boolean        @default(true)
+  aiNudgesNotification       Boolean        @default(true)
+  createdAt                  DateTime       @default(now())
+  status                     String         @default("online") // online, busy, away, focus, offline
+  role                       String         @default("Software Developer")
+  broadcastGroups            String         @default("Engineering Group")
+  lastHeartbeat              DateTime       @default(now())
+  distractionsCount          Int            @default(0)
+  focusStreak                Int            @default(0)
+  lastFocusDate              String         @default("")
+
+  activities                 Activity[]
+  memberships                GroupMember[]
+  activityLogs               ActivityLog[]
+}
+
+model Group {
+  id          String        @id @default(uuid())
+  name        String        @unique
+  description String
+  createdAt   DateTime      @default(now())
+  members     GroupMember[]
+}
+
+model GroupMember {
+  userId  String
+  groupId String
+  role    String @default("member") // admin, member
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+}
+
+model Activity {
+  id              String   @id @default(uuid())
+  userId          String
+  app             String
+  project         String
+  startedAt       DateTime @default(now())
+  durationSeconds Int      @default(0)
+  isPaused        Boolean  @default(false)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id           String   @id @default(uuid())
+  userId       String
+  app          String
+  project      String
+  timestamp    DateTime @default(now())
+  durationText String   @default("Running...")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  userName  String
+  avatarUrl String   @default("")
+  message   String
+  timestamp DateTime @default(now())
+}
