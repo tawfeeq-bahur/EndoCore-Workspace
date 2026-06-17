@@ -75,6 +75,10 @@ export default function App() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
   const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [roomsOccupants, setRoomsOccupants] = useState<Record<string, Friend[]>>({});
+  const [roomsLastMessage, setRoomsLastMessage] = useState<Record<string, ChatMessage | null>>({});
+  const [hubTab, setHubTab] = useState<"timeline" | "rooms">("timeline");
+  const groupsRef = useRef<Group[]>([]);
   
   // Asynchronous Loading Flags
   const [loadingInsights, setLoadingInsights] = useState<boolean>(false);
@@ -102,6 +106,11 @@ export default function App() {
   const [authName, setAuthName] = useState<string>("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [electronTracking, setElectronTracking] = useState<boolean>(false);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
 
   const getAuthHeaders = () => {
     return {
@@ -136,6 +145,9 @@ export default function App() {
       fetchActivity();
       silentFetchAnalytics();
       fetchProfile();
+      if (groupsRef.current.length > 0) {
+        fetchAllRoomsDetails(groupsRef.current);
+      }
     }, 8000);
 
     // Initialize Socket.io connection
@@ -274,9 +286,212 @@ export default function App() {
       const res = await fetch("/api/groups", { headers: getAuthHeaders() });
       const data = await res.json();
       setGroups(data);
+      if (Array.isArray(data) && data.length > 0) {
+        fetchAllRoomsDetails(data);
+      }
     } catch (e) {
       console.error("API Fetch Error (Groups):", e);
     }
+  };
+
+  const fetchAllRoomsDetails = async (rooms: Group[]) => {
+    try {
+      const occupantsMap: Record<string, Friend[]> = {};
+      const lastMsgMap: Record<string, ChatMessage | null> = {};
+      
+      await Promise.all(
+        rooms.map(async (group) => {
+          // Fetch occupants
+          const friendsRes = await fetch(`/api/friends?group=${encodeURIComponent(group.name)}`, { headers: getAuthHeaders() });
+          if (friendsRes.ok) {
+            const data = await friendsRes.json();
+            occupantsMap[group.name] = data;
+          }
+          
+          // Fetch chat
+          const chatRes = await fetch(`/api/chat/${group.id}`, { headers: getAuthHeaders() });
+          if (chatRes.ok) {
+            const messages = await chatRes.json();
+            if (Array.isArray(messages) && messages.length > 0) {
+              lastMsgMap[group.name] = messages[messages.length - 1];
+            } else {
+              lastMsgMap[group.name] = null;
+            }
+          }
+        })
+      );
+      
+      setRoomsOccupants(occupantsMap);
+      setRoomsLastMessage(lastMsgMap);
+    } catch (e) {
+      console.error("Error fetching all rooms details:", e);
+    }
+  };
+
+  const toggleRoomSync = async (roomName: string, currentlyEnabled: boolean) => {
+    try {
+      let activeBroadcasts = user?.broadcastGroups 
+        ? user.broadcastGroups.split(",").map(g => g.trim()).filter(Boolean)
+        : [];
+      
+      let updatedGroups: string[];
+      if (currentlyEnabled) {
+        // Remove room
+        updatedGroups = activeBroadcasts.filter(g => g !== roomName);
+      } else {
+        // Add room if not present
+        updatedGroups = [...activeBroadcasts];
+        if (!updatedGroups.includes(roomName)) {
+          updatedGroups.push(roomName);
+        }
+      }
+
+      const res = await fetch("/api/user/broadcast-groups", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ groups: updatedGroups })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUser(prev => prev ? { ...prev, broadcastGroups: data.broadcastGroups } : null);
+        triggerToast(`${currentlyEnabled ? "Disabled" : "Enabled"} sync broadcasting for #${roomName}`);
+        
+        // Refresh occupants map
+        if (groupsRef.current.length > 0) {
+          fetchAllRoomsDetails(groupsRef.current);
+        }
+      }
+    } catch (e) {
+      console.error("API Broadcast Groups Update Error:", e);
+    }
+  };
+
+  const getAppColor = (app: string) => {
+    const colors: Record<string, string> = {
+      "VS Code": "bg-blue-500",
+      "Chrome": "bg-emerald-500",
+      "Google Chrome": "bg-emerald-500",
+      "Figma": "bg-pink-500",
+      "Terminal": "bg-zinc-500",
+      "Spotify": "bg-purple-500",
+      "Slack": "bg-amber-500",
+      "Electron": "bg-indigo-500",
+    };
+    return colors[app] || "bg-stone-500";
+  };
+
+  const getTodayWorkBreakdown = () => {
+    if (!analytics || !analytics.appBreakdown) return [];
+    return analytics.appBreakdown.map(item => {
+      const minutes = item.value;
+      const hoursText = minutes >= 60 ? `${(minutes / 60).toFixed(1)} hrs` : `${minutes} mins`;
+      return {
+        app: item.name,
+        seconds: minutes * 60,
+        hoursText,
+        color: item.color
+      };
+    });
+  };
+
+  const renderTimelineItemText = (item: { text: string; app?: string; project?: string; type: string }) => {
+    if (item.type === "app_focus" && item.app) {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
+          <span>Started focus in</span>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-blue-550/10 text-blue-400 border border-blue-500/20 shadow-sm">
+            {item.app}
+          </span>
+          {item.project && (
+            <>
+              <span>on</span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-emerald-550/10 text-emerald-450 border border-emerald-500/20 shadow-sm max-w-[200px] truncate" title={item.project}>
+                {item.project}
+              </span>
+            </>
+          )}
+        </div>
+      );
+    }
+    
+    if (item.type === "room_entry" && item.project) {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
+          <span>Entered workspace room</span>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-purple-550/10 text-purple-400 border border-purple-500/20 shadow-sm">
+            #{item.project}
+          </span>
+        </div>
+      );
+    }
+
+    if (item.type === "pomodoro") {
+      return (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
+          <span>Completed focus sprint</span>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-amber-550/10 text-amber-400 border border-amber-500/20 shadow-sm">
+            Pomodoro block
+          </span>
+        </div>
+      );
+    }
+
+    return <span className="text-stone-300">{item.text}</span>;
+  };
+
+  const getGroupedEvents = () => {
+    const todayStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+    const allEvents: Array<{ date: string; time: string; text: string; app?: string; project?: string; type: string }> = [];
+
+    if (user?.timeline) {
+      user.timeline.forEach(item => {
+        allEvents.push({
+          date: item.date || todayStr,
+          time: item.time,
+          text: `Started focus in ${item.app} — ${item.project}`,
+          app: item.app,
+          project: item.project,
+          type: "app_focus"
+        });
+      });
+    }
+
+    if (user?.activeGroup) {
+      allEvents.push({
+        date: todayStr,
+        time: "11:00 AM",
+        text: `Entered workspace room: "${user.activeGroup}"`,
+        project: user.activeGroup,
+        type: "room_entry"
+      });
+    }
+
+    if (pomodoroSessionCount > 0) {
+      allEvents.push({
+        date: todayStr,
+        time: "10:25 AM",
+        text: `Completed focus sprint (Pomodoro block)`,
+        type: "pomodoro"
+      });
+    }
+
+    const groupsMap: Record<string, typeof allEvents> = {};
+    allEvents.forEach(evt => {
+      let groupLabel = evt.date;
+      if (evt.date === todayStr) groupLabel = "Today";
+      else if (evt.date === yesterdayStr) groupLabel = "Yesterday";
+      
+      if (!groupsMap[groupLabel]) {
+        groupsMap[groupLabel] = [];
+      }
+      groupsMap[groupLabel].push(evt);
+    });
+
+    return Object.entries(groupsMap);
   };
 
   const fetchAiBriefing = async (force: boolean = false) => {
@@ -1468,40 +1683,275 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Right Column: Personal Recent Focus Timeline */}
-                    <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} flex flex-col justify-between`}>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between border-b dark:border-[#222227] border-stone-200/50 pb-2">
-                          <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400 flex items-center">
-                            <Activity className="h-4 w-4 mr-1.5 text-zinc-500" />
-                            Recent Focus Timeline
-                          </h3>
-                          <span className="text-[10px] font-mono text-zinc-500">My sessions</span>
+                    {/* Right Column: Unified Sync & Room Hub */}
+                    <div className="space-y-6">
+                      <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} space-y-6 flex flex-col justify-between`}>
+                        {/* Tab Switcher */}
+                        <div className="flex items-center justify-between border-b dark:border-[#222227] border-stone-200/50 pb-4">
+                          <div className="flex space-x-4">
+                            <button
+                              onClick={() => setHubTab("timeline")}
+                              className={`text-xs font-semibold font-mono tracking-widest uppercase pb-2 border-b-2 transition-all cursor-pointer ${
+                                hubTab === "timeline"
+                                  ? "text-white border-white dark:border-white"
+                                  : "text-zinc-500 border-transparent hover:text-zinc-300"
+                              }`}
+                            >
+                              Timeline
+                            </button>
+                            <button
+                              onClick={() => setHubTab("rooms")}
+                              className={`text-xs font-semibold font-mono tracking-widest uppercase pb-2 border-b-2 transition-all cursor-pointer ${
+                                hubTab === "rooms"
+                                  ? "text-white border-white dark:border-white"
+                                  : "text-zinc-500 border-transparent hover:text-zinc-300"
+                              }`}
+                            >
+                              Rooms & Sync
+                            </button>
+                          </div>
+                          <span className="text-[10px] font-mono text-zinc-550 dark:text-zinc-450 uppercase tracking-widest">
+                            {hubTab === "timeline" ? "Personal Activity" : "Live Workspace"}
+                          </span>
                         </div>
 
-                        <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
-                          {user?.timeline && user.timeline.length > 0 ? (
-                            user.timeline.map((item, idx) => (
-                              <div key={idx} className="flex items-start space-x-3 text-xs border-b dark:border-zinc-900 border-stone-150 pb-3 last:border-0 last:pb-0">
-                                <div className="h-2 w-2 rounded-full bg-emerald-500 mt-1.5 shrink-0 animate-pulse" />
-                                <div className="flex-1 min-w-0 space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <span className="font-mono font-semibold text-[#e4e4e7] truncate">{item.app}</span>
-                                    <span className="font-mono text-[9px] text-zinc-500 shrink-0">{item.time}</span>
-                                  </div>
-                                  <p className="text-[11px] text-zinc-400 truncate leading-snug">{item.project}</p>
-                                  <span className="text-[9px] font-mono text-zinc-550 dark:text-zinc-450 bg-stone-100 dark:bg-zinc-800/40 border dark:border-neutral-800/50 border-neutral-250 px-1.5 py-0.5 rounded inline-block mt-0.5">
-                                    {item.duration} elapsed
-                                  </span>
-                                </div>
+                        {hubTab === "timeline" && (
+                          <div className="space-y-6">
+                            {/* Today's Work Breakdown Card (Inlined) */}
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-mono text-stone-550 dark:text-stone-400 uppercase tracking-widest block">Today's Work Breakdown</span>
+                                <span className="text-[10px] font-mono text-zinc-550 dark:text-zinc-450">Distribution</span>
                               </div>
-                            ))
-                          ) : (
-                            <div className="text-stone-550 text-xs font-mono py-12 text-center">
-                              No recent focus sessions logged. Start tracking to populate timeline!
+
+                              <div className="space-y-3">
+                                {(() => {
+                                  const todayBreakdown = getTodayWorkBreakdown();
+                                  const maxSeconds = todayBreakdown.length > 0 ? Math.max(...todayBreakdown.map(x => x.seconds)) : 1;
+
+                                  if (todayBreakdown.length === 0) {
+                                    return (
+                                      <div className="text-stone-550 text-xs font-mono py-2 text-center">
+                                        No activity tracked today yet.
+                                      </div>
+                                    );
+                                  }
+
+                                  return todayBreakdown.map((item, idx) => {
+                                    const percent = Math.min(100, Math.round((item.seconds / maxSeconds) * 100));
+                                    return (
+                                      <div key={idx} className="space-y-1">
+                                        <div className="flex justify-between items-center text-xs">
+                                          <span className="font-mono font-semibold truncate flex items-center space-x-2">
+                                            <span className={`h-2 w-2 rounded-full ${getAppColor(item.app)} shrink-0`}></span>
+                                            <span>{item.app}</span>
+                                          </span>
+                                          <span className="font-mono text-[10px] text-zinc-500 shrink-0">{item.hoursText}</span>
+                                        </div>
+                                        <div className="h-1.5 bg-[#f5f4ef] dark:bg-stone-900 rounded-full overflow-hidden border dark:border-neutral-850 border-stone-200/50">
+                                          <div 
+                                            className={`h-full ${getAppColor(item.app)} rounded-full transition-all duration-700`}
+                                            style={{ width: `${percent}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
                             </div>
-                          )}
-                        </div>
+
+                            <hr className="border-stone-200/50 dark:border-[#222227]" />
+
+                            {/* Daily Activity Feed */}
+                            <div className="space-y-4">
+                              <div className="flex items-center justify-between pb-2">
+                                <h4 className="text-[10px] font-mono uppercase tracking-widest text-[#a1a1aa] flex items-center">
+                                  <Target className="h-4 w-4 mr-1.5 text-zinc-500" />
+                                  Recent Activity Logs
+                                </h4>
+                                <span className="text-[9px] font-mono text-zinc-550 dark:text-zinc-450">Timeline</span>
+                              </div>
+
+                              <div className="space-y-6 max-h-[350px] overflow-y-auto pr-1">
+                                {(() => {
+                                  const grouped = getGroupedEvents();
+
+                                  if (grouped.length === 0) {
+                                    return (
+                                      <p className="text-stone-550 text-xs italic text-center py-12 font-mono">
+                                        No activities logged yet.
+                                      </p>
+                                    );
+                                  }
+
+                                  return grouped.map(([groupLabel, items]) => (
+                                    <div key={groupLabel} className="space-y-3">
+                                      {/* Group Label */}
+                                      <h4 className="text-[10px] font-bold font-mono tracking-wider text-zinc-500 uppercase flex items-center">
+                                        <span className="bg-zinc-200 dark:bg-zinc-800/80 px-2.5 py-0.5 rounded-full text-[9px] font-medium text-stone-550 dark:text-stone-450">
+                                          {groupLabel}
+                                        </span>
+                                      </h4>
+
+                                      {/* Items list with vertical connector */}
+                                      <div className="relative pl-6 border-l border-zinc-200 dark:border-zinc-800/80 ml-3 space-y-4">
+                                        {items.map((item, idx) => {
+                                          return (
+                                            <div key={idx} className="relative">
+                                              {/* Timeline dot */}
+                                              <div className="absolute -left-[29px] top-1.5 h-2 w-2 rounded-full bg-emerald-500 border border-[#121215] dark:border-[#121215] shadow-sm animate-pulse" />
+                                              <div className="flex flex-col space-y-0.5">
+                                                <div className="flex items-start justify-between">
+                                                  {renderTimelineItemText(item)}
+                                                  <span className="font-mono text-[9px] text-zinc-500 shrink-0 ml-2 mt-0.5">{item.time}</span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ));
+                                })()}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {hubTab === "rooms" && (
+                          <div className="space-y-6 max-h-[550px] overflow-y-auto pr-1">
+                            {groups.length === 0 ? (
+                              <p className="text-stone-550 text-xs italic text-center py-12 font-mono">
+                                No workspace rooms joined.
+                              </p>
+                            ) : (
+                              groups.map((group) => {
+                                const isSyncing = user?.broadcastGroups
+                                  ? user.broadcastGroups.split(",").map(g => g.trim()).includes(group.name)
+                                  : false;
+                                const occupants = roomsOccupants[group.name] || [];
+                                const lastMessage = roomsLastMessage[group.name];
+
+                                return (
+                                  <div 
+                                    key={group.id} 
+                                    className={`p-4 rounded-2xl border ${bgInternal} dark:border-[#222227] space-y-4 transition-all hover:border-zinc-700/50`}
+                                  >
+                                    {/* Room Header with Toggle Sync */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex flex-col min-w-0">
+                                        <div className="flex items-center space-x-1.5">
+                                          <span className="text-zinc-550 font-mono">#</span>
+                                          <span className="font-mono text-xs font-bold text-stone-350 truncate">{group.name}</span>
+                                        </div>
+                                        <span className="text-[9px] text-zinc-550 dark:text-zinc-450 truncate mt-0.5 font-mono">{group.description}</span>
+                                      </div>
+
+                                      <div className="flex items-center space-x-2">
+                                        <span className={`text-[9px] font-mono tracking-widest uppercase ${isSyncing ? "text-emerald-450" : "text-stone-500"}`}>
+                                          {isSyncing ? "Syncing" : "Muted"}
+                                        </span>
+                                        <button
+                                          onClick={() => toggleRoomSync(group.name, isSyncing)}
+                                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-zinc-700/30 transition-colors duration-200 ease-in-out focus:outline-none ${
+                                            isSyncing ? "bg-emerald-500" : "bg-zinc-800"
+                                          }`}
+                                          title={isSyncing ? "Turn off telemetry syncing to this room" : "Turn on telemetry syncing to this room"}
+                                        >
+                                          <span
+                                            aria-hidden="true"
+                                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                              isSyncing ? "translate-x-4" : "translate-x-0"
+                                            }`}
+                                          />
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Room Occupants Status */}
+                                    <div className="space-y-2 border-t border-b dark:border-[#222227]/60 border-stone-200/50 py-3">
+                                      <span className="text-[9px] font-mono text-zinc-550 dark:text-zinc-450 uppercase tracking-widest block">Room Members Activity</span>
+                                      {occupants.length === 0 ? (
+                                        <p className="text-[10px] text-stone-550 font-mono italic">No other occupants in room</p>
+                                      ) : (
+                                        <div className="space-y-2.5">
+                                          {occupants.map((occ) => {
+                                            const isOnline = occ.status !== "offline";
+                                            const activityApp = occ.currentActivity?.app || "Offline";
+                                            const activityProject = occ.currentActivity?.project || "None";
+                                            const duration = occ.currentActivity?.durationText || "";
+
+                                            return (
+                                              <div key={occ.id} className="flex items-center justify-between text-[11px] font-mono">
+                                                <div className="flex items-center space-x-2 min-w-0">
+                                                  <div className="relative">
+                                                    <img 
+                                                      src={occ.avatarUrl} 
+                                                      alt={occ.name} 
+                                                      className="h-5 w-5 rounded-full object-cover border dark:border-neutral-850 border-neutral-200" 
+                                                    />
+                                                    <span className={`absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-black ${
+                                                      isOnline ? "bg-emerald-500" : "bg-zinc-650"
+                                                    }`} />
+                                                  </div>
+                                                  <span className="font-semibold text-stone-300 truncate">{occ.name}</span>
+                                                </div>
+
+                                                <div className="flex items-center space-x-1.5 shrink-0 text-zinc-400">
+                                                  {isOnline ? (
+                                                    <>
+                                                      <span className="bg-zinc-800 text-zinc-300 px-1.5 py-0.5 rounded text-[9px] font-medium border border-zinc-700/50">
+                                                        {activityApp}
+                                                      </span>
+                                                      {activityProject !== "None" && (
+                                                        <span className="text-[9px] text-zinc-550 dark:text-zinc-450 max-w-[80px] truncate" title={activityProject}>
+                                                          ({activityProject})
+                                                        </span>
+                                                      )}
+                                                      <span className="text-[9px] text-zinc-550 dark:text-zinc-450">{duration}</span>
+                                                    </>
+                                                  ) : (
+                                                    <span className="text-[9px] text-zinc-650">offline</span>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Room Chat Summary */}
+                                    <div className="space-y-1">
+                                      <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest block">Latest Message</span>
+                                      {lastMessage ? (
+                                        <div className="bg-black/10 dark:bg-[#121215]/40 rounded-xl p-2.5 border dark:border-[#222227]/50 border-stone-200/30 flex items-start space-x-2">
+                                          <img 
+                                            src={lastMessage.avatarUrl} 
+                                            alt={lastMessage.userName} 
+                                            className="h-4.5 w-4.5 rounded-full object-cover shrink-0 mt-0.5" 
+                                          />
+                                          <div className="min-w-0 flex-1 font-mono text-[10px]">
+                                            <div className="flex justify-between items-center">
+                                              <span className="font-semibold text-stone-350">{lastMessage.userName}</span>
+                                              <span className="text-[8px] text-zinc-500">
+                                                {new Date(lastMessage.timestamp).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                              </span>
+                                            </div>
+                                            <p className="text-stone-450 truncate mt-0.5">{lastMessage.message}</p>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <p className="text-[10px] text-zinc-550 font-mono italic">No recent messages</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2096,7 +2546,7 @@ export default function App() {
 
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {Array.isArray(friends) && friends.map((friend) => {
-                                  const styleMeta = getStatusNodeMeta(friend.status);
+                                  const styleMeta = getStatusNodeMeta(friend.status as any);
 
                                   return (
                                     <div 

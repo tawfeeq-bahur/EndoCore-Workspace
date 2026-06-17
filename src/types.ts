@@ -18,9 +18,10 @@ export interface UserProfile {
   productivityGoal: number;
   customStatus: string;
   theme: string;
-  status: "online" | "busy" | "away" | "focus" | "offline";
+  status: string;
   distractionsCount: number;
   focusStreak: number;
+  broadcastGroups?: string;
   notifications: {
     friendUpdates: boolean;
     breakReminders: boolean;
@@ -31,6 +32,7 @@ export interface UserProfile {
 
 export interface TimelineItem {
   time: string;
+  date?: string;
   app: string;
   project: string;
   duration: string;
@@ -41,7 +43,7 @@ export interface Friend {
   name: string;
   role: string;
   avatarUrl: string;
-  status: "online" | "busy" | "away" | "focus" | "offline";
+  status: string;
   currentActivity: {
     app: string;
     project: string;
@@ -97,3 +99,16 @@ export interface ChatMessage {
   message: string;
   timestamp: string;
 }
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      saveConfig: (config: { backendUrl: string; token: string; email: string }) => void;
+      onConfigSaved: (callback: (config: any) => void) => void;
+      startTracking: () => void;
+      stopTracking: () => void;
+      onTrackingState: (callback: (state: { isTracking: boolean }) => void) => void;
+    };
+  }
+}
+

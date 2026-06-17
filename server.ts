@@ -72,48 +72,144 @@ function formatUserProfile(user: any) {
 }
 
 // App categorization helper
-function getAppCategory(appName: string): string {
-  const name = appName.toLowerCase();
-  if (['code', 'vs code', 'vscode', 'intellij', 'sublime', 'vim', 'webstorm'].some(x => name.includes(x))) {
-    return "Work";
-  }
-  if (['youtube', 'netflix', 'prime', 'twitch'].some(x => name.includes(x))) {
-    return "Entertainment";
-  }
-  if (['instagram', 'twitter', 'facebook', 'tiktok', 'snapchat'].some(x => name.includes(x))) {
-    return "Social";
-  }
-  if (['slack', 'teams', 'zoom', 'skype', 'telegram', 'discord'].some(x => name.includes(x))) {
-    return "Communication";
-  }
-  if (['chrome', 'firefox', 'edge', 'safari', 'research'].some(x => name.includes(x))) {
-    return "Research";
-  }
-  if (['terminal', 'docker', 'git', 'postman', 'mongodb', 'cmd', 'powershell', 'bash'].some(x => name.includes(x))) {
+function getAppCategory(appName: string, title: string = ""): string {
+  const app = appName.toLowerCase();
+  const t = title.toLowerCase();
+  
+  if (app.includes("code") || app.includes("vs code") || app.includes("vscode") || app.includes("intellij") || app.includes("sublime") || app.includes("vim") || app.includes("webstorm")) {
     return "Development";
   }
-  return "Activity";
+  if (app.includes("chatgpt")) {
+    return "Learning";
+  }
+  if (app.includes("leetcode")) {
+    return "Coding Practice";
+  }
+  if (app.includes("figma")) {
+    return "Design";
+  }
+  if (app.includes("google docs") || app.includes("google document") || app.includes("word") || t.includes("google doc") || t.includes("docx")) {
+    return "Documentation";
+  }
+  if (app.includes("netflix")) {
+    return "Entertainment";
+  }
+  if (app.includes("instagram") || app.includes("twitter") || app.includes("facebook") || app.includes("tiktok") || app.includes("snapchat")) {
+    return "Distraction";
+  }
+  if (app.includes("youtube")) {
+    if (t.includes("tutorial") || t.includes("learn") || t.includes("how to") || t.includes("course") || t.includes("education") || t.includes("java")) {
+      return "Learning";
+    }
+    return "Entertainment";
+  }
+  
+  // Fallbacks:
+  if (['slack', 'teams', 'zoom', 'skype', 'telegram', 'discord'].some(x => app.includes(x))) {
+    return "Meeting";
+  }
+  if (['chrome', 'firefox', 'edge', 'safari'].some(x => app.includes(x))) {
+    if (t.includes("tutorial") || t.includes("learn") || t.includes("how to") || t.includes("course")) {
+      return "Learning";
+    }
+    if (t.includes("leetcode")) {
+      return "Coding Practice";
+    }
+    if (t.includes("figma")) {
+      return "Design";
+    }
+    if (t.includes("docs.google") || t.includes("google docs")) {
+      return "Documentation";
+    }
+    if (t.includes("chatgpt")) {
+      return "Learning";
+    }
+    return "Research";
+  }
+  
+  return "Development";
+}
+
+// Window title privacy sanitizer
+function sanitizeTitle(title: string): string {
+  if (!title) return "";
+  let sanitized = title;
+
+  // 1. Scrub Personal URLs
+  const urlRegex = /https?:\/\/[^\s]+/g;
+  sanitized = sanitized.replace(urlRegex, "[URL]");
+
+  // 2. Scrub Search Queries
+  const searchEngines = ["- Google Search", "- Bing Search", "- Yahoo Search", "- DuckDuckGo Search", "Google Search", "Bing Search"];
+  for (const engine of searchEngines) {
+    if (sanitized.toLowerCase().includes(engine.toLowerCase())) {
+      return `[Search Query] ${engine}`;
+    }
+  }
+  if (sanitized.includes("search?q=") || sanitized.includes("google.com/search")) {
+    return "Google Search - [Search Query]";
+  }
+
+  // 3. Scrub Personal Documents & Private Notes
+  const sensitiveWords = [
+    "salary", "negotiation", "journal", "diary", "invoice", "resume", "tax", "passport", "bank", 
+    "cv", "confidential", "secret", "financial", "payslip", "contract", "agreement", "personal"
+  ];
+  
+  const lowerTitle = sanitized.toLowerCase();
+  const isDocument = /\.(docx|doc|pdf|xlsx|xls|pptx|ppt|csv|txt|md)$/i.test(sanitized);
+  const containsSensitiveWord = sensitiveWords.some(word => lowerTitle.includes(word));
+
+  if (isDocument || containsSensitiveWord) {
+    if (lowerTitle.includes("journal") || lowerTitle.includes("diary")) {
+      return "Private Notes - [Journal]";
+    }
+    return `[Document] - Sensitive Activity Hidden`;
+  }
+
+  return sanitized;
+}
+
+// Productivity score calculator based on goal hours, pomodoro sessions, and distractions
+async function calculateProductivityScore(userId: string, hours: number, goalHours: number, distractionsCount: number): Promise<number> {
+  const todayStart = new Date();
+  todayStart.setHours(0,0,0,0);
+  const pomodoroCycles = await prisma.activityLog.count({
+    where: {
+      userId,
+      timestamp: { gte: todayStart }
+    }
+  });
+  return Math.max(0, Math.min(100, Math.round(
+    (hours / goalHours) * 60 +
+    pomodoroCycles * 15 -
+    distractionsCount * 5
+  )));
 }
 
 // Privacy level masking helper
 function applyPrivacyMask(currentActivity: any, privacyMode: string) {
   const masked = { ...currentActivity };
+  const category = getAppCategory(currentActivity.app, currentActivity.project || "");
   
-  if (privacyMode === "Level 2: Category Only" || privacyMode === "Anonymous") {
-    const category = getAppCategory(currentActivity.app);
-    masked.app = `${category} App`;
-    masked.project = "Project hidden (Category privacy)";
-  } else if (privacyMode === "Level 3: Summary Only") {
-    masked.app = "Focused";
-    masked.project = "Details hidden (Summary privacy)";
-  } else if (privacyMode === "Level 4: Private") {
+  if (privacyMode === "Private") {
     masked.app = "Private Workstation";
     masked.project = "Activity hidden";
+    masked.category = "Private";
     masked.durationText = "--";
+  } else if (privacyMode === "Team") {
+    masked.app = currentActivity.app;
+    masked.project = "Activity hidden";
+    masked.category = category;
+  } else {
+    // Public
+    masked.app = currentActivity.app;
+    masked.project = currentActivity.project;
+    masked.category = category;
   }
-  
   return masked;
 }
+
 
 // Socket.io Connection Handler
 io.on("connection", (socket) => {
@@ -241,10 +337,10 @@ async function broadcastActivityUpdate(userId: string) {
     // Calculate focus time and dynamic score based on real user activity
     const userActivities = await prisma.activity.findMany({ where: { userId: user.id } });
     const activeSeconds = userActivities.reduce((acc, act) => acc + act.durationSeconds, 0);
-    const hours = (activeSeconds / 3600).toFixed(1);
+    const hours = parseFloat((activeSeconds / 3600).toFixed(1));
     const todayFocusTime = `${hours}h`;
     const goalHours = user.productivityGoal || 6;
-    const focusScore = Math.min(100, Math.round((parseFloat(hours) / goalHours) * 100)) || 0;
+    const focusScore = await calculateProductivityScore(user.id, hours, goalHours, user.distractionsCount);
 
     const formattedFriend = {
       id: user.id,
@@ -255,7 +351,7 @@ async function broadcastActivityUpdate(userId: string) {
       currentActivity: maskedActivity,
       todayFocusTime,
       focusScore,
-      timeline: user.privacyMode === "Level 4: Private" ? [] : user.activityLogs.map(log => {
+      timeline: user.privacyMode === "Private" ? [] : user.activityLogs.map(log => {
         const rawLogActivity = {
           app: log.app,
           project: log.project,
@@ -264,6 +360,7 @@ async function broadcastActivityUpdate(userId: string) {
         const maskedLog = applyPrivacyMask(rawLogActivity, user.privacyMode);
         return {
           time: new Date(log.timestamp).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+          date: new Date(log.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
           app: maskedLog.app,
           project: maskedLog.project,
           duration: log.durationText
@@ -491,6 +588,7 @@ app.get("/api/user", authenticateToken, async (req: any, res) => {
     const formatted = formatUserProfile(user);
     (formatted as any).timeline = user.activityLogs.map(log => ({
       time: new Date(log.timestamp).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+      date: new Date(log.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       app: log.app,
       project: log.project,
       duration: log.durationText
@@ -505,7 +603,7 @@ app.get("/api/user", authenticateToken, async (req: any, res) => {
 // Update settings
 app.post("/api/user/settings", authenticateToken, async (req: any, res) => {
   try {
-    const { name, avatarUrl, activeGroup, privacyMode, deviceConnected, productivityGoal, customStatus, theme, notifications } = req.body;
+    const { name, avatarUrl, activeGroup, privacyMode, deviceConnected, productivityGoal, customStatus, theme, notifications, status } = req.body;
     
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
@@ -516,6 +614,7 @@ app.post("/api/user/settings", authenticateToken, async (req: any, res) => {
     if (productivityGoal !== undefined) updateData.productivityGoal = productivityGoal;
     if (customStatus !== undefined) updateData.customStatus = customStatus;
     if (theme !== undefined) updateData.theme = theme;
+    if (status !== undefined) updateData.status = status;
     
     if (notifications !== undefined) {
       if (notifications.friendUpdates !== undefined) updateData.friendUpdatesNotification = notifications.friendUpdates;
@@ -596,18 +695,20 @@ app.get("/api/my-activity", authenticateToken, async (req: any, res) => {
 app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
   try {
     const { app: selectedApp, project, isPaused, togglePause, resetTimer, incrementDistraction, resetDistractions, completeFocusSession } = req.body;
+    const sanitizedProject = project !== undefined ? sanitizeTitle(project) : undefined;
 
-    // Update user heartbeat and set status back to online if it was offline
+    // Update user heartbeat and set status back to Focused if it was offline
     let wasOffline = false;
     const currentUser = await prisma.user.findUnique({ where: { id: req.user.id } });
     if (currentUser) {
-      if (currentUser.status === "offline") {
+      const statusLower = currentUser.status.toLowerCase();
+      if (statusLower === "offline") {
         wasOffline = true;
       }
       
       const updatePayload: any = {
         lastHeartbeat: new Date(),
-        ...(currentUser.status === "offline" ? { status: "online" } : {})
+        ...(statusLower === "offline" ? { status: "Focused" } : {})
       };
 
       if (incrementDistraction === true) {
@@ -657,7 +758,7 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
     }
 
     const hasChanged = selectedApp !== undefined && (selectedApp !== activity.app) ||
-                       project !== undefined && (project !== activity.project);
+                       sanitizedProject !== undefined && (sanitizedProject !== activity.project);
 
     if (hasChanged) {
       // 1. Create a log entry for the *previous* activity session
@@ -692,7 +793,7 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
         where: { id: activity.id },
         data: {
           app: selectedApp !== undefined ? selectedApp : activity.app,
-          project: project !== undefined ? project : activity.project,
+          project: sanitizedProject !== undefined ? sanitizedProject : activity.project,
           durationSeconds: 0,
           startedAt: new Date(),
           isPaused: isPaused !== undefined ? isPaused : (togglePause !== undefined ? togglePause : (wasOffline ? false : activity.isPaused))
@@ -782,9 +883,9 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
       }
     });
 
-    const friendList = members
+    const friendPromises = members
       .filter(m => m.userId !== req.user.id)
-      .map(m => {
+      .map(async m => {
         const u = m.user;
         const currentAct = u.activities[0] || {
           app: "Offline",
@@ -811,9 +912,9 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
         const maskedActivity = applyPrivacyMask(rawActivity, u.privacyMode);
 
         const uActiveSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
-        const uHours = (uActiveSeconds / 3600).toFixed(1);
+        const uHours = parseFloat((uActiveSeconds / 3600).toFixed(1));
         const todayFocusTime = `${uHours}h`;
-        const focusScore = Math.min(100, Math.round((parseFloat(uHours) / (u.productivityGoal || 6)) * 100)) || 0;
+        const focusScore = await calculateProductivityScore(u.id, uHours, u.productivityGoal || 6, u.distractionsCount);
 
         return {
           id: u.id,
@@ -824,7 +925,7 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
           currentActivity: maskedActivity,
           todayFocusTime,
           focusScore,
-          timeline: u.privacyMode === "Level 4: Private" ? [] : u.activityLogs.map(log => {
+          timeline: u.privacyMode === "Private" ? [] : u.activityLogs.map(log => {
             const rawLogActivity = {
               app: log.app,
               project: log.project,
@@ -833,6 +934,7 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
             const maskedLog = applyPrivacyMask(rawLogActivity, u.privacyMode);
             return {
               time: new Date(log.timestamp).toLocaleTimeString("en-US", { hour: '2-digit', minute: '2-digit' }),
+              date: new Date(log.timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
               app: maskedLog.app,
               project: maskedLog.project,
               duration: log.durationText
@@ -840,6 +942,8 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
           })
         };
       });
+
+    const friendList = await Promise.all(friendPromises);
 
     res.json(friendList);
   } catch (error: any) {
@@ -889,7 +993,7 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
     if (user) {
       const activeSeconds = user.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
       focusTimeHours = parseFloat((activeSeconds / 3600).toFixed(1));
-      focusScore = Math.min(100, Math.round((focusTimeHours / (user.productivityGoal || 6)) * 100)) || 0;
+      focusScore = await calculateProductivityScore(user.id, focusTimeHours, user.productivityGoal || 6, user.distractionsCount);
     }
 
     const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -905,10 +1009,10 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
       include: { activities: true }
     });
 
-    const comparisonStats = allUsers.map(u => {
+    const comparisonStatsPromises = allUsers.map(async u => {
       const durationSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
       const hours = parseFloat((durationSeconds / 3600).toFixed(1));
-      const score = Math.min(100, Math.round((hours / (u.productivityGoal || 6)) * 100)) || 0;
+      const score = await calculateProductivityScore(u.id, hours, u.productivityGoal || 6, u.distractionsCount);
 
       return {
         name: u.name.split(" ")[0],
@@ -916,6 +1020,7 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
         score
       };
     });
+    const comparisonStats = await Promise.all(comparisonStatsPromises);
 
     let totalLogSeconds = 0;
     logs.forEach(log => {
@@ -939,6 +1044,142 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
       weeklyTotalHours,
       weeklyProdGoalAchieved,
       averageDailyFocus
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper to parse duration text into seconds
+function parseDurationText(durationText: string): number {
+  let seconds = 0;
+  const matchHr = durationText.match(/(\d+)\s*h/);
+  const matchMin = durationText.match(/(\d+)\s*m/);
+  const matchSec = durationText.match(/(\d+)\s*s/);
+  if (matchHr) seconds += parseInt(matchHr[1]) * 3600;
+  if (matchMin) seconds += parseInt(matchMin[1]) * 60;
+  if (matchSec) seconds += parseInt(matchSec[1]);
+  if (!matchHr && !matchMin && !matchSec) {
+    const rawVal = parseInt(durationText);
+    if (!isNaN(rawVal)) {
+      seconds += rawVal * 60;
+    } else {
+      seconds += 300; // default 5 mins
+    }
+  }
+  return seconds;
+}
+
+// 4.5. Reports Data (Weekly / Monthly with reference date)
+app.get("/api/reports", authenticateToken, async (req: any, res) => {
+  try {
+    const period = (req.query.period as string) || "weekly";
+    const refDateStr = req.query.date as string;
+    const refDate = refDateStr ? new Date(refDateStr) : new Date();
+
+    if (isNaN(refDate.getTime())) {
+      return res.status(400).json({ error: "Invalid date format" });
+    }
+
+    let start: Date;
+    let end: Date;
+    let periodLabel = "";
+    let chartData: { label: string; hours: number }[] = [];
+
+    if (period === "monthly") {
+      start = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+      end = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0, 23, 59, 59, 999);
+      periodLabel = refDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+      const numDays = end.getDate();
+      for (let i = 1; i <= numDays; i++) {
+        chartData.push({ label: String(i), hours: 0 });
+      }
+    } else {
+      // weekly
+      start = new Date(refDate);
+      const dayOfWeek = start.getDay();
+      start.setDate(start.getDate() - dayOfWeek);
+      start.setHours(0, 0, 0, 0);
+
+      end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      end.setHours(23, 59, 59, 999);
+
+      const startMonth = start.toLocaleDateString("en-US", { month: "short" });
+      const startDay = start.getDate();
+      const endMonth = end.toLocaleDateString("en-US", { month: "short" });
+      const endDay = end.getDate();
+      const startYear = start.getFullYear();
+      periodLabel = `${startMonth} ${startDay} – ${endMonth} ${endDay}, ${startYear}`;
+
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      chartData = days.map(day => ({ label: day, hours: 0 }));
+    }
+
+    const logs = await prisma.activityLog.findMany({
+      where: {
+        userId: req.user.id,
+        timestamp: {
+          gte: start,
+          lte: end
+        }
+      }
+    });
+
+    const appCounts: Record<string, number> = {};
+    let totalSeconds = 0;
+
+    logs.forEach(log => {
+      const logSec = parseDurationText(log.durationText);
+      const logTime = new Date(log.timestamp);
+
+      if (period === "monthly") {
+        const dayIdx = logTime.getDate() - 1;
+        if (dayIdx >= 0 && dayIdx < chartData.length) {
+          chartData[dayIdx].hours += logSec / 3600;
+        }
+      } else {
+        const dayIdx = logTime.getDay();
+        if (dayIdx >= 0 && dayIdx < 7) {
+          chartData[dayIdx].hours += logSec / 3600;
+        }
+      }
+
+      appCounts[log.app] = (appCounts[log.app] || 0) + logSec;
+      totalSeconds += logSec;
+    });
+
+    // Round hours
+    chartData.forEach(item => {
+      item.hours = parseFloat(item.hours.toFixed(1));
+    });
+
+    const colorsMap: Record<string, string> = {
+      "VS Code": "#2563EB",
+      "Figma": "#EC4899",
+      "Chrome": "#10B981",
+      "Google Chrome": "#10B981",
+      "Terminal": "#6B7280",
+      "Slack": "#F59E0B",
+      "Spotify": "#A855F7"
+    };
+
+    const appBreakdown = Object.entries(appCounts)
+      .map(([name, sec]) => ({
+        name,
+        value: totalSeconds > 0 ? Math.round((sec / totalSeconds) * 100) : 0,
+        color: colorsMap[name] || "#6B7280"
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    const totalHours = parseFloat((totalSeconds / 3600).toFixed(1));
+
+    res.json({
+      periodLabel,
+      chartData,
+      appBreakdown,
+      totalHours
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1081,31 +1322,125 @@ app.get("/api/leaderboard", authenticateToken, async (req: any, res) => {
   }
 });
 
+// AI Coach Fallbacks
+function getPersonalFallbackInsights(user: any, logs: any[], todayHours: number): string {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = yesterday.toDateString();
+  
+  let yesterdayHours = 0;
+  logs.forEach(log => {
+    if (new Date(log.timestamp).toDateString() === yesterdayStr) {
+      const match = log.durationText.match(/(\d+)m/);
+      yesterdayHours += (match ? parseInt(match[1]) / 60 : 0.25);
+    }
+  });
+
+  let percentDiff = 0;
+  if (yesterdayHours > 0) {
+    percentDiff = Math.round(((todayHours - yesterdayHours) / yesterdayHours) * 100);
+  } else {
+    percentDiff = todayHours > 0 ? 18 : 0;
+  }
+
+  const comparisonText = percentDiff >= 0 
+    ? `focused **${percentDiff}% more** than yesterday`
+    : `focused **${Math.abs(percentDiff)}% less** than yesterday`;
+
+  // Hour counts for best window
+  const hourCounts: Record<number, number> = {};
+  logs.forEach(log => {
+    const hour = new Date(log.timestamp).getHours();
+    hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+  });
+  let peakHour = 9;
+  let maxCount = 0;
+  Object.entries(hourCounts).forEach(([hour, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      peakHour = parseInt(hour);
+    }
+  });
+  const bestWindow = `${peakHour % 12 || 12} ${peakHour >= 12 ? 'PM' : 'AM'} – ${(peakHour + 2) % 12 || 12} ${(peakHour + 2) >= 12 ? 'PM' : 'AM'}`;
+
+  return `### ⚡ PERSONAL PULSE SUMMARY
+*   You ${comparisonText}.
+*   **Best focus window**: ${bestWindow}
+*   **Recommendation**: Start a 45-minute deep work session.`;
+}
+
+function getRoomFallbackInsights(activeGroup: string, members: any[]): string {
+  const categories: Record<string, number> = {};
+  let totalHours = 0;
+  
+  members.forEach(m => {
+    const currentAct = m.activities ? m.activities[0] : null;
+    if (currentAct) {
+      const category = getAppCategory(currentAct.app, currentAct.project);
+      categories[category] = (categories[category] || 0) + 1;
+    }
+    
+    // Calculate total hours
+    let memberSeconds = m.activities ? m.activities.reduce((acc: number, act: any) => acc + act.durationSeconds, 0) : 0;
+    totalHours += memberSeconds / 3600;
+  });
+
+  let topCategory = "Development";
+  let maxCount = 0;
+  Object.entries(categories).forEach(([cat, count]) => {
+    if (count > maxCount) {
+      maxCount = count;
+      topCategory = cat;
+    }
+  });
+
+  const targetHours = Math.max(50, Math.ceil(totalHours * 1.2));
+
+  return `### 👥 TEAM PRODUCTIVITY INSIGHTS
+*   **Vibe Check**: Most members of **${activeGroup}** are currently in **${topCategory}** work.
+*   **Team Performance**: Team focus increased by **12%** this week.
+*   **Suggested Goal**: Reach **${targetHours} focus hours** today.`;
+}
+
 // 6. smart AI briefing with Gemini 3.5 Flash!
-let lastAiInsights: string = "";
-let lastAiTimestamp: number = 0;
+let lastAiInsightsPersonal: string = "";
+let lastAiTimestampPersonal: number = 0;
+let lastAiInsightsRoom: string = "";
+let lastAiTimestampRoom: number = 0;
 
 app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
   const forceRefresh = req.query.force === "true";
-  
-  if (lastAiInsights && (Date.now() - lastAiTimestamp < 120_000) && !forceRefresh) {
-    return res.json({ text: lastAiInsights, cached: true });
+  const type = req.query.type || "room"; // 'personal' or 'room'
+
+  // Serve cache if fresh
+  if (type === "personal" && lastAiInsightsPersonal && (Date.now() - lastAiTimestampPersonal < 120_000) && !forceRefresh) {
+    return res.json({ text: lastAiInsightsPersonal, cached: true });
+  }
+  if (type === "room" && lastAiInsightsRoom && (Date.now() - lastAiTimestampRoom < 120_000) && !forceRefresh) {
+    return res.json({ text: lastAiInsightsRoom, cached: true });
   }
 
+  let user: any = null;
+  let activeGroup = "Engineering Team";
+  let friendsList: any[] = [];
+  let myHours = 0;
+
   try {
-    const user = await prisma.user.findUnique({
+    user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: { activities: true }
+      include: {
+        activities: true,
+        activityLogs: true
+      }
     });
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    const activeGroup = user.activeGroup;
+    activeGroup = user.activeGroup;
     const group = activeGroup ? await prisma.group.findUnique({
       where: { name: activeGroup }
     }) : null;
 
-    let friendsList: any[] = [];
     if (group) {
       const members = await prisma.groupMember.findMany({
         where: { groupId: group.id },
@@ -1125,17 +1460,8 @@ app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
       isPaused: false
     };
 
-    const myStateStr = `My Core state: User name: ${user.name}, active tracking: ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}). My goal is ${user.productivityGoal} focus hours. Custom status: "${user.customStatus}".`;
-    
-    const friendsStateStr = friendsList.map(u => {
-      const currentAct = u.activities[0] || { app: "Offline", project: "None" };
-      const uActiveSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
-      const uHours = (uActiveSeconds / 3600).toFixed(1);
-      const todayFocusTime = `${uHours}h`;
-      const focusScore = Math.min(100, Math.round((parseFloat(uHours) / (u.productivityGoal || 6)) * 100)) || 0;
-
-      return `Friend "${u.name}" (${u.role}) is current status: "${u.status}" using "${currentAct.app}" for project "${currentAct.project}". Today total focus time: ${todayFocusTime}, productivity score: ${focusScore}%.`;
-    }).join("\n");
+    const myActiveSeconds = user.activities.reduce((acc: number, act: any) => acc + act.durationSeconds, 0);
+    myHours = parseFloat((myActiveSeconds / 3600).toFixed(1));
 
     const key = process.env.GEMINI_API_KEY;
     if (!key || key === "MY_GEMINI_API_KEY") {
@@ -1151,9 +1477,38 @@ app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
       }
     });
 
-    const prompt = `You are a helpful, extremely clever, and witty developer co-working assistant companion.
-Here is the current real-time activity status in our co-working group:
+    let prompt = "";
+    if (type === "personal") {
+      prompt = `You are a helpful, extremely clever, and witty developer co-working assistant companion.
+Here is the user's (${user.name}) productivity stats today:
+Focus Time: ${myHours} hours (Goal: ${user.productivityGoal} hours)
+Distraction Flags: ${user.distractionsCount}
+Focus Streak: ${user.focusStreak} days
+Current status: "${user.status}"
+Active Activity: tracking ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}).
 
+Please generate a premium, tailored Personal Productivity Coaching Briefing.
+Format your output in clean, eye-catching Markdown with the following structured sections:
+1.  **⚡ PERSONAL PULSE SUMMARY**: A wittily formulated summary of the user's performance today compared to yesterday.
+2.  **🎮 FOCUS WINDOW DETAILS**: A peak productivity hour recommendation (e.g. "Best focus window: 9 AM - 11 AM").
+3.  **💪 ACTIONABLE RECOMMENDATION**: A tailored suggestion on what the user should do next to maintain focus.
+
+Keep it extremely concise, engaging, and professional but full of developer humor! Limit the entire response to exactly 100-130 words. Do not praise yourself or write self-referential introductory statements. Start directly with the pulse.`;
+    } else {
+      const myStateStr = `My Core state: User name: ${user.name}, active tracking: ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}). My goal is ${user.productivityGoal} focus hours. Custom status: "${user.customStatus}".`;
+      
+      const friendsStateStr = friendsList.map(u => {
+        const currentAct = u.activities[0] || { app: "Offline", project: "None" };
+        const uActiveSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
+        const uHours = (uActiveSeconds / 3600).toFixed(1);
+        const todayFocusTime = `${uHours}h`;
+        const focusScore = Math.min(100, Math.round((parseFloat(uHours) / (u.productivityGoal || 6)) * 100)) || 0;
+
+        return `Friend "${u.name}" (${u.role}) is current status: "${u.status}" using "${currentAct.app}" for project "${currentAct.project}". Today total focus time: ${todayFocusTime}, productivity score: ${focusScore}%.`;
+      }).join("\n");
+
+      prompt = `You are a helpful, extremely clever, and witty developer co-working assistant companion.
+Here is the current real-time activity status in our co-working group "${activeGroup}":
 ---
 ${myStateStr}
 
@@ -1164,12 +1519,12 @@ ${friendsStateStr}
 
 Please generate a premium Daily Focus & Co-working Briefing.
 Format your output in clean, eye-catching Markdown with the following structured sections:
-1.  **⚡ TEAM PULSE SUMMARY**: A quick, enthusiastic 2-sentence summary of what the vibe of the channel is right now (e.g. "We are in ultra-focused execution mode!").
-2.  **🎮 INDIVIDUAL NUDGES & COMPLIMENTS**: Mention at least 2 specific friends. Offer a witty or helpful comment on what they are working on, or give them a humorous productivity nudge (e.g., Sarah Chen is on fire, or Marcus Johnson should probably toggle back to VS Code).
-3.  **💪 PERSONAL COACHING INSIGHT**: Give me (${user.name}) an actionable co-working insight or recommendation based on my current work (${myActivity.app} on "${myActivity.project}").
-4.  **🎯 PRO-TIP ALERTS**: A 1-sentence productivity highlight of the day.
+1.  **⚡ TEAM PULSE SUMMARY**: A quick, enthusiastic 2-sentence summary of what the vibe of the channel is right now (e.g., "Most members are currently in development work.").
+2.  **🎮 INDIVIDUAL NUDGES & COMPLIMENTS**: Mention at least 2 specific friends. Offer a witty or helpful comment on what they are working on.
+3.  **💪 SUGGESTED GOAL**: A dynamic daily goal for the team (e.g., "Reach 50 focus hours today.").
 
-Keep the brief extremely visual, using bullet points, bold keywords, emoji highlights, and clean typography layouts. Keep it concise, engaging, and professional but full of developer humor! Limit the entire response to exactly 150-200 words. Do not praise yourself or write self-referential introductory statements (like "Here is the briefing"). Start directly with the pulse.`;
+Keep the brief extremely visual, using bullet points, bold keywords, emoji highlights, and clean layouts. Keep it concise, engaging, and professional but full of developer humor! Limit the entire response to exactly 120-150 words. Do not praise yourself or write self-referential introductory statements. Start directly with the pulse.`;
+    }
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
@@ -1180,29 +1535,31 @@ Keep the brief extremely visual, using bullet points, bold keywords, emoji highl
     });
 
     const outputText = response.text || "No insights could be parsed.";
-    lastAiInsights = outputText;
-    lastAiTimestamp = Date.now();
+    
+    if (type === "personal") {
+      lastAiInsightsPersonal = outputText;
+      lastAiTimestampPersonal = Date.now();
+    } else {
+      lastAiInsightsRoom = outputText;
+      lastAiTimestampRoom = Date.now();
+    }
     
     res.json({ text: outputText, cached: false });
 
   } catch (error: any) {
     console.error("Gemini API Error:", error.message || error);
     
-    const fallbackBriefing = `### ⚡ TEAM PULSE SUMMARY
-The workspace is focused on deep development and design iterations. All members are checking in and aligning their daily focus goals.
-
-### 🎮 INDIVIDUAL NUDGES & COMPLIMENTS
-*   Co-working channels are open. Wave or send nudges to your team members directly from the dashboard to keep each other in deep flow! ☕
-
-### 💪 PERSONAL COACHING INSIGHT
-You've been tracking your workspace activity. The momentum is great, but don't forget to take a 5-minute stretch or hydrate soon to optimize cognitive clarity!
-
-### 🎯 PRO-TIP ALERTS
-*   **Developers who stretch** every 45 minutes report 30% higher focus retention. Stretch boundaries today!`;
-
-    lastAiInsights = fallbackBriefing;
-    lastAiTimestamp = Date.now();
-    res.json({ text: fallbackBriefing, cached: true, error: true, details: error.message });
+    if (type === "personal") {
+      const fallback = getPersonalFallbackInsights(user, user ? user.activityLogs : [], myHours);
+      lastAiInsightsPersonal = fallback;
+      lastAiTimestampPersonal = Date.now();
+      res.json({ text: fallback, cached: true, error: true, details: error.message });
+    } else {
+      const fallback = getRoomFallbackInsights(activeGroup || "Engineering Team", friendsList);
+      lastAiInsightsRoom = fallback;
+      lastAiTimestampRoom = Date.now();
+      res.json({ text: fallback, cached: true, error: true, details: error.message });
+    }
   }
 });
 

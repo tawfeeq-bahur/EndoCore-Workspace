@@ -15,9 +15,9 @@ let config = {
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 450,
-    height: 600,
-    resizable: false,
+    width: 1280,
+    height: 800,
+    resizable: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -26,7 +26,7 @@ function createWindow() {
     backgroundColor: '#09090b',
   });
 
-  mainWindow.loadFile('index.html');
+  mainWindow.loadURL('http://localhost:3000');
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -43,7 +43,7 @@ function setupTray() {
     { label: 'Quit', click: () => { app.quit(); } }
   ]);
   tray.setContextMenu(contextMenu);
-  tray.setToolTip('Tokyo Activity Agent');
+  tray.setToolTip('EndoCore Agent');
   tray.on('click', () => {
     if (mainWindow) {
       if (mainWindow.isVisible()) mainWindow.hide();
