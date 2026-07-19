@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onConfigSaved: (callback) => ipcRenderer.on('config-saved', (event, config) => callback(config)),
   startTracking: () => ipcRenderer.send('start-tracking'),
   stopTracking: () => ipcRenderer.send('stop-tracking'),
-  onTrackingState: (callback) => ipcRenderer.on('tracking-state', (event, state) => callback(state))
+  onTrackingState: (callback) => ipcRenderer.on('tracking-state', (event, state) => callback(state)),
+  onAuthError: (callback) => ipcRenderer.on('auth-error', (event, message) => callback(message))
 });

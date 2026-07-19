@@ -341,6 +341,16 @@
         trackBtn.classList.remove('stop');
       }
     });
+
+    window.electronAPI.onAuthError((message) => {
+      token = '';
+      email = '';
+      authSection.style.display = 'block';
+      statusSection.style.display = 'none';
+      emailInput.value = '';
+      passwordInput.value = '';
+      errorBox.textContent = message;
+    });
   </script>
 </body>
 </html>

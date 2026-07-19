@@ -1,24 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
 import { io } from "socket.io-client";
-import { 
-  LayoutDashboard, 
-  BarChart3, 
-  Users, 
-  User, 
-  Settings, 
-  Activity, 
-  Pause, 
-  Play, 
-  RefreshCw, 
-  Search, 
-  Award, 
-  Clock, 
-  Sparkles, 
-  Laptop, 
-  CheckCircle2, 
-  Plus, 
-  X, 
-  ArrowLeft, 
+import {
+  LayoutDashboard,
+  BarChart3,
+  Users,
+  User,
+  Settings,
+  Activity,
+  Pause,
+  Play,
+  RefreshCw,
+  Search,
+  Award,
+  Clock,
+  Sparkles,
+  Laptop,
+  CheckCircle2,
+  Plus,
+  X,
+  ArrowLeft,
   ArrowUpRight,
   Terminal,
   ExternalLink,
@@ -31,20 +31,36 @@ import {
   Home,
   Target,
   Flame,
-  MessageSquare
+  MessageSquare,
+  Menu,
+  Send
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { 
-  UserProfile, 
-  Activity as UserActivity, 
-  Friend, 
-  Group, 
-  AnalyticsData, 
+import {
+  UserProfile,
+  Activity as UserActivity,
+  Friend,
+  Group,
+  AnalyticsData,
   TimelineItem,
   ChatMessage
 } from "./types";
 
 export default function App() {
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [mobileTab, setMobileTab] = useState<"control" | "room" | "me">("control");
+
+  useEffect(() => {
+    const checkDevice = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const platform = urlParams.get("platform");
+      setIsMobile(platform === "mobile" || window.innerWidth < 768);
+    };
+    checkDevice();
+    window.addEventListener("resize", checkDevice);
+    return () => window.removeEventListener("resize", checkDevice);
+  }, []);
+
   // Navigation & Workspace Panel states
   const [activeTab, setActiveTab] = useState<string>("dashboard");
   const [selectedFriendId, setSelectedFriendId] = useState<string | null>(null);
@@ -79,13 +95,13 @@ export default function App() {
   const [roomsLastMessage, setRoomsLastMessage] = useState<Record<string, ChatMessage | null>>({});
   const [hubTab, setHubTab] = useState<"timeline" | "rooms">("timeline");
   const groupsRef = useRef<Group[]>([]);
-  
+
   // Asynchronous Loading Flags
   const [loadingInsights, setLoadingInsights] = useState<boolean>(false);
   const [insightsError, setInsightsError] = useState<boolean>(false);
   const [updatingActivity, setUpdatingActivity] = useState<boolean>(false);
   const [creatingGroup, setCreatingGroup] = useState<boolean>(false);
-  
+
   // Interactive Controls Input Buffers
   const [appInput, setAppInput] = useState<string>("VS Code");
   const [projectInput, setProjectInput] = useState<string>("EndoCore Workspace");
@@ -93,6 +109,9 @@ export default function App() {
   const [newGroupName, setNewGroupName] = useState<string>("");
   const [newGroupDesc, setNewGroupDesc] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [profileNameInput, setProfileNameInput] = useState<string>("");
+  const [profileAvatarInput, setProfileAvatarInput] = useState<string>("");
+  const [profileDeviceInput, setProfileDeviceInput] = useState<string>("");
   const [currentTimeText, setCurrentTimeText] = useState<string>("");
 
   // Nudge reaction status Map
@@ -108,6 +127,15 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [electronTracking, setElectronTracking] = useState<boolean>(false);
 
+  // Diagnostics & Connectivity Health States
+  const [apiStatus, setApiStatus] = useState<"online" | "offline">("online");
+  const [dbStatus, setDbStatus] = useState<"connected" | "error" | "checking">("checking");
+  const [socketStatus, setSocketStatus] = useState<"connected" | "disconnected" | "error">("disconnected");
+  const [aiStatus, setAiStatus] = useState<"configured" | "missing_key" | "checking">("checking");
+
+  // Responsive layout state
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
@@ -119,8 +147,39 @@ export default function App() {
     };
   };
 
+  async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+    const headers = {
+      ...getAuthHeaders(),
+      ...(init?.headers || {})
+    };
+    const res = await fetch(input, { ...init, headers });
+    if (res.status === 401 || res.status === 403) {
+      handleLogout();
+      throw new Error("Session expired. Please log in again.");
+    }
+    return res;
+  }
+
   const socketRef = useRef<any>(null);
   const chatEndRef = useRef<any>(null);
+
+  const checkHealth = async () => {
+    try {
+      const res = await fetch("/api/health");
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data.database);
+        setAiStatus(data.ai);
+        setApiStatus("online");
+      } else {
+        setDbStatus("error");
+        setApiStatus("offline");
+      }
+    } catch (e) {
+      setDbStatus("error");
+      setApiStatus("offline");
+    }
+  };
 
   // Bootstrap data loop, polling for updates and setting up WebSocket connection
   useEffect(() => {
@@ -132,6 +191,7 @@ export default function App() {
     fetchAnalytics();
     fetchGroups();
     fetchAiBriefing();
+    checkHealth();
 
     const updateTime = () => {
       const now = new Date();
@@ -139,6 +199,7 @@ export default function App() {
     };
     updateTime();
     const clockInterval = setInterval(updateTime, 1000);
+    const healthInterval = setInterval(checkHealth, 10000);
 
     // Slower fallback polling for other database states
     const dataSyncInterval = setInterval(() => {
@@ -158,9 +219,24 @@ export default function App() {
 
     socket.on("connect", () => {
       console.log("WebSocket connected");
+      setSocketStatus("connected");
       if (user?.activeGroup) {
         socket.emit("join-group", user.activeGroup);
       }
+    });
+
+    socket.on("connect_error", (err: any) => {
+      console.error("WebSocket connection error:", err);
+      setSocketStatus("error");
+      if (err.message && err.message.includes("Authentication error")) {
+        socket.disconnect();
+        handleLogout();
+      }
+    });
+
+    socket.on("disconnect", () => {
+      console.log("WebSocket disconnected");
+      setSocketStatus("disconnected");
     });
 
     socket.on("activity-update", (updatedFriend: Friend) => {
@@ -188,6 +264,7 @@ export default function App() {
 
     return () => {
       clearInterval(clockInterval);
+      clearInterval(healthInterval);
       clearInterval(dataSyncInterval);
       if (socket) {
         socket.disconnect();
@@ -195,6 +272,34 @@ export default function App() {
       socketRef.current = null;
     };
   }, [token]);
+
+  // Sync token and start tracking with Electron desktop agent if available
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) return;
+
+    if (token && user?.email) {
+      electronAPI.saveConfig({ token, email: user.email });
+      electronAPI.startTracking();
+    } else {
+      electronAPI.stopTracking();
+    }
+  }, [token, user?.email]);
+
+  // Listen to Electron tracking state and auth errors
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI;
+    if (!electronAPI) return;
+
+    electronAPI.onTrackingState((state: { isTracking: boolean }) => {
+      setElectronTracking(state.isTracking);
+    });
+
+    electronAPI.onAuthError((message: string) => {
+      triggerToast(`⚠️ Agent: ${message}`);
+      handleLogout();
+    });
+  }, []);
 
   // Keep WebSocket room membership in sync with user's active group
   useEffect(() => {
@@ -215,12 +320,24 @@ export default function App() {
   // REST API Interactions
   const fetchProfile = async () => {
     try {
-      const res = await fetch("/api/user", { headers: getAuthHeaders() });
-      const data = await res.json();
-      setUser(data);
-      setStatusInput(data.customStatus || "");
-      if (data.theme === "light") {
-        setThemeMode("light");
+      const res = await apiFetch("/api/user");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error) {
+          setUser(data);
+          setStatusInput(data.customStatus || "");
+          setProfileNameInput(data.name || "");
+          setProfileAvatarInput(data.avatarUrl || "");
+          setProfileDeviceInput(data.deviceConnected || "");
+          if (data.theme === "light") {
+            setThemeMode("light");
+          }
+          return;
+        }
+      }
+      if (res.status === 401) {
+        setToken(null);
+        localStorage.removeItem("token");
       }
     } catch (e) {
       console.error("API Fetch Error (Profile):", e);
@@ -229,9 +346,13 @@ export default function App() {
 
   const fetchActivity = async () => {
     try {
-      const res = await fetch("/api/my-activity", { headers: getAuthHeaders() });
-      const data = await res.json();
-      setMyActivity(data);
+      const res = await apiFetch("/api/my-activity");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error) {
+          setMyActivity(data);
+        }
+      }
     } catch (e) {
       console.error("API Fetch Error (My Activity):", e);
     }
@@ -240,13 +361,15 @@ export default function App() {
   const fetchFriends = async () => {
     try {
       const groupParam = user?.activeGroup ? `?group=${encodeURIComponent(user.activeGroup)}` : "";
-      const res = await fetch(`/api/friends${groupParam}`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      if (res.ok && Array.isArray(data)) {
-        setFriends(data);
-      } else {
-        setFriends([]);
+      const res = await apiFetch(`/api/friends${groupParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setFriends(data);
+          return;
+        }
       }
+      setFriends([]);
     } catch (e) {
       console.error("API Fetch Error (Friends):", e);
       setFriends([]);
@@ -255,9 +378,13 @@ export default function App() {
 
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch("/api/analytics", { headers: getAuthHeaders() });
-      const data = await res.json();
-      setAnalytics(data);
+      const res = await apiFetch("/api/analytics");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error) {
+          setAnalytics(data);
+        }
+      }
     } catch (e) {
       console.error("API Fetch Error (Analytics):", e);
     }
@@ -265,17 +392,21 @@ export default function App() {
 
   const silentFetchAnalytics = async () => {
     try {
-      const res = await fetch("/api/analytics", { headers: getAuthHeaders() });
-      const data = await res.json();
-      setAnalytics(prev => {
-        if (!prev) return data;
-        // Blend in real-time values smoothly
-        return {
-          ...data,
-          weeklyTotalHours: prev.weeklyTotalHours,
-          weeklyProdGoalAchieved: prev.weeklyProdGoalAchieved
-        };
-      });
+      const res = await apiFetch("/api/analytics");
+      if (res.ok) {
+        const data = await res.json();
+        if (data && !data.error) {
+          setAnalytics(prev => {
+            if (!prev) return data;
+            // Blend in real-time values smoothly
+            return {
+              ...data,
+              weeklyTotalHours: prev.weeklyTotalHours,
+              weeklyProdGoalAchieved: prev.weeklyProdGoalAchieved
+            };
+          });
+        }
+      }
     } catch (e) {
       // Slient fail
     }
@@ -283,11 +414,15 @@ export default function App() {
 
   const fetchGroups = async () => {
     try {
-      const res = await fetch("/api/groups", { headers: getAuthHeaders() });
-      const data = await res.json();
-      setGroups(data);
-      if (Array.isArray(data) && data.length > 0) {
-        fetchAllRoomsDetails(data);
+      const res = await apiFetch("/api/groups");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setGroups(data);
+          if (data.length > 0) {
+            fetchAllRoomsDetails(data);
+          }
+        }
       }
     } catch (e) {
       console.error("API Fetch Error (Groups):", e);
@@ -298,18 +433,18 @@ export default function App() {
     try {
       const occupantsMap: Record<string, Friend[]> = {};
       const lastMsgMap: Record<string, ChatMessage | null> = {};
-      
+
       await Promise.all(
         rooms.map(async (group) => {
           // Fetch occupants
-          const friendsRes = await fetch(`/api/friends?group=${encodeURIComponent(group.name)}`, { headers: getAuthHeaders() });
+          const friendsRes = await apiFetch(`/api/friends?group=${encodeURIComponent(group.name)}`);
           if (friendsRes.ok) {
             const data = await friendsRes.json();
             occupantsMap[group.name] = data;
           }
-          
+
           // Fetch chat
-          const chatRes = await fetch(`/api/chat/${group.id}`, { headers: getAuthHeaders() });
+          const chatRes = await apiFetch(`/api/chat/${group.id}`);
           if (chatRes.ok) {
             const messages = await chatRes.json();
             if (Array.isArray(messages) && messages.length > 0) {
@@ -320,7 +455,7 @@ export default function App() {
           }
         })
       );
-      
+
       setRoomsOccupants(occupantsMap);
       setRoomsLastMessage(lastMsgMap);
     } catch (e) {
@@ -330,10 +465,10 @@ export default function App() {
 
   const toggleRoomSync = async (roomName: string, currentlyEnabled: boolean) => {
     try {
-      let activeBroadcasts = user?.broadcastGroups 
+      let activeBroadcasts = user?.broadcastGroups
         ? user.broadcastGroups.split(",").map(g => g.trim()).filter(Boolean)
         : [];
-      
+
       let updatedGroups: string[];
       if (currentlyEnabled) {
         // Remove room
@@ -346,16 +481,15 @@ export default function App() {
         }
       }
 
-      const res = await fetch("/api/user/broadcast-groups", {
+      const res = await apiFetch("/api/user/broadcast-groups", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify({ groups: updatedGroups })
       });
       const data = await res.json();
       if (data.success) {
         setUser(prev => prev ? { ...prev, broadcastGroups: data.broadcastGroups } : null);
         triggerToast(`${currentlyEnabled ? "Disabled" : "Enabled"} sync broadcasting for #${roomName}`);
-        
+
         // Refresh occupants map
         if (groupsRef.current.length > 0) {
           fetchAllRoomsDetails(groupsRef.current);
@@ -413,7 +547,7 @@ export default function App() {
         </div>
       );
     }
-    
+
     if (item.type === "room_entry" && item.project) {
       return (
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
@@ -484,7 +618,7 @@ export default function App() {
       let groupLabel = evt.date;
       if (evt.date === todayStr) groupLabel = "Today";
       else if (evt.date === yesterdayStr) groupLabel = "Yesterday";
-      
+
       if (!groupsMap[groupLabel]) {
         groupsMap[groupLabel] = [];
       }
@@ -498,7 +632,7 @@ export default function App() {
     setLoadingInsights(true);
     setInsightsError(false);
     try {
-      const res = await fetch(`/api/ai-insights${force ? "?force=true" : ""}`, { headers: getAuthHeaders() });
+      const res = await apiFetch(`/api/ai-insights${force ? "?force=true" : ""}`);
       const data = await res.json();
       setAiInsights(data.text);
       if (data.error) {
@@ -529,7 +663,7 @@ export default function App() {
           // Timer finished!
           clearInterval(timer);
           setPomodoroActive(false);
-          
+
           if (pomodoroMode === "focus") {
             setPomodoroSessionCount(prev => prev + 1);
             triggerToast("🎉 Pomodoro Focus Session Complete! Time for a short break.");
@@ -552,9 +686,8 @@ export default function App() {
   const completePomodoroSession = async () => {
     if (!token) return;
     try {
-      const res = await fetch("/api/my-activity", {
+      const res = await apiFetch("/api/my-activity", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify({ completeFocusSession: true })
       });
       const data = await res.json();
@@ -570,9 +703,8 @@ export default function App() {
     if (!token) return;
     setDistractionsManualCount(prev => prev + 1);
     try {
-      await fetch("/api/my-activity", {
+      await apiFetch("/api/my-activity", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify({ incrementDistraction: true })
       });
       fetchProfile();
@@ -585,9 +717,8 @@ export default function App() {
     if (!token) return;
     setDistractionsManualCount(0);
     try {
-      await fetch("/api/my-activity", {
+      await apiFetch("/api/my-activity", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify({ resetDistractions: true })
       });
       fetchProfile();
@@ -601,9 +732,13 @@ export default function App() {
     try {
       const g = groups.find(x => x.name === roomName);
       if (!g) return;
-      const res = await fetch(`/api/chat/${g.id}`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      setRoomChatMessages(data);
+      const res = await apiFetch(`/api/chat/${g.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setRoomChatMessages(data);
+        }
+      }
     } catch (e) {
       console.error("Failed to fetch chat:", e);
     }
@@ -613,9 +748,13 @@ export default function App() {
     if (!token) return;
     setFetchingLeaderboard(true);
     try {
-      const res = await fetch(`/api/leaderboard?group=${encodeURIComponent(roomName)}`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      setRoomLeaderboard(data);
+      const res = await apiFetch(`/api/leaderboard?group=${encodeURIComponent(roomName)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setRoomLeaderboard(data);
+        }
+      }
     } catch (e) {
       console.error("Failed to fetch leaderboard:", e);
     } finally {
@@ -627,7 +766,7 @@ export default function App() {
     if (!roomChatInput.trim() || !socketRef.current || !selectedRoomName) return;
     const g = groups.find(x => x.name === selectedRoomName);
     if (!g) return;
-    
+
     socketRef.current.emit("send-chat-message", {
       groupId: g.id,
       message: roomChatInput
@@ -672,10 +811,9 @@ export default function App() {
       }
       if (project !== undefined) payload.project = project;
       if (togglePause !== undefined) payload.togglePause = togglePause;
-      
-      const res = await fetch("/api/my-activity", {
+
+      const res = await apiFetch("/api/my-activity", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify(payload)
       });
       const data = await res.json();
@@ -697,14 +835,16 @@ export default function App() {
 
   const submitProfileSettings = async (updates: Partial<UserProfile>) => {
     try {
-      const res = await fetch("/api/user/settings", {
+      const res = await apiFetch("/api/user/settings", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify(updates)
       });
       const data = await res.json();
       if (data.success) {
         setUser(data.profile);
+        setProfileNameInput(data.profile.name || "");
+        setProfileAvatarInput(data.profile.avatarUrl || "");
+        setProfileDeviceInput(data.profile.deviceConnected || "");
         triggerToast("Developer workstation parameters loaded");
         // Re-align friends group focus instantly
         setTimeout(fetchFriends, 200);
@@ -719,9 +859,8 @@ export default function App() {
     if (!newGroupName) return;
     setCreatingGroup(true);
     try {
-      const res = await fetch("/api/groups/create", {
+      const res = await apiFetch("/api/groups/create", {
         method: "POST",
-        headers: getAuthHeaders(),
         body: JSON.stringify({ name: newGroupName, description: newGroupDesc })
       });
       const data = await res.json();
@@ -750,7 +889,7 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Login failed");
-      
+
       localStorage.setItem("token", data.token);
       setToken(data.token);
       triggerToast("Logged in successfully! Welcome to EndoCore.");
@@ -784,7 +923,7 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  function handleLogout() {
     localStorage.removeItem("token");
     setToken(null);
     setUser(null);
@@ -794,13 +933,13 @@ export default function App() {
     setGroups([]);
     setAiInsights(null);
     triggerToast("Logged out successfully");
-  };
+  }
 
   // Send interactive co-working nudge
   const triggerPeerNudge = (friendName: string, id: string) => {
     setNudgedFriendIds(prev => ({ ...prev, [id]: true }));
     triggerToast(`Sent continuous work support signal to ${friendName} 🕊️`);
-    
+
     if (socketRef.current) {
       socketRef.current.emit("send-nudge", { targetUserId: id });
     }
@@ -852,20 +991,28 @@ export default function App() {
     const daysInCalendar = 371; // 53 weeks * 7 days
     const today = new Date();
     const calendarDays = [];
-    
+
     // Start date: 370 days ago
     const startDate = new Date();
     startDate.setDate(today.getDate() - daysInCalendar + 1);
-    
+
     for (let i = 0; i < daysInCalendar; i++) {
       const currentDate = new Date(startDate);
       currentDate.setDate(startDate.getDate() + i);
       const dateString = currentDate.toISOString().split("T")[0];
-      
+
       const isToday = dateString === today.toISOString().split("T")[0];
-      
+
       let level = 0;
-      if (isToday) {
+      const historyDay = analytics?.dailySummaries?.find((d: any) => d.date === dateString);
+      if (historyDay) {
+        const hours = historyDay.totalFocusSeconds / 3600;
+        if (hours === 0) level = 0;
+        else if (hours < 1) level = 1;
+        else if (hours < 3) level = 2;
+        else if (hours < 5) level = 3;
+        else level = 4;
+      } else if (isToday) {
         const hours = myActivity ? myActivity.durationSeconds / 3600 : 0;
         if (hours === 0) level = 0;
         else if (hours < 1) level = 1;
@@ -873,26 +1020,21 @@ export default function App() {
         else if (hours < 5) level = 3;
         else level = 4;
       } else {
-        const hash = (currentDate.getFullYear() * 31 + currentDate.getMonth() * 7 + currentDate.getDate()) % 13;
-        if (hash === 0 || hash === 3 || hash === 8) level = 0;
-        else if (hash === 1 || hash === 5) level = 1;
-        else if (hash === 2 || hash === 9 || hash === 11) level = 2;
-        else if (hash === 4 || hash === 10) level = 3;
-        else level = 4;
+        level = 0;
       }
-      
+
       calendarDays.push({
         date: currentDate,
         level,
         isToday
       });
     }
-    
+
     const weeks = [];
     for (let i = 0; i < calendarDays.length; i += 7) {
       weeks.push(calendarDays.slice(i, i + 7));
     }
-    
+
     return (
       <div className={`p-6 rounded-3xl border ${bgCard} ${borderRule} space-y-4`}>
         <div className="flex items-center justify-between">
@@ -901,7 +1043,7 @@ export default function App() {
           </h3>
           <span className="text-[10px] font-mono text-stone-500">Last 365 Days</span>
         </div>
-        
+
         <div className="overflow-x-auto pr-2 pb-2 scrollbar-thin">
           <div className="flex space-x-1.5 min-w-[650px] justify-start items-start">
             <div className="grid grid-rows-7 gap-1 pr-2 text-[9px] font-mono text-zinc-500 pt-6">
@@ -913,7 +1055,7 @@ export default function App() {
               <span></span>
               <span></span>
             </div>
-            
+
             <div className="flex-1 space-y-1">
               <div className="flex justify-between text-[9px] font-mono text-zinc-500 pb-1.5 px-1">
                 <span>Jan</span>
@@ -924,21 +1066,20 @@ export default function App() {
                 <span>Nov</span>
                 <span>Jan</span>
               </div>
-              
+
               <div className="flex gap-1">
                 {weeks.map((week, wIdx) => (
                   <div key={wIdx} className="grid grid-rows-7 gap-1">
                     {week.map((day, dIdx) => {
-                      const levelColors = themeMode === 'dark' 
+                      const levelColors = themeMode === 'dark'
                         ? ["bg-[#18181c]/80 border border-[#27272a]/30", "bg-emerald-950 border border-emerald-900/20", "bg-emerald-800", "bg-emerald-600", "bg-emerald-400"]
                         : ["bg-[#f5f4ef] border border-[#dcdcd4]/30", "bg-emerald-100 border border-emerald-200/40", "bg-emerald-200", "bg-emerald-400", "bg-emerald-600"];
-                      
+
                       return (
-                        <div 
-                          key={dIdx} 
-                          className={`w-3.5 h-3.5 rounded-sm transition-all duration-300 ${levelColors[day.level]} ${
-                            day.isToday ? "ring-2 ring-blue-500 dark:ring-stone-300" : ""
-                          }`}
+                        <div
+                          key={dIdx}
+                          className={`w-3.5 h-3.5 rounded-sm transition-all duration-300 ${levelColors[day.level]} ${day.isToday ? "ring-2 ring-blue-500 dark:ring-stone-300" : ""
+                            }`}
                           title={`${day.date.toDateString()}: Focus level ${day.level}`}
                         />
                       );
@@ -949,7 +1090,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        
+
         <div className="flex items-center justify-end space-x-2 text-[9px] font-mono text-stone-500">
           <span>Less</span>
           <div className="w-3 h-3 rounded-sm bg-neutral-100 dark:bg-neutral-900 border dark:border-neutral-800"></div>
@@ -972,192 +1113,35 @@ export default function App() {
   const borderRule = themeMode === "dark" ? "border-[#222227]" : "border-[#ecebe6]";
   const formInput = themeMode === "dark" ? "bg-[#0a0a0c] border-[#222227] text-white focus:border-neutral-500" : "bg-white border-[#dcdcd4] text-[#1c1c1f] focus:border-[#101012]";
 
-  // Selected friend detailed side navigation pane helper
-  const rightPaneFriend = friends.find(f => f.id === selectedFriendId);
-
-  if (!token) {
+  // Reusable Sidebar Render Helper (closed over App states)
+  const renderSidebar = (isMobileDrawer: boolean = false) => {
     return (
-      <div className={`min-h-screen flex items-center justify-center p-6 transition-colors duration-350 ease-out font-sans ${bgMain}`}>
-        {/* ⚡ PREMIUM MINIMAL TOAST ALERT */}
-        <AnimatePresence>
-          {toastMessage && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
-              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-              exit={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
-              className={`fixed top-8 left-1/2 -translate-x-1/2 z-50 px-6 py-3.5 rounded-full shadow-2xl flex items-center space-x-3 text-xs tracking-wide font-mono ${
-                themeMode === "dark" ? "bg-white text-black border border-neutral-100" : "bg-neutral-900 text-white border border-neutral-800"
-              }`}
-            >
-              <span className="h-2 w-2 rounded-full bg-stone-500 animate-ping"></span>
-              <span>{toastMessage}</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
+      <aside className={`${isMobileDrawer ? 'w-full h-full' : 'hidden md:flex w-64 border-r h-screen sticky top-0'} flex flex-col shrink-0 ${bgCard} ${borderRule}`}>
 
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`w-full max-w-md p-8 rounded-3xl ${bgCard} border shadow-2xl space-y-8`}
-        >
-          <div className="text-center space-y-2">
-            <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
-            <p className="text-[10px] font-mono tracking-wider uppercase opacity-60">WORKSTATION AUTHENTICATION GATE</p>
-          </div>
-
-          {authError && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs text-red-400 font-mono">
-              Error: {authError}
-            </div>
-          )}
-
-          {authView === "login" ? (
-            <form onSubmit={handleLogin} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
-                <input 
-                  type="email" 
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="name@email.com"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
-                <input 
-                  type="password" 
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <button 
-                type="submit"
-                disabled={authLoading}
-                className="w-full bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs py-3.5 rounded-xl tracking-wider font-mono uppercase font-semibold transition-all cursor-pointer disabled:opacity-50"
-              >
-                {authLoading ? "Verifying Traces..." : "Connect Workspace"}
-              </button>
-
-              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
-                Need key clearance?{" "}
-                <button 
-                  type="button"
-                  onClick={() => { setAuthView("register"); setAuthError(null); }}
-                  className="text-stone-300 hover:underline cursor-pointer"
-                >
-                  Create Identity
-                </button>
-              </div>
-
-              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1 bg-[#fafafa]/50 dark:bg-[#151518]/20">
-                <p className="font-semibold text-stone-400">Demo workstation credentials:</p>
-                <p>Email: <span className="dark:text-stone-300 select-all">tawfeeqbahur@gmail.com</span></p>
-                <p>Password: <span className="dark:text-stone-300 select-all">password123</span></p>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleRegister} className="space-y-5">
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Your Display Name</label>
-                <input 
-                  type="text" 
-                  required
-                  value={authName}
-                  onChange={(e) => setAuthName(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="Tawfeeq Bahur"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
-                <input 
-                  type="email" 
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="name@email.com"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
-                <input 
-                  type="password" 
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="Min 6 characters"
-                />
-              </div>
-
-              <button 
-                type="submit"
-                disabled={authLoading}
-                className="w-full bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs py-3.5 rounded-xl tracking-wider font-mono uppercase font-semibold transition-all cursor-pointer disabled:opacity-50"
-              >
-                {authLoading ? "Registering Identity..." : "Establish Clearances"}
-              </button>
-
-              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
-                Already registered?{" "}
-                <button 
-                  type="button"
-                  onClick={() => { setAuthView("login"); setAuthError(null); }}
-                  className="text-stone-300 hover:underline cursor-pointer"
-                >
-                  Log in
-                </button>
-              </div>
-            </form>
-          )}
-        </motion.div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-350 ease-out font-sans ${bgMain}`}>
-      
-      {/* ⚡ PREMIUM MINIMAL TOAST ALERT */}
-      <AnimatePresence>
-        {toastMessage && (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
-            animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-            exit={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
-            className={`fixed top-8 left-1/2 -translate-x-1/2 z-50 px-6 py-3.5 rounded-full shadow-2xl flex items-center space-x-3 text-xs tracking-wide font-mono ${
-              themeMode === "dark" ? "bg-white text-black border border-neutral-100" : "bg-neutral-900 text-white border border-neutral-800"
-            }`}
-          >
-            <span className="h-2 w-2 rounded-full bg-stone-500 animate-ping"></span>
-            <span>{toastMessage}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 🕊️ LEFT SYSTEM BRAND & WORKSPACE COMMAND PANEL */}
-      <aside className={`w-full md:w-64 border-r flex flex-col shrink-0 ${bgCard} ${borderRule}`}>
-        
         {/* Elegant Top Branding Section */}
-        <div className={`p-6 border-b ${borderRule} space-y-1`}>
-          <div className="flex items-center space-x-2">
-            <span className="font-serif italic text-2xl font-semibold tracking-tight">EndoCore.</span>
-            <span className="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 border rounded opacity-70">v1.0</span>
+        <div className={`p-6 border-b ${borderRule} space-y-1 flex items-center justify-between`}>
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <span className="font-serif italic text-2xl font-semibold tracking-tight">EndoCore.</span>
+              <span className="font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 border rounded opacity-70">v1.0</span>
+            </div>
+            <p className="text-[10px] font-mono tracking-wider uppercase opacity-65 flex items-center">
+              <span className={`h-1.5 w-1.5 rounded-full inline-block mr-2 animate-pulse ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "bg-emerald-500"
+                  : "bg-red-500 animate-ping"
+                }`}></span>
+              WORKSTATION PIPELINE
+            </p>
           </div>
-          <p className="text-[10px] font-mono tracking-wider uppercase opacity-65 flex items-center">
-            <span className="h-1.5 w-1.5 bg-zinc-600 dark:bg-[#bfb5a3] rounded-full inline-block mr-2 animate-pulse"></span>
-            WORKSTATION PIPELINE
-          </p>
+          {isMobileDrawer && (
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-2 text-stone-500 hover:text-stone-300 rounded-full hover:bg-neutral-800/40 cursor-pointer"
+              title="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
         {/* Dynamic Guild Selector */}
@@ -1167,9 +1151,12 @@ export default function App() {
               Active Focus Guild
             </label>
             <div className="relative">
-              <select 
+              <select
                 value={user.activeGroup}
-                onChange={(e) => submitProfileSettings({ activeGroup: e.target.value })}
+                onChange={(e) => {
+                  submitProfileSettings({ activeGroup: e.target.value });
+                  if (isMobileDrawer) setMobileMenuOpen(false);
+                }}
                 className="w-full bg-transparent border-0 font-mono text-xs text-stone-500 hover:text-stone-300 focus:ring-0 cursor-pointer text-ellipsis overflow-hidden"
               >
                 {groups.map(g => (
@@ -1189,38 +1176,50 @@ export default function App() {
             <div className="px-3 mb-2 text-[9px] font-mono tracking-widest text-zinc-500 uppercase">
               HOME
             </div>
-            
-            <button 
-              onClick={() => { setActiveTab("dashboard"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-                activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
-                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
+
+            <button
+              onClick={() => {
+                setActiveTab("dashboard");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
+                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-[#D4AF37] font-semibold" : "bg-[#f3f2eb] text-[#D4AF37] font-semibold")
                   : `text-stone-500 hover:${themeMode === 'dark' ? 'text-white' : 'text-black'}`
-              }`}
+                }`}
             >
               <Home className="h-4 w-4 shrink-0 opacity-80" />
               <span>My Productivity</span>
             </button>
 
-            <button 
-              onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-                activeTab === "analytics"
-                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
+            <button
+              onClick={() => {
+                setActiveTab("analytics");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${activeTab === "analytics"
+                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-[#D4AF37] font-semibold" : "bg-[#f3f2eb] text-[#D4AF37] font-semibold")
                   : `text-stone-500 hover:${themeMode === 'dark' ? 'text-white' : 'text-black'}`
-              }`}
+                }`}
             >
               <BarChart3 className="h-4 w-4 shrink-0 opacity-80" />
               <span>My Analytics</span>
             </button>
 
-            <button 
-              onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-                activeTab === "focus"
-                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
+            <button
+              onClick={() => {
+                setActiveTab("focus");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${activeTab === "focus"
+                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-[#D4AF37] font-semibold" : "bg-[#f3f2eb] text-[#D4AF37] font-semibold")
                   : `text-stone-500 hover:${themeMode === 'dark' ? 'text-white' : 'text-black'}`
-              }`}
+                }`}
             >
               <Target className="h-4 w-4 shrink-0 opacity-80" />
               <span>My Goals</span>
@@ -1229,8 +1228,13 @@ export default function App() {
 
           {/* Rooms Section */}
           <div className="space-y-1">
-            <div 
-              onClick={() => { setActiveTab("groups"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+            <div
+              onClick={() => {
+                setActiveTab("groups");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
               className="px-3 mb-2 text-[9px] font-mono tracking-widest text-zinc-500 uppercase cursor-pointer hover:text-stone-300 flex items-center justify-between"
             >
               <span>ROOMS</span>
@@ -1243,12 +1247,14 @@ export default function App() {
                 return (
                   <div key={group.id} className="space-y-1">
                     <button
-                      onClick={() => enterRoomChannel(group.name)}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all duration-150 cursor-pointer ${
-                        isSelected
+                      onClick={() => {
+                        enterRoomChannel(group.name);
+                        if (isMobileDrawer) setMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all duration-150 cursor-pointer ${isSelected
                           ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
                           : "text-stone-500 hover:text-stone-300"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center space-x-3 text-ellipsis overflow-hidden">
                         <span className="text-zinc-650 font-mono">#</span>
@@ -1261,60 +1267,78 @@ export default function App() {
                     {isSelected && (
                       <div className="pl-4 border-l border-zinc-800 space-y-1 ml-4 mt-1">
                         <button
-                          onClick={() => setRoomTab("overview")}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${
-                            roomTab === "overview" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
-                          }`}
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("overview");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${roomTab === "overview" && activeTab === "groups" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
+                            }`}
                         >
                           <LayoutDashboard className="h-3 w-3 opacity-70" />
                           <span>Overview</span>
                         </button>
 
                         <button
-                          onClick={() => setRoomTab("members")}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${
-                            roomTab === "members" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
-                          }`}
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("members");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${roomTab === "members" && activeTab === "groups" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
+                            }`}
                         >
                           <Users className="h-3 w-3 opacity-70" />
                           <span>Members</span>
                         </button>
 
                         <button
-                          onClick={() => setRoomTab("live")}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${
-                            roomTab === "live" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
-                          }`}
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("live");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${roomTab === "live" && activeTab === "groups" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
+                            }`}
                         >
                           <Activity className="h-3 w-3 opacity-70" />
                           <span>Live Activity</span>
                         </button>
 
                         <button
-                          onClick={() => setRoomTab("leaderboard")}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${
-                            roomTab === "leaderboard" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
-                          }`}
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("leaderboard");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${roomTab === "leaderboard" && activeTab === "groups" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
+                            }`}
                         >
                           <Award className="h-3 w-3 opacity-70" />
                           <span>Leaderboard</span>
                         </button>
 
                         <button
-                          onClick={() => setRoomTab("ai-summary")}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${
-                            roomTab === "ai-summary" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
-                          }`}
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("ai-summary");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${roomTab === "ai-summary" && activeTab === "groups" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
+                            }`}
                         >
                           <Sparkles className="h-3 w-3 opacity-70" />
                           <span>AI Summary</span>
                         </button>
 
                         <button
-                          onClick={() => setRoomTab("chat")}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${
-                            roomTab === "chat" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
-                          }`}
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("chat");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-[11px] font-mono rounded transition-colors cursor-pointer text-left ${roomTab === "chat" && activeTab === "groups" ? "text-white font-medium bg-zinc-850/40" : "text-stone-500 hover:text-stone-300"
+                            }`}
                         >
                           <MessageSquare className="h-3 w-3 opacity-70" />
                           <span>Chat</span>
@@ -1333,25 +1357,33 @@ export default function App() {
               ACCOUNT
             </div>
 
-            <button 
-              onClick={() => { setActiveTab("profile"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-                activeTab === "profile"
-                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
+            <button
+              onClick={() => {
+                setActiveTab("profile");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${activeTab === "profile"
+                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-[#D4AF37] font-semibold" : "bg-[#f3f2eb] text-[#D4AF37] font-semibold")
                   : `text-stone-500 hover:${themeMode === 'dark' ? 'text-white' : 'text-black'}`
-              }`}
+                }`}
             >
               <User className="h-4 w-4 shrink-0 opacity-80" />
               <span>Profile</span>
             </button>
 
-            <button 
-              onClick={() => { setActiveTab("settings"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-                activeTab === "settings"
-                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
+            <button
+              onClick={() => {
+                setActiveTab("settings");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${activeTab === "settings"
+                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-[#D4AF37] font-semibold" : "bg-[#f3f2eb] text-[#D4AF37] font-semibold")
                   : `text-stone-500 hover:${themeMode === 'dark' ? 'text-white' : 'text-black'}`
-              }`}
+                }`}
             >
               <Settings className="h-4 w-4 shrink-0 opacity-80" />
               <span>Settings</span>
@@ -1363,9 +1395,9 @@ export default function App() {
         {user && (
           <div className={`p-5 border-t ${borderRule} space-y-4`}>
             <div className="flex items-center space-x-3">
-              <img 
-                src={user.avatarUrl} 
-                alt={user.name} 
+              <img
+                src={user.avatarUrl}
+                alt={user.name}
                 className={`h-9 w-9 rounded-full object-cover border ${themeMode === 'dark' ? 'border-neutral-800' : 'border-neutral-200'}`}
               />
               <div className="flex-1 min-w-0">
@@ -1374,16 +1406,21 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 bg-[#f5f4ef]/30 dark:bg-[#18181c]/50 p-2.5 rounded-lg border dark:border-[#222227] border-stone-200/50">
+            <div className="flex items-center justify-between text-[10px] font-mono text-zinc-550 bg-[#f5f4ef]/35 dark:bg-[#18181c]/50 p-2.5 rounded-lg border dark:border-[#222227] border-stone-200/50">
               <div className="flex items-center space-x-1">
                 <Laptop className="h-3 w-3 inline opacity-60" />
                 <span className="truncate max-w-[80px]">{user.deviceConnected}</span>
               </div>
-              <span className="text-[9px] uppercase tracking-wider text-stone-400">Synced ✓</span>
+              <span className={`text-[9px] uppercase tracking-wider ${electronTracking ? "text-emerald-500 font-semibold" : "text-stone-400"}`}>
+                {electronTracking ? "Agent: Tracking ✓" : "Synced ✓"}
+              </span>
             </div>
 
             <button
-              onClick={handleLogout}
+              onClick={() => {
+                handleLogout();
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
               className="w-full text-center py-2 border dark:border-neutral-800/80 border-stone-200/55 text-[10px] font-mono uppercase tracking-wider rounded-lg text-red-500 hover:text-red-400 dark:hover:bg-red-950/20 hover:bg-red-50/50 cursor-pointer transition-all duration-150"
             >
               Sign Out
@@ -1391,19 +1428,675 @@ export default function App() {
           </div>
         )}
       </aside>
+    );
+  };
+
+  // Selected friend detailed side navigation pane helper
+  const rightPaneFriend = friends.find(f => f.id === selectedFriendId);
+
+  if (!token) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center p-6 transition-colors duration-350 ease-out font-sans ${bgMain}`}>
+        {/* ⚡ PREMIUM MINIMAL TOAST ALERT */}
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
+              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+              exit={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
+              className={`fixed top-8 left-1/2 -translate-x-1/2 z-50 px-6 py-3.5 rounded-full shadow-2xl flex items-center space-x-3 text-xs tracking-wide font-mono ${themeMode === "dark" ? "bg-white text-black border border-neutral-100" : "bg-neutral-900 text-white border border-neutral-800"
+                }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-stone-500 animate-ping"></span>
+              <span>{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`w-full max-w-md p-8 rounded-3xl ${bgCard} border shadow-2xl space-y-8`}
+        >
+          <div className="text-center space-y-2">
+            <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
+            <p className="text-[10px] font-mono tracking-wider uppercase opacity-60">WORKSTATION AUTHENTICATION GATE</p>
+          </div>
+
+          {authError && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs text-red-400 font-mono">
+              Error: {authError}
+            </div>
+          )}
+
+          {authView === "login" ? (
+            <form onSubmit={handleLogin} className="space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
+                  placeholder="name@email.com"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
+                <input
+                  type="password"
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
+                  placeholder="••••••••"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs py-3.5 rounded-xl tracking-wider font-mono uppercase font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                {authLoading ? "Verifying Traces..." : "Connect Workspace"}
+              </button>
+
+              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
+                Need key clearance?{" "}
+                <button
+                  type="button"
+                  onClick={() => { setAuthView("register"); setAuthError(null); }}
+                  className="text-stone-300 hover:underline cursor-pointer"
+                >
+                  Create Identity
+                </button>
+              </div>
+
+              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1 bg-[#fafafa]/50 dark:bg-[#151518]/20">
+                <p className="font-semibold text-stone-400">Demo workstation credentials:</p>
+                <p>Email: <span className="dark:text-stone-300 select-all">tawfeeqbahur@gmail.com</span></p>
+                <p>Password: <span className="dark:text-stone-300 select-all">password123</span></p>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Your Display Name</label>
+                <input
+                  type="text"
+                  required
+                  value={authName}
+                  onChange={(e) => setAuthName(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
+                  placeholder="Tawfeeq Bahur"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
+                  placeholder="name@email.com"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
+                <input
+                  type="password"
+                  required
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
+                  placeholder="Min 6 characters"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs py-3.5 rounded-xl tracking-wider font-mono uppercase font-semibold transition-all cursor-pointer disabled:opacity-50"
+              >
+                {authLoading ? "Registering Identity..." : "Establish Clearances"}
+              </button>
+
+              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
+                Already registered?{" "}
+                <button
+                  type="button"
+                  onClick={() => { setAuthView("login"); setAuthError(null); }}
+                  className="text-stone-300 hover:underline cursor-pointer"
+                >
+                  Log in
+                </button>
+              </div>
+            </form>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
+
+  // --- START OF MOBILE COMPANION VIEW ---
+  const renderMobileView = () => {
+    const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : "");
+    const occupants = roomsOccupants[activeGroupName] || [];
+    const todayFocusHours = myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0";
+    const productivityScore = myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0;
+
+    return (
+      <div className={`min-h-screen flex flex-col transition-colors duration-350 ease-out font-sans ${bgMain} pb-16`}>
+
+        {/* ⚡ PREMIUM MINIMAL TOAST ALERT */}
+        <AnimatePresence>
+          {toastMessage && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
+              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+              exit={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
+              className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full shadow-2xl flex items-center space-x-3 text-[10px] tracking-wide font-mono ${themeMode === "dark" ? "bg-white text-black border border-neutral-100" : "bg-neutral-900 text-white border border-neutral-800"
+                }`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-stone-500 animate-ping"></span>
+              <span>{toastMessage}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Minimal Companion Header */}
+        <header className={`h-14 border-b shrink-0 px-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
+          }`}>
+          <div className="flex items-center space-x-2">
+            <span className="font-serif italic text-base font-semibold tracking-tight">EndoCore.</span>
+            <span className="font-mono text-[8px] uppercase tracking-widest px-1.5 py-0.2 border rounded opacity-75">mobile</span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            {/* Quick status dot for PC tracking agent connection state */}
+            <div className="flex items-center space-x-1 bg-[#f5f4ef] dark:bg-[#18181c] px-2 py-0.5 rounded-full border dark:border-[#222227] border-stone-200/50 text-[9px] font-mono text-stone-400">
+              <span className={`h-1.5 w-1.5 rounded-full ${electronTracking ? "bg-emerald-500 animate-pulse" : "bg-zinc-500"}`}></span>
+              <span>{electronTracking ? "PC CONNECTED" : "PC IDLE"}</span>
+            </div>
+
+            {/* Mini light-dark theme switch */}
+            <button
+              onClick={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
+              className="p-1 rounded-full text-stone-500 hover:text-stone-300"
+            >
+              {themeMode === "dark" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </header>
+
+        {/* Main scrollable body viewport */}
+        <main className="flex-grow overflow-y-auto px-4 py-4 space-y-4">
+
+          {/* TAB 1: WORKSPACE CONTROL SCREEN */}
+          {mobileTab === "control" && myActivity && (
+            <div className="space-y-4">
+
+              {/* Circular productivity summary card */}
+              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between bg-gradient-to-br from-[#121215] to-[#181820]/30`}>
+                <div className="space-y-1 flex-1">
+                  <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block">Workstation Focus Dashboard</span>
+                  <h3 className="text-base font-serif italic font-semibold text-white mt-1">Hello, {user ? user.name.split(" ")[0] : "Developer"}</h3>
+
+                  <div className="flex items-baseline space-x-1 pt-2">
+                    <span className="text-3xl font-mono font-bold tracking-tight text-white">{todayFocusHours}</span>
+                    <span className="text-xs text-stone-500 font-mono">hrs focus today</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-550 dark:text-zinc-500 font-mono block">Workstation: {user?.deviceConnected || "Default PC"}</span>
+                </div>
+
+                {/* Score percentage circle display */}
+                <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
+                  <svg className="w-full h-full transform -rotate-90">
+                    <circle cx="40" cy="40" r="30" fill="none" stroke={themeMode === "dark" ? "#1a1a20" : "#f1f0ea"} strokeWidth="4" />
+                    <circle cx="40" cy="40" r="30" fill="none" stroke="#D4AF37" strokeWidth="4.5"
+                      strokeDasharray="188.4" strokeDashoffset={188.4 - (productivityScore / 100) * 188.4}
+                      strokeLinecap="round" className="transition-all duration-700" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                    <span className="text-sm font-mono font-bold text-white">{productivityScore}%</span>
+                    <span className="text-[7px] text-stone-500 uppercase tracking-wider mt-0.5">Score</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Large Controller Action Trigger */}
+              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-4 text-center`}>
+                <div className="space-y-1">
+                  <span className="text-[9px] font-mono text-[#a1a1aa] bg-stone-100 dark:bg-zinc-800/60 border dark:border-neutral-800 px-2 py-0.5 rounded-full inline-block">
+                    Telemetry Action Controller
+                  </span>
+                  <div className="text-xs text-stone-400 mt-1">
+                    Current Running App: <span className="font-semibold text-white font-mono">{myActivity.app}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity?.isPaused)}
+                  disabled={updatingActivity}
+                  className={`w-full py-4 rounded-xl font-mono text-xs font-bold tracking-widest uppercase border transition-all duration-300 shadow-md cursor-pointer ${myActivity.isPaused
+                      ? "bg-red-950/20 text-red-400 border-red-900/30 hover:bg-red-900/10"
+                      : "bg-emerald-950/20 text-emerald-400 border-emerald-900/30 hover:bg-emerald-900/10"
+                    }`}
+                >
+                  {myActivity.isPaused ? "▶️ Resume PC Tracking" : "⏸️ Pause PC Tracking"}
+                </button>
+              </div>
+
+              {/* Workstation Quick Switcher parameters */}
+              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-4`}>
+                <h4 className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block border-b border-zinc-850 pb-2">
+                  Update PC Tracking Details
+                </h4>
+
+                {/* Switch App Focus Dropdown */}
+                <div className="space-y-1.5">
+                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Select Active Application</label>
+                  <select
+                    value={myActivity.app}
+                    onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
+                    className={`w-full rounded-xl px-3 py-2 text-xs font-mono ${formInput} transition-all cursor-pointer`}
+                  >
+                    {myActivity.openApps && myActivity.openApps.length > 0 ? (
+                      <>
+                        <optgroup label="Open Apps on PC" className="text-[9px] font-mono text-zinc-550 bg-[#121215]">
+                          {!myActivity.openApps.includes(myActivity.app) && myActivity.app !== "Offline" && myActivity.app !== "Inactive" && (
+                            <option value={myActivity.app}>{myActivity.app}</option>
+                          )}
+                          {myActivity.openApps.map(app => (
+                            <option key={app} value={app}>{app}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Default Presets" className="text-[9px] font-mono text-zinc-550 bg-[#121215]">
+                          <option value="VS Code">VS Code</option>
+                          <option value="Chrome">Chrome Browser</option>
+                          <option value="Figma">Figma Design</option>
+                          <option value="Terminal">Terminal / Shell</option>
+                          <option value="Spotify">Spotify Music</option>
+                        </optgroup>
+                      </>
+                    ) : (
+                      <>
+                        <option value="VS Code">VS Code</option>
+                        <option value="Chrome">Chrome Browser</option>
+                        <option value="Figma">Figma Design</option>
+                        <option value="Terminal">Terminal / Shell</option>
+                        <option value="Spotify">Spotify Music</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Edit Project Title Details */}
+                <div className="space-y-1.5">
+                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Active Project / Task Name</label>
+                  <div className="flex items-center space-x-1.5">
+                    <input
+                      type="text"
+                      value={projectInput}
+                      onChange={(e) => setProjectInput(e.target.value)}
+                      className={`w-full rounded-xl px-3 py-2 text-xs ${formInput} transition-all`}
+                      placeholder="e.g. EndoCore Workspace"
+                      onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
+                    />
+                    <button
+                      onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
+                      className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-4 py-2 rounded-xl font-mono uppercase font-semibold transition-all cursor-pointer shrink-0"
+                    >
+                      Sync
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 2: ROOM STATUS BOARD & CHAT SCREEN */}
+          {mobileTab === "room" && (
+            <div className="space-y-4 pb-4">
+
+              {/* Guild Room selector parameters */}
+              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-2`}>
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 block">
+                    Focus Guild channel
+                  </label>
+                  <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded-full font-mono font-semibold animate-pulse">
+                    Live
+                  </span>
+                </div>
+                <select
+                  value={activeGroupName}
+                  onChange={(e) => {
+                    enterRoomChannel(e.target.value);
+                  }}
+                  className={`w-full rounded-xl px-3 py-2.5 text-xs font-mono ${formInput} transition-all cursor-pointer`}
+                >
+                  {groups.map(g => (
+                    <option key={g.id} value={g.name} className={themeMode === 'dark' ? 'bg-[#121215]' : 'bg-white'}>
+                      #{g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Members horizontal carousel lists */}
+              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-3`}>
+                <div className="flex justify-between items-center text-[9px] font-mono text-stone-500 uppercase tracking-widest border-b border-zinc-850 pb-2">
+                  <span>Room occupants ({occupants.length})</span>
+                  <span>Co-workers online</span>
+                </div>
+
+                {occupants.length === 0 ? (
+                  <p className="text-[10px] text-stone-500 font-mono italic py-2">No other co-workers in this room currently.</p>
+                ) : (
+                  <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+                    {occupants.map((occ) => {
+                      const isOnline = occ.status !== "offline";
+                      const styleMeta = getStatusNodeMeta(occ.status as any);
+
+                      return (
+                        <div key={occ.id} className="p-2.5 bg-black/10 dark:bg-black/35 rounded-xl border dark:border-neutral-850 border-stone-200/30 flex items-center justify-between text-[11px] font-mono">
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <div className="relative shrink-0">
+                              <img
+                                src={occ.avatarUrl}
+                                alt={occ.name}
+                                className="h-6.5 w-6.5 rounded-full object-cover border dark:border-neutral-800 border-neutral-200"
+                              />
+                              <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-black ${styleMeta.color}`} />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-sans font-semibold text-xs text-stone-200 truncate block leading-tight">{occ.name}</span>
+                              <span className="text-[8px] text-stone-500 uppercase tracking-wider block">{occ.role}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <span className="bg-zinc-850 text-zinc-300 px-1.5 py-0.5 rounded text-[8px] font-medium border border-zinc-800 max-w-[65px] truncate">
+                              {occ.currentActivity?.app || "Offline"}
+                            </span>
+                            <button
+                              onClick={() => triggerPeerNudge(occ.name, occ.id)}
+                              disabled={nudgedFriendIds[occ.id]}
+                              className={`px-2 py-1 rounded border text-[8px] font-mono uppercase tracking-wider transition-all ${nudgedFriendIds[occ.id]
+                                  ? "bg-stone-300 text-black border-stone-300"
+                                  : "text-stone-500 hover:text-stone-300 dark:border-neutral-800 border-stone-250"
+                                }`}
+                            >
+                              {nudgedFriendIds[occ.id] ? "Waved!" : "Wave"}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Simplified Room chat viewport */}
+              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-3`}>
+                <div className="flex justify-between items-center text-[9px] font-mono text-stone-500 uppercase tracking-widest border-b border-zinc-850 pb-2">
+                  <span>Room conversation board</span>
+                  <span>#{activeGroupName} Chat</span>
+                </div>
+
+                {/* Chat items scroll box */}
+                <div className="h-56 bg-black/10 dark:bg-black/20 rounded-xl p-3 border dark:border-neutral-850 border-stone-200/50 overflow-y-auto space-y-3">
+                  {roomChatMessages.length > 0 ? (
+                    roomChatMessages.map((msg) => {
+                      const isMe = msg.userId === user?.id;
+                      return (
+                        <div key={msg.id} className={`flex items-start gap-2 max-w-[90%] ${isMe ? "ml-auto flex-row-reverse" : ""}`}>
+                          <img src={msg.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"} className="h-6 w-6 rounded-full object-cover shrink-0 mt-0.5 border border-zinc-800" />
+                          <div className="space-y-0.5">
+                            <div className={`flex items-center gap-1.5 text-[8px] font-mono text-stone-500 ${isMe ? "justify-end" : ""}`}>
+                              <span className="font-semibold text-stone-400">{msg.userName.split(" ")[0]}</span>
+                              <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                            <div className={`px-3 py-2 rounded-xl text-[11px] leading-relaxed ${isMe
+                                ? "bg-stone-800 text-white dark:bg-stone-300 dark:text-black rounded-tr-none"
+                                : `bg-zinc-800/40 dark:bg-[#151518] text-stone-300 border ${borderRule} rounded-tl-none`
+                              }`}>
+                              {msg.message}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="text-center py-12 text-[10px] font-mono text-stone-500 italic">
+                      No chat logs. Write a message to connect!
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Message input elements */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={roomChatInput}
+                    onChange={(e) => setRoomChatInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && sendRoomChatMessage()}
+                    className={`flex-grow rounded-xl px-3 py-2 text-xs tracking-wide ${formInput}`}
+                    placeholder="Type message to room..."
+                  />
+                  <button
+                    onClick={sendRoomChatMessage}
+                    className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-4 py-2 rounded-xl font-mono uppercase font-semibold cursor-pointer shrink-0"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 3: USER PERSONAL IDENTITY & SETTINGS SCREEN */}
+          {mobileTab === "me" && user && (
+            <div className="space-y-4">
+
+              {/* Profile summary details */}
+              <div className={`p-6 rounded-2xl border ${bgCard} ${borderRule} flex flex-col items-center justify-center text-center space-y-3 bg-[#121215]`}>
+                <img
+                  src={user.avatarUrl}
+                  alt="Avatar profile"
+                  className="h-16 w-16 rounded-full object-cover border dark:border-[#D4AF37] border-zinc-300 shadow-md animate-pulse"
+                />
+                <div className="space-y-0.5">
+                  <h3 className="text-base font-serif italic font-bold text-white">{user.name}</h3>
+                  <span className="text-[10px] font-mono text-stone-500 lowercase block">{user.email}</span>
+                </div>
+              </div>
+
+              {/* Settings configuration form */}
+              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-4`}>
+                <h4 className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block border-b border-zinc-850 pb-2">
+                  Personal Settings & Goals
+                </h4>
+
+                {/* Update custom status text */}
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Custom Status Message</label>
+                  <input
+                    type="text"
+                    value={statusInput}
+                    onChange={(e) => setStatusInput(e.target.value)}
+                    onBlur={() => submitProfileSettings({ customStatus: statusInput })}
+                    onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ customStatus: statusInput })}
+                    className={`w-full rounded-xl px-3 py-2.5 text-xs ${formInput} transition-all`}
+                    placeholder="Set what you are doing..."
+                  />
+                </div>
+
+                {/* Focus Target Hours selector */}
+                <div className="space-y-1">
+                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Daily Focus Goal Hour Line</label>
+                  <select
+                    value={user.productivityGoal}
+                    onChange={(e) => submitProfileSettings({ productivityGoal: parseInt(e.target.value) })}
+                    className={`w-full rounded-xl px-3 py-2 text-xs font-mono lowercase ${formInput} transition-all cursor-pointer`}
+                  >
+                    <option value="4">4 hours target</option>
+                    <option value="6">6 hours target</option>
+                    <option value="8">8 hours target</option>
+                    <option value="10">10 hours target</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Sign Out Trigger action */}
+              <div className="pt-2">
+                <button
+                  onClick={handleLogout}
+                  className="w-full py-3.5 border dark:border-red-950 border-red-200 dark:hover:bg-red-950/20 hover:bg-red-50 text-xs font-mono uppercase tracking-wider rounded-xl text-red-500 cursor-pointer transition-all text-center"
+                >
+                  Sign Out Workspace
+                </button>
+              </div>
+
+            </div>
+          )}
+
+        </main>
+
+        {/* Sticky Premium Glassmorphic Bottom Navigation Bar */}
+        <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t backdrop-blur-lg flex items-center justify-around z-50 ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/90" : "bg-[#fbfbfa]/90"
+          }`}>
+          {/* Tab Button: Control */}
+          <button
+            onClick={() => setMobileTab("control")}
+            className={`flex flex-col items-center space-y-1 py-1 cursor-pointer transition-colors ${mobileTab === "control" ? "text-[#D4AF37]" : "text-stone-500"
+              }`}
+          >
+            <Laptop className="h-5 w-5" />
+            <span className="text-[9px] font-mono uppercase tracking-wider">Control</span>
+          </button>
+
+          {/* Tab Button: Room */}
+          <button
+            onClick={() => setMobileTab("room")}
+            className={`flex flex-col items-center space-y-1 py-1 cursor-pointer transition-colors ${mobileTab === "room" ? "text-[#D4AF37]" : "text-stone-500"
+              }`}
+          >
+            <Users className="h-5 w-5" />
+            <span className="text-[9px] font-mono uppercase tracking-wider">Room</span>
+          </button>
+
+          {/* Tab Button: Me */}
+          <button
+            onClick={() => setMobileTab("me")}
+            className={`flex flex-col items-center space-y-1 py-1 cursor-pointer transition-colors ${mobileTab === "me" ? "text-[#D4AF37]" : "text-stone-500"
+              }`}
+          >
+            <User className="h-5 w-5" />
+            <span className="text-[9px] font-mono uppercase tracking-wider">Me</span>
+          </button>
+        </nav>
+
+      </div>
+    );
+  };
+
+  // Mobile layout branch check
+  if (isMobile) {
+    return renderMobileView();
+  }
+  // --- END OF MOBILE COMPANION VIEW ---
+
+  return (
+    <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-350 ease-out font-sans ${bgMain}`}>
+
+      {/* ⚡ PREMIUM MINIMAL TOAST ALERT */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
+            animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
+            exit={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
+            className={`fixed top-8 left-1/2 -translate-x-1/2 z-50 px-6 py-3.5 rounded-full shadow-2xl flex items-center space-x-3 text-xs tracking-wide font-mono ${themeMode === "dark" ? "bg-white text-black border border-neutral-100" : "bg-neutral-900 text-white border border-neutral-800"
+              }`}
+          >
+            <span className="h-2 w-2 rounded-full bg-stone-500 animate-ping"></span>
+            <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🕊️ LEFT SYSTEM BRAND & WORKSPACE COMMAND PANEL */}
+      {renderSidebar(false)}
+
+      {/* Mobile Drawer Sidebar overlay */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileMenuOpen(false)}
+              className="fixed inset-0 bg-black/60 z-50 md:hidden backdrop-blur-sm"
+            />
+            {/* Drawer container */}
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 bottom-0 w-72 z-50 flex flex-col md:hidden shadow-2xl"
+            >
+              {renderSidebar(true)}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* 🚀 CENTRAL VIEW CONTAINER */}
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative">
-        
+
         {/* Elegant Top Header with Minimalist Meta Controls */}
-        <header className={`h-16 border-b shrink-0 px-6 md:px-8 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${
-          themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
-        }`}>
-          <div className="flex items-center space-x-4 flex-1">
+        <header className={`h-16 border-b shrink-0 px-6 md:px-8 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
+          }`}>
+          <div className="flex items-center space-x-3 flex-1">
+            {/* Mobile Hamburger Menu Trigger */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="md:hidden p-2 text-stone-500 hover:text-stone-300 rounded-lg hover:bg-neutral-800/40 cursor-pointer"
+              title="Open Navigation"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
             <h1 className="text-lg font-serif italic tracking-tight font-medium">Workspace Status</h1>
-            <span className="h-3.5 w-px bg-neutral-400/20"></span>
-            
-            <p className="text-[10px] font-mono text-[#a1a1aa] leading-none uppercase hidden sm:block">
+
+            {/* System Status Quick Indicator */}
+            <div className="flex items-center space-x-1.5 bg-[#f5f4ef]/40 dark:bg-stone-900/40 px-2.5 py-1 rounded-full border dark:border-neutral-850 border-stone-250/60 text-[9px] font-mono text-stone-400">
+              <span className={`h-1.5 w-1.5 rounded-full inline-block ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "bg-emerald-500 animate-pulse"
+                  : "bg-red-500 animate-ping"
+                }`}></span>
+              <span className="hidden sm:inline">
+                {socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "Pipeline Healthy"
+                  : "Pipeline Error"}
+              </span>
+            </div>
+
+            <span className="h-3.5 w-px bg-neutral-400/20 hidden md:block"></span>
+            <p className="text-[10px] font-mono text-[#a1a1aa] leading-none uppercase hidden md:block">
               {user ? `Active guild: ${user.activeGroup}` : ""}
             </p>
           </div>
@@ -1411,14 +2104,14 @@ export default function App() {
           <div className="flex items-center space-x-4">
             {/* Minimal Dark/Light Toggle Icon */}
             <div className="flex items-center bg-[#f5f4ef] dark:bg-[#18181c] p-1 rounded-full border dark:border-[#222227] border-stone-200/60">
-              <button 
+              <button
                 onClick={() => handleManualThemeChange("light")}
                 className={`p-1.5 rounded-full transition-colors cursor-pointer ${themeMode === "light" ? "bg-white text-[#1c1c1f] shadow-sm" : "text-stone-500 hover:text-white"}`}
                 title="Light Mode"
               >
                 <Sun className="h-3.5 w-3.5" />
               </button>
-              <button 
+              <button
                 onClick={() => handleManualThemeChange("dark")}
                 className={`p-1.5 rounded-full transition-colors cursor-pointer ${themeMode === "dark" ? "bg-[#121215] text-[#e4e4e7] shadow-sm" : "text-stone-400 hover:text-[#1c1c1f]"}`}
                 title="Dark Mode"
@@ -1435,8 +2128,8 @@ export default function App() {
         </header>
 
         {/* 📚 PRIMARY SCROLLABLE BODY */}
-        <div className="p-6 md:p-8 space-y-8 max-w-5xl w-full mx-auto">
-          
+        <div className="p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 max-w-5xl w-full mx-auto">
+
           {/* SLIDING TIMELINE SUBSECTION FOR SELECTED FRIENDS */}
           <AnimatePresence>
             {rightPaneFriend && (
@@ -1446,7 +2139,7 @@ export default function App() {
                 exit={{ opacity: 0, height: 0 }}
                 className={`p-6 border rounded-2xl relative overflow-hidden ${bgCard} ${borderRule}`}
               >
-                <button 
+                <button
                   onClick={() => setSelectedFriendId(null)}
                   className="absolute top-5 right-5 text-stone-500 hover:text-stone-300 p-2 rounded-full cursor-pointer"
                   title="Close panel"
@@ -1456,9 +2149,9 @@ export default function App() {
 
                 <div className="space-y-6">
                   <div className="flex items-center space-x-4">
-                    <img 
-                      src={rightPaneFriend.avatarUrl} 
-                      alt={rightPaneFriend.name} 
+                    <img
+                      src={rightPaneFriend.avatarUrl}
+                      alt={rightPaneFriend.name}
                       className="h-12 w-12 rounded-full object-cover"
                     />
                     <div>
@@ -1512,172 +2205,650 @@ export default function App() {
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
               className="space-y-8"
             >
-              
+
               {/* 1⃣ MAIN DASHBOARD TAB VIEW */}
               {activeTab === "dashboard" && (
                 <>
                   {/* EDITORIAL HERO TITLE BLOCK */}
-                  <div className="space-y-2">
-                    <h2 className="text-4xl md:text-5xl font-serif italic font-medium tracking-tight leading-tight">
-                      {getGreeting()}
-                    </h2>
-                    <p className={`text-sm tracking-wide ${textSub}`}>
-                      Here's your productivity overview for today. Keep your momentum going!
-                    </p>
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 sm:gap-4">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl sm:text-3xl md:text-4xl font-serif font-semibold tracking-tight leading-tight">
+                        {getGreeting()}
+                      </h2>
+                      <p className={`text-xs sm:text-sm tracking-wide ${textSub}`}>
+                        Here's your productivity overview for today. Keep your momentum going!
+                      </p>
+                    </div>
+
+                    {/* Quick controls pill container */}
+                    <div className="flex flex-wrap items-center gap-2 bg-[#121215]/60 border border-[#222227] p-1.5 rounded-2xl sm:rounded-full w-fit">
+                      {/* Agent Active/Paused Toggle */}
+                      <button
+                        onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity?.isPaused)}
+                        disabled={updatingActivity}
+                        className={`px-3.5 py-1.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${myActivity?.isPaused
+                            ? "bg-red-950/40 text-red-400 border-red-900/35"
+                            : "bg-emerald-950/40 text-emerald-400 border-emerald-900/35"
+                          }`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${myActivity?.isPaused ? "bg-red-500 animate-pulse" : "bg-emerald-500 animate-ping"}`} />
+                        <span>{myActivity?.isPaused ? "AGENT PAUSED" : "AGENT ACTIVE"}</span>
+                      </button>
+
+                      <span className="h-4 w-px bg-zinc-800 hidden sm:block"></span>
+
+                      {/* Private Status Toggle */}
+                      <button
+                        onClick={() => submitProfileSettings({ privacyMode: "Private" })}
+                        className={`px-3.5 py-1.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${user?.privacyMode === "Private"
+                            ? "bg-amber-950/40 text-amber-400 border-amber-900/35"
+                            : "bg-transparent text-stone-500 border-transparent hover:text-stone-300"
+                          }`}
+                      >
+                        <Lock className="h-3 w-3" />
+                        <span>PRIVATE</span>
+                      </button>
+
+                      {/* Team Status Toggle */}
+                      <button
+                        onClick={() => submitProfileSettings({ privacyMode: "Team" })}
+                        className={`px-3.5 py-1.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${user?.privacyMode === "Team"
+                            ? "bg-purple-950/40 text-purple-400 border-purple-900/35"
+                            : "bg-transparent text-stone-500 border-transparent hover:text-stone-300"
+                          }`}
+                      >
+                        <Users className="h-3 w-3" />
+                        <span>TEAM</span>
+                      </button>
+
+                      {/* Public Status Toggle */}
+                      <button
+                        onClick={() => submitProfileSettings({ privacyMode: "Public" })}
+                        className={`px-3.5 py-1.5 rounded-full text-[10px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
+                            ? "bg-blue-950/40 text-blue-400 border-blue-900/35"
+                            : "bg-transparent text-stone-500 border-transparent hover:text-stone-300"
+                          }`}
+                      >
+                        <Globe className="h-3 w-3" />
+                        <span>PUBLIC</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* WORKSPACE PIPELINE DIAGNOSTICS & SYSTEM STATUS */}
+                  <div className={`p-4 sm:p-6 rounded-2xl sm:rounded-3xl border ${bgCard} ${borderRule} space-y-4`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400 flex items-center gap-2">
+                          <Terminal className="h-4 w-4 text-zinc-505" />
+                          Workspace Pipeline Connectivity Status
+                        </h3>
+                        <p className={`text-[11px] ${textSub}`}>
+                          Live telemetry integrity check across development cluster microservices.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            triggerToast("Running diagnostics health-check...");
+                            await checkHealth();
+                            if (socketRef.current) {
+                              if (!socketRef.current.connected) {
+                                socketRef.current.connect();
+                              }
+                            }
+                          }}
+                          className="border dark:border-[#222227] border-neutral-300 hover:border-[#D4AF37] dark:hover:bg-zinc-900/30 hover:bg-zinc-100/50 dark:text-white text-neutral-800 hover:text-[#D4AF37] text-[10px] px-4 py-2 rounded-xl font-mono uppercase tracking-wide font-semibold transition-all duration-150 cursor-pointer bg-transparent"
+                        >
+                          Run diagnostics
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+                      {/* 1. REST API */}
+                      <div className="p-3.5 rounded-2xl bg-black/10 dark:bg-black/35 border dark:border-[#222227]/40 border-stone-200/20 flex flex-col justify-between h-20 transition-all hover:border-zinc-700/40">
+                        <span className="text-[9px] font-mono text-stone-500 uppercase tracking-wider block">REST API</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`h-2.5 w-2.5 rounded-full ${apiStatus === "online" ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-red-500 animate-ping shadow-[0_0_8px_rgba(239,68,68,0.5)]"}`} />
+                          <span className="text-xs font-mono font-bold text-stone-300">{apiStatus === "online" ? "ONLINE" : "OFFLINE"}</span>
+                        </div>
+                      </div>
+
+                      {/* 2. WebSockets */}
+                      <div className="p-3.5 rounded-2xl bg-black/10 dark:bg-black/35 border dark:border-[#222227]/40 border-stone-200/20 flex flex-col justify-between h-20 transition-all hover:border-zinc-700/40">
+                        <span className="text-[9px] font-mono text-stone-500 uppercase tracking-wider block">Websockets</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`h-2.5 w-2.5 rounded-full ${socketStatus === "connected"
+                              ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                              : socketStatus === "error"
+                                ? "bg-red-500 animate-ping shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                                : "bg-neutral-500 shadow-[0_0_8px_rgba(115,115,115,0.5)]"
+                            }`} />
+                          <span className="text-xs font-mono font-bold text-stone-300">
+                            {socketStatus === "connected" ? "CONNECTED" : socketStatus === "error" ? "ERROR STATE" : "DISCONNECTED"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 3. Supabase Database */}
+                      <div className="p-3.5 rounded-2xl bg-black/10 dark:bg-black/35 border dark:border-[#222227]/40 border-stone-200/20 flex flex-col justify-between h-20 transition-all hover:border-zinc-700/40">
+                        <span className="text-[9px] font-mono text-stone-500 uppercase tracking-wider block">Supabase DB</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`h-2.5 w-2.5 rounded-full ${dbStatus === "connected" ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-red-500 animate-ping shadow-[0_0_8px_rgba(239,68,68,0.5)]"}`} />
+                          <span className="text-xs font-mono font-bold text-stone-300">
+                            {dbStatus === "connected" ? "CONNECTED" : dbStatus === "checking" ? "CHECKING..." : "ERROR STATE"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 4. Desktop Agent */}
+                      <div className="p-3.5 rounded-2xl bg-black/10 dark:bg-black/35 border dark:border-[#222227]/40 border-stone-200/20 flex flex-col justify-between h-20 transition-all hover:border-zinc-700/40">
+                        <span className="text-[9px] font-mono text-stone-500 uppercase tracking-wider block">Desktop Agent</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`h-2.5 w-2.5 rounded-full ${electronTracking ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" : "bg-neutral-500 shadow-[0_0_8px_rgba(115,115,115,0.5)]"}`} />
+                          <span className="text-xs font-mono font-bold text-stone-300">{electronTracking ? "SYNCED" : "OFFLINE / IDLE"}</span>
+                        </div>
+                      </div>
+
+                      {/* 5. Gemini AI Engine */}
+                      <div className="p-3.5 rounded-2xl bg-black/10 dark:bg-black/35 border dark:border-[#222227]/40 border-stone-200/20 flex flex-col justify-between h-20 transition-all hover:border-zinc-700/40">
+                        <span className="text-[9px] font-mono text-stone-500 uppercase tracking-wider block">Gemini AI</span>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`h-2.5 w-2.5 rounded-full ${aiStatus === "configured" && !insightsError
+                              ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]"
+                              : "bg-red-500 animate-ping shadow-[0_0_8px_rgba(239,68,68,0.5)]"
+                            }`} />
+                          <span className="text-xs font-mono font-bold text-stone-300">
+                            {aiStatus === "configured" && !insightsError ? "ACTIVE" : aiStatus === "checking" ? "CHECKING..." : "ERROR STATE"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   {/* CARDS GRID */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
+                  <div className="grid grid-cols-12 gap-3 sm:gap-5">
                     {/* Focus Time */}
-                    <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-32`}>
+                    <div className={`col-span-12 sm:col-span-6 lg:col-span-2 p-4 sm:p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-28 sm:h-32`}>
                       <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block">Focus Time</span>
                       <div className="space-y-1">
-                        <div className="text-2xl font-serif italic font-semibold">{myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0"} hrs</div>
+                        <div className="text-2xl font-serif font-semibold">{myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0"} hrs</div>
                         <div className="text-[10px] text-zinc-500 font-mono">Goal: {user?.productivityGoal || 6} hrs</div>
                       </div>
                     </div>
                     {/* Productivity Score */}
-                    <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-32`}>
+                    <div className={`col-span-12 sm:col-span-6 lg:col-span-2 p-4 sm:p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-28 sm:h-32`}>
                       <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block">Productivity Score</span>
                       <div className="space-y-1">
-                        <div className="text-2xl font-serif italic font-semibold">{myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0}%</div>
+                        <div className="text-2xl font-serif font-semibold">{myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0}%</div>
                         <div className="text-[10px] text-zinc-500 font-mono">Today's target achieved</div>
                       </div>
                     </div>
                     {/* Current Session */}
-                    <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-32`}>
+                    <div className={`col-span-12 sm:col-span-6 lg:col-span-2 p-4 sm:p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-28 sm:h-32`}>
                       <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block">Current Session</span>
                       <div className="space-y-1">
-                        <div className="text-lg font-serif italic font-semibold truncate">{myActivity ? myActivity.app : "Inactive"}</div>
+                        <div className="text-lg font-serif font-semibold truncate">{myActivity ? myActivity.app : "Inactive"}</div>
                         <div className="text-[10px] text-zinc-500 font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
                       </div>
                     </div>
-                    {/* Goals Completed */}
-                    <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-32`}>
-                      <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block">Goals Completed</span>
-                      <div className="space-y-1">
-                        <div className="text-2xl font-serif italic font-semibold">{pomodoroSessionCount} cycles</div>
-                        <div className="text-[10px] text-zinc-500 font-mono">Pomodoro focus block</div>
-                      </div>
-                    </div>
-                    {/* Weekly Trend */}
-                    <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between h-32`}>
-                      <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block">Weekly Trend</span>
-                      <div className="space-y-1">
-                        <div className="text-2xl font-serif italic font-semibold">{analytics ? analytics.weeklyTotalHours.toFixed(1) : "0.0"} hrs</div>
-                        <div className="text-[10px] text-zinc-500 font-mono">Daily Avg: {analytics ? analytics.averageDailyFocus : 0} hrs</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* TODAY'S PROGRESS / TRACKER & TIMELINE SPLIT GRID */}
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left Column: Today's Progress / Activity Tracker */}
-                    <div className="lg:col-span-2">
-                      {myActivity && (
-                        <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} h-full relative overflow-hidden transition-all duration-300`}>
-                          <div className="absolute top-0 right-0 p-8 opacity-[0.02] pointer-events-none">
-                            <Terminal className="h-64 w-64 text-zinc-400" />
+                    {/* Today's Progress / Activity Tracker Controls */}
+                    {myActivity && (
+                      <div className={`col-span-12 sm:col-span-12 lg:col-span-6 p-4 sm:p-5 rounded-2xl border ${bgCard} ${borderRule} flex flex-col justify-between min-h-32`}>
+                        <div className="flex items-center justify-between">
+                          <div className="inline-flex items-center space-x-2">
+                            <span className="text-[9px] font-mono uppercase tracking-widest text-[#a1a1aa] bg-stone-100 dark:bg-zinc-800/60 border dark:border-neutral-800/50 border-neutral-200 px-2.5 py-0.5 rounded-full">
+                              Today's Progress / Activity Tracker
+                            </span>
+                            {myActivity.isPaused && (
+                              <span className="text-[9px] font-mono uppercase tracking-wider text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full animate-pulse">
+                                Paused
+                              </span>
+                            )}
                           </div>
+                        </div>
 
-                          <div className="flex flex-col justify-between h-full space-y-6 relative z-10">
-                            <div className="space-y-4">
-                              <div className="inline-flex items-center space-x-2">
-                                <span className="text-[10px] font-mono uppercase tracking-widest text-[#a1a1aa] bg-stone-100 dark:bg-zinc-800/60 border dark:border-neutral-800/50 border-neutral-200 px-3 py-1 rounded-full">
-                                  Today's Progress / Activity Tracker
-                                </span>
-                                {myActivity.isPaused && (
-                                  <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full animate-pulse">
-                                    Paused
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                {/* App Selector Custom Node */}
-                                <div className="space-y-1.5">
-                                  <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Select Active Application</label>
-                                  <select 
-                                    value={myActivity.app}
-                                    onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
-                                    className={`w-full rounded-xl px-4 py-3 text-xs font-mono ${formInput} transition-all cursor-pointer`}
-                                  >
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                          {/* App Selector Custom Node */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] uppercase font-mono tracking-widest text-zinc-500 block leading-none">Select Active Application</label>
+                            <select
+                              value={myActivity.app}
+                              onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
+                              className={`w-full rounded-xl px-3 py-2 text-[11px] font-mono ${formInput} transition-all cursor-pointer`}
+                            >
+                              {myActivity.openApps && myActivity.openApps.length > 0 ? (
+                                <>
+                                  <optgroup label="Currently Open Apps" className="text-[9px] font-mono text-zinc-550 bg-[#121215] border-[#222227]">
+                                    {!myActivity.openApps.includes(myActivity.app) && myActivity.app !== "Offline" && myActivity.app !== "Inactive" && (
+                                      <option value={myActivity.app}>{myActivity.app}</option>
+                                    )}
+                                    {myActivity.openApps.map(app => (
+                                      <option key={app} value={app}>{app}</option>
+                                    ))}
+                                  </optgroup>
+                                  <optgroup label="Default Workstation Apps" className="text-[9px] font-mono text-zinc-550 bg-[#121215] border-[#222227]">
                                     <option value="VS Code">VS Code</option>
                                     <option value="Chrome">Chrome Browser</option>
                                     <option value="Figma">Figma Design</option>
                                     <option value="Terminal">Terminal / Shell</option>
                                     <option value="Spotify">Spotify Music</option>
                                     <option value="Slack">Slack Chat</option>
-                                  </select>
-                                </div>
+                                  </optgroup>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="VS Code">VS Code</option>
+                                  <option value="Chrome">Chrome Browser</option>
+                                  <option value="Figma">Figma Design</option>
+                                  <option value="Terminal">Terminal / Shell</option>
+                                  <option value="Spotify">Spotify Music</option>
+                                  <option value="Slack">Slack Chat</option>
+                                </>
+                              )}
+                            </select>
+                          </div>
 
-                                {/* Project description inline apply */}
-                                <div className="space-y-1.5">
-                                  <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Active Project / Task Details</label>
-                                  <div className="flex items-center space-x-2">
-                                    <input 
-                                      type="text"
-                                      value={projectInput}
-                                      onChange={(e) => setProjectInput(e.target.value)}
-                                      className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput} transition-all`}
-                                      placeholder="What are you building?"
-                                      onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
-                                    />
-                                    <button 
-                                      onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                                      className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-4 py-3 rounded-xl tracking-wide font-mono uppercase font-semibold transition-all cursor-pointer shrink-0"
-                                    >
-                                      Sync
-                                    </button>
+                          {/* Project description inline apply */}
+                          <div className="space-y-1">
+                            <label className="text-[9px] uppercase font-mono tracking-widest text-zinc-550 block leading-none">Active Project / Task Details</label>
+                            <div className="flex items-center space-x-1.5">
+                              <input
+                                type="text"
+                                value={projectInput}
+                                onChange={(e) => setProjectInput(e.target.value)}
+                                className={`w-full rounded-xl px-3 py-2 text-[11px] tracking-wide ${formInput} transition-all`}
+                                placeholder="What are you building?"
+                                onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
+                              />
+                              <button
+                                onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
+                                className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-[11px] px-3.5 py-2 rounded-xl tracking-wide font-mono uppercase font-semibold transition-all cursor-pointer shrink-0"
+                              >
+                                Sync
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* TODAY'S PROGRESS / TRACKER & TIMELINE SPLIT GRID */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                    {/* Left Column: Today's Progress / Activity Tracker */}
+                    <div className="lg:col-span-2">
+                      {myActivity && (
+                        <div className={`p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl ${bgCard} border ${borderRule} h-full relative overflow-hidden transition-all duration-300`}>
+                          <div className="absolute top-0 right-0 p-8 opacity-[0.02] pointer-events-none">
+                            <Terminal className="h-64 w-64 text-zinc-400" />
+                          </div>
+
+                          <div className="flex flex-col justify-between h-full space-y-6 relative z-10">
+                            {/* Team & Scrum Telemetry Section */}
+                            <div className={`p-5 rounded-2xl border dark:border-[#222227]/80 border-stone-200/50 ${bgInternal} space-y-4`}>
+                              <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-mono uppercase tracking-widest text-stone-300 flex items-center gap-1.5">
+                                  <Users className="h-4 w-4 text-zinc-500" />
+                                  <span>Team & Scrum Telemetry</span>
+                                </h3>
+                                <div className="flex items-center space-x-2">
+                                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  <span className="text-[10px] font-mono text-zinc-550 dark:text-zinc-400 uppercase tracking-widest">Live Synced</span>
+                                </div>
+                              </div>
+
+                              {/* Active Room Members Grid */}
+                              <div className="space-y-3">
+                                {(() => {
+                                  const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : null);
+                                  if (!activeGroupName) {
+                                    return (
+                                      <p className="text-[10px] font-mono text-stone-500 italic">No active workspace group selected.</p>
+                                    );
+                                  }
+
+                                  const occupants = activeGroupName === user?.activeGroup && friends && friends.length > 0
+                                    ? friends
+                                    : (roomsOccupants[activeGroupName] || []);
+
+                                  return (
+                                    <div className="space-y-3">
+                                      <div className="flex justify-between items-center text-[10px] font-mono text-zinc-455 dark:text-zinc-400 border-b dark:border-neutral-800 border-stone-200/50 pb-1.5">
+                                        <span>Guild: #{activeGroupName}</span>
+                                        <span>{occupants.length} Co-workers</span>
+                                      </div>
+
+                                      {occupants.length === 0 ? (
+                                        <p className="text-[10px] font-mono text-stone-500 italic">No other co-workers in this room currently.</p>
+                                      ) : (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto pr-1">
+                                          {occupants.map((occ) => {
+                                            const occOnline = occ.status !== "offline";
+                                            const activityApp = occ.currentActivity?.app || "Offline";
+                                            const activityProject = occ.currentActivity?.project || "None";
+                                            const duration = occ.currentActivity?.durationText || "";
+
+                                            return (
+                                              <div key={occ.id} className="p-3 bg-black/20 dark:bg-black/35 rounded-xl border dark:border-[#222227]/40 border-stone-200/20 flex flex-col justify-between space-y-2 hover:border-zinc-700/40 transition-all duration-200">
+                                                <div className="flex items-center justify-between">
+                                                  <div className="flex items-center space-x-2 min-w-0">
+                                                    <div className="relative shrink-0">
+                                                      <img
+                                                        src={occ.avatarUrl}
+                                                        alt={occ.name}
+                                                        className="h-6 w-6 rounded-full object-cover border dark:border-neutral-850 border-neutral-200"
+                                                      />
+                                                      <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-[#121215] ${occOnline ? "bg-emerald-500 animate-pulse" : "bg-zinc-650"
+                                                        }`} />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                      <span className="font-sans font-semibold text-xs text-stone-200 truncate block leading-tight">{occ.name}</span>
+                                                      <span className="text-[8px] font-mono uppercase tracking-wider text-stone-500 block">{occ.role}</span>
+                                                    </div>
+                                                  </div>
+                                                  <span className="text-[9px] font-mono text-zinc-500 shrink-0">{duration}</span>
+                                                </div>
+
+                                                {occOnline ? (
+                                                  <div className="flex items-center justify-between text-[10px] font-mono bg-black/10 dark:bg-[#121215]/30 p-1.5 rounded-lg border dark:border-[#222227]/20 border-stone-200/10">
+                                                    <span className="text-stone-300 font-semibold truncate flex items-center space-x-1">
+                                                      <span className="text-emerald-450">⚡</span>
+                                                      <span>{activityApp}</span>
+                                                    </span>
+                                                    {activityProject !== "None" && (
+                                                      <span className="text-[9px] text-zinc-550 dark:text-zinc-400 max-w-[100px] truncate" title={activityProject}>
+                                                        {activityProject}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                ) : (
+                                                  <span className="text-[9px] font-mono text-zinc-600 block pl-1">Offline</span>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+
+                              {/* AI Scrum Coordinator Brief */}
+                              <div className="pt-2 border-t dark:border-neutral-80 border-stone-200/50">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center space-x-1.5">
+                                    <Sparkles className="h-4 w-4 text-amber-500/80" />
+                                    <span className="text-[10px] font-mono uppercase tracking-widest text-stone-405 font-bold">Scrum Coordinator Brief</span>
                                   </div>
+                                  <button
+                                    onClick={() => fetchAiBriefing(true)}
+                                    disabled={loadingInsights}
+                                    className="p-1 rounded bg-transparent hover:bg-neutral-800 text-stone-500 hover:text-stone-300 transition-all cursor-pointer disabled:opacity-50"
+                                    title="Regenerate Scrum Alignment Brief"
+                                  >
+                                    <RefreshCw className={`h-3 w-3 ${loadingInsights ? "animate-spin" : ""}`} />
+                                  </button>
                                 </div>
-                              </div>
-                            </div>
 
-                            {/* High precision countdown box */}
-                            <div className={`p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-6 border ${bgInternal} dark:border-[#222227] border-stone-200/50`}>
-                              <div className="space-y-1">
-                                <span className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Current Session Duration</span>
-                                <div className="text-xl font-mono tracking-tight text-stone-350 font-bold flex items-center">
-                                  <Clock className="h-4.5 w-4.5 text-zinc-400 mr-2 shrink-0 animate-pulse" />
-                                  <span>{parsedDurationText(myActivity.durationSeconds || 0)}</span>
-                                </div>
-                              </div>
+                                {loadingInsights ? (
+                                  <div className="space-y-2 py-1">
+                                    <div className="h-2 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-1/3 animate-pulse"></div>
+                                    <div className="h-2 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-full animate-pulse"></div>
+                                    <div className="h-2 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-5/6 animate-pulse"></div>
+                                  </div>
+                                ) : aiInsights ? (() => {
+                                  let parsedBrief: any = null;
+                                  try {
+                                    parsedBrief = JSON.parse(aiInsights);
+                                  } catch (e) {
+                                    // Fallback if not JSON
+                                  }
 
-                              <div className="flex items-center space-x-2 select-none border-t sm:border-y-0 sm:border-l dark:border-[#222227] border-stone-200/50 pt-4 sm:pt-0 sm:pl-4">
-                                <button 
-                                  onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity.isPaused)}
-                                  className={`h-11 w-11 rounded-xl flex items-center justify-center transition-all cursor-pointer ${
-                                    myActivity.isPaused 
-                                      ? "bg-stone-850 dark:bg-stone-300 dark:text-black text-white" 
-                                      : "bg-[#2563EB]/10 border border-[#2563EB]/30 hover:bg-[#2563EB]/25 text-blue-450 dark:text-blue-350"
-                                  }`}
-                                  title={myActivity.isPaused ? "Resume focus tracking session" : "Temporarily pause activity tracker"}
-                                >
-                                  {myActivity.isPaused ? <Play className="h-4.5 w-4.5" /> : <Pause className="h-4.5 w-4.5" />}
-                                </button>
-                                
-                                <button 
-                                  onClick={async () => {
-                                    const res = await fetch("/api/my-activity", {
-                                      method: "POST",
-                                      headers: getAuthHeaders(),
-                                      body: JSON.stringify({ resetTimer: true })
+                                  if (parsedBrief && parsedBrief.roomSummary) {
+                                    // Sanitize to prevent crashes on undefined properties
+                                    const summaryObj = parsedBrief.roomSummary;
+                                    const roomSummary = {
+                                      status: typeof summaryObj.status === "string" ? summaryObj.status : "Active Room",
+                                      productivityPercentage: typeof summaryObj.productivityPercentage === "number" ? summaryObj.productivityPercentage : 50,
+                                      description: typeof summaryObj.description === "string" ? summaryObj.description : "No description available.",
+                                      activeCount: typeof summaryObj.activeCount === "number" ? summaryObj.activeCount : 0,
+                                      totalCount: typeof summaryObj.totalCount === "number" ? summaryObj.totalCount : 1
+                                    };
+
+                                    const performerObj = parsedBrief.topPerformer || {};
+                                    const topPerformer = {
+                                      name: typeof performerObj.name === "string" ? performerObj.name : "None",
+                                      focusTime: typeof performerObj.focusTime === "string" ? performerObj.focusTime : "0h",
+                                      apps: Array.isArray(performerObj.apps) ? performerObj.apps : ["VS Code"],
+                                      score: typeof performerObj.score === "number" ? performerObj.score : 0,
+                                      reason: typeof performerObj.reason === "string" ? performerObj.reason : ""
+                                    };
+
+                                    const attentionObj = parsedBrief.needsAttention || {};
+                                    const needsAttention = {
+                                      name: typeof attentionObj.name === "string" ? attentionObj.name : "None",
+                                      idleTime: typeof attentionObj.idleTime === "string" ? attentionObj.idleTime : "0m",
+                                      reason: typeof attentionObj.reason === "string" ? attentionObj.reason : ""
+                                    };
+
+                                    const recommendations = Array.isArray(parsedBrief.recommendations) ? parsedBrief.recommendations : [];
+                                    
+                                    const predictionObj = parsedBrief.prediction || {};
+                                    const prediction = {
+                                      completionPercentage: typeof predictionObj.completionPercentage === "number" ? predictionObj.completionPercentage : 50,
+                                      description: typeof predictionObj.description === "string" ? predictionObj.description : ""
+                                    };
+
+                                    const summary = typeof parsedBrief.summary === "string" ? parsedBrief.summary : "";
+
+                                    const telemetryRoomName = selectedRoomName || user?.activeGroup || (groups.length > 0 ? groups[0].name : null) || "";
+                                    const cycledOccupants = (telemetryRoomName === user?.activeGroup && friends && friends.length > 0
+                                      ? friends
+                                      : (Array.isArray(roomsOccupants[telemetryRoomName]) ? roomsOccupants[telemetryRoomName] : [])).filter(o => o && o.id);
+
+                                    // Calculate mini stats card metrics
+                                    const myHours = myActivity ? (myActivity.durationSeconds / 3600) : 0;
+                                    const myScore = Math.min(100, Math.round((myHours / (user?.productivityGoal || 6)) * 100)) || 0;
+                                    
+                                    const safeFloat = (val: any) => {
+                                      const parsed = parseFloat(val);
+                                      return isNaN(parsed) ? 0 : parsed;
+                                    };
+
+                                    const friendsScores = (cycledOccupants || []).map(o => {
+                                      const hours = safeFloat(o.todayFocusTime);
+                                      return Math.min(100, Math.round((hours / 6) * 100));
                                     });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                      setMyActivity(data.activity);
-                                      triggerToast("Focus session duration timer reset successfully");
-                                      fetchProfile();
-                                    }
-                                  }}
-                                  className="h-11 w-11 bg-transparent hover:bg-stone-500/10 text-stone-500 hover:text-stone-300 border dark:border-[#222227] border-stone-200/50 rounded-xl flex items-center justify-center cursor-pointer"
-                                  title="Restart Timer"
-                                >
-                                  <RefreshCw className="h-4 w-4" />
-                                </button>
+                                    const avgProductivity = Math.round((myScore + friendsScores.reduce((a,b)=>a+b, 0)) / (friendsScores.length + 1)) || 0;
+
+                                    const maxHoursVal = Math.max(
+                                      myHours,
+                                      ...(cycledOccupants || []).map(o => safeFloat(o.todayFocusTime))
+                                    );
+                                    const maxHoursStr = isNaN(maxHoursVal) 
+                                      ? "0h 0m" 
+                                      : `${Math.floor(maxHoursVal)}h ${Math.round((maxHoursVal % 1) * 60)}m`;
+
+                                    const switchesCount = user?.timeline ? user.timeline.filter(t => t.app !== "Offline").length : 12;
+
+                                    const totalMembers = cycledOccupants.length + 1;
+                                    const onlineMembers = cycledOccupants.filter(o => o.status !== "offline").length + (myActivity && myActivity.app !== "Offline" ? 1 : 0);
+                                    const teamEnergyPct = Math.round((onlineMembers / totalMembers) * 100) || 50;
+
+                                    return (
+                                      <div className="space-y-4">
+                                        {/* Mini Cards Grid */}
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                                          <div className="p-2.5 bg-black/20 dark:bg-black/35 rounded-xl border dark:border-[#222227]/40 border-stone-200/10 text-center">
+                                            <span className="text-[7.5px] font-mono uppercase tracking-wider text-zinc-500 block">Productivity</span>
+                                            <span className="text-xs font-bold text-[#E5D3B3] block mt-0.5">{avgProductivity}%</span>
+                                            <span className="text-[7px] font-mono text-emerald-450 block mt-0.5">{avgProductivity >= 75 ? "Above Average" : "On Track"}</span>
+                                          </div>
+                                          <div className="p-2.5 bg-black/20 dark:bg-black/35 rounded-xl border dark:border-[#222227]/40 border-stone-200/10 text-center">
+                                            <span className="text-[7.5px] font-mono uppercase tracking-wider text-zinc-500 block">Deep Work</span>
+                                            <span className="text-xs font-bold text-[#E5D3B3] block mt-0.5">{maxHoursStr}</span>
+                                            <span className="text-[7px] font-mono text-emerald-450 block mt-0.5">Highest today</span>
+                                          </div>
+                                          <div className="p-2.5 bg-black/20 dark:bg-black/35 rounded-xl border dark:border-[#222227]/40 border-stone-200/10 text-center">
+                                            <span className="text-[7.5px] font-mono uppercase tracking-wider text-zinc-500 block">Switches</span>
+                                            <span className="text-xs font-bold text-[#E5D3B3] block mt-0.5">{switchesCount}</span>
+                                            <span className="text-[7px] font-mono text-amber-500/80 block mt-0.5">{switchesCount > 15 ? "High switching" : "Low switching"}</span>
+                                          </div>
+                                          <div className="p-2.5 bg-black/20 dark:bg-black/35 rounded-xl border dark:border-[#222227]/40 border-stone-200/10 text-center">
+                                            <span className="text-[7.5px] font-mono uppercase tracking-wider text-zinc-500 block">Team Energy</span>
+                                            <span className="text-xs font-bold text-[#E5D3B3] block mt-0.5">{teamEnergyPct}%</span>
+                                            <span className="text-[7px] font-mono text-emerald-450 block mt-0.5">{teamEnergyPct >= 70 ? "Excellent" : "Quiet"}</span>
+                                          </div>
+                                        </div>
+
+                                        {/* Scrum Coordinator Panel */}
+                                        <div className="text-[10.5px] leading-relaxed font-sans max-h-[380px] overflow-y-auto pr-1 text-stone-300 bg-black/10 dark:bg-black/35 rounded-2xl p-4 border dark:border-[#222227]/45 border-stone-200/20 space-y-4">
+                                          
+                                          {/* Room Status */}
+                                          <div className="space-y-1.5 pb-3 border-b dark:border-[#222227]/60 border-stone-200/15">
+                                            <div className="flex justify-between items-center text-[10px] font-mono">
+                                              <span className="text-stone-300 font-semibold flex items-center gap-1.5 uppercase tracking-wider">
+                                                <span className="text-emerald-500">🟢</span> Room Summary
+                                              </span>
+                                              <span className="text-[#E5D3B3] font-bold">{roomSummary.productivityPercentage}%</span>
+                                            </div>
+                                            <div className="w-full bg-black/30 rounded-full h-1.5 overflow-hidden border dark:border-[#222227]/45 border-stone-200/10">
+                                              <div 
+                                                className="bg-emerald-500 h-full rounded-full transition-all duration-700" 
+                                                style={{ width: `${roomSummary.productivityPercentage}%` }}
+                                              />
+                                            </div>
+                                            <p className="text-[10px] text-zinc-400 mt-1.5 leading-normal">
+                                              {roomSummary.description}
+                                            </p>
+                                            <div className="flex gap-3 text-[9px] font-mono text-zinc-550 pt-1">
+                                              <span>• {roomSummary.activeCount} / {roomSummary.totalCount} developers active</span>
+                                              <span>• Room focus state synced</span>
+                                            </div>
+                                          </div>
+
+                                          {/* Top Performer */}
+                                          {topPerformer && topPerformer.name !== "None" && (
+                                            <div className="p-3 bg-amber-500/5 rounded-xl border border-amber-500/15 space-y-2">
+                                              <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-mono font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                                                  🏆 Top Performer
+                                                </span>
+                                                <span className="text-[9px] font-mono bg-amber-500/20 text-amber-200 px-1.5 py-0.2 rounded font-semibold">
+                                                  Score: {topPerformer.score}%
+                                                </span>
+                                              </div>
+                                              <div className="flex items-center justify-between text-[10px]">
+                                                <span className="font-semibold text-stone-200">{topPerformer.name}</span>
+                                                <span className="text-stone-400 font-mono">Focus: {topPerformer.focusTime}</span>
+                                              </div>
+                                              <div className="text-[9px] text-zinc-400">
+                                                <span className="font-mono text-zinc-555">Apps: </span>
+                                                {topPerformer.apps.join(" • ")}
+                                              </div>
+                                              <p className="text-[9.5px] italic text-amber-200/70 border-t border-amber-500/10 pt-1.5">
+                                                {topPerformer.reason}
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          {/* Needs Attention */}
+                                          {needsAttention && needsAttention.name !== "None" && (
+                                            <div className="p-3 bg-rose-500/5 rounded-xl border border-rose-500/15 space-y-1.5">
+                                              <span className="text-[10px] font-mono font-bold text-rose-300 uppercase tracking-wider block">
+                                                ⚠️ Needs Attention
+                                              </span>
+                                              <div className="flex items-center justify-between text-[10px]">
+                                                <span className="font-semibold text-stone-200">{needsAttention.name}</span>
+                                                <span className="text-rose-300/80 font-mono">Idle: {needsAttention.idleTime}</span>
+                                              </div>
+                                              <p className="text-[9.5px] text-rose-200/60 leading-normal">
+                                                {needsAttention.reason}
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          {/* Recommendations */}
+                                          {recommendations && recommendations.length > 0 && (
+                                            <div className="space-y-1.5">
+                                              <span className="text-[10px] font-mono font-bold text-blue-300 uppercase tracking-wider block">
+                                                🤖 AI Recommendations
+                                              </span>
+                                              <ul className="space-y-1 pl-1">
+                                                {recommendations.map((rec: string, idx: number) => (
+                                                  <li key={idx} className="flex items-start text-[9.5px] text-stone-300">
+                                                    <span className="text-blue-400 mr-2 mt-0.5">•</span>
+                                                    <span>{rec}</span>
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            </div>
+                                          )}
+
+                                          {/* Prediction */}
+                                          {prediction && (
+                                            <div className="space-y-1.5 pt-2.5 border-t dark:border-[#222227]/60 border-stone-200/15">
+                                              <div className="flex justify-between items-center text-[10px] font-mono">
+                                                <span className="text-purple-300 font-bold uppercase tracking-wider">
+                                                  🔮 Estimated Room Completion
+                                                </span>
+                                                <span className="text-purple-300 font-bold">{prediction.completionPercentage}%</span>
+                                              </div>
+                                              <div className="w-full bg-black/30 rounded-full h-1.5 overflow-hidden border dark:border-[#222227]/45 border-stone-200/10">
+                                                <div 
+                                                  className="bg-purple-500 h-full rounded-full transition-all duration-700" 
+                                                  style={{ width: `${prediction.completionPercentage}%` }}
+                                                />
+                                              </div>
+                                              <p className="text-[9.5px] text-zinc-400 italic">
+                                                {prediction.description}
+                                              </p>
+                                            </div>
+                                          )}
+
+                                          {/* Summary */}
+                                          <div className="pt-3 border-t border-stone-200/15 dark:border-[#222227]/60 text-[10px] text-zinc-400 italic font-sans leading-normal">
+                                            {summary}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  }
+
+                                  // Fallback to original text rendering if JSON parse failed
+                                  return (
+                                    <div className="text-[10.5px] leading-relaxed font-sans max-h-36 overflow-y-auto pr-1 text-stone-400 bg-black/10 dark:bg-black/35 rounded-xl p-3 border dark:border-[#222227]/30 border-stone-200/20">
+                                      {aiInsights.split("\n").slice(0, 8).map((line, idx) => {
+                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
+                                          return (
+                                            <h5 key={idx} className="text-zinc-300 dark:text-[#c4b69d] font-semibold font-serif italic text-[11px] mt-2 mb-1">
+                                              {line.replace(/[\*#]/g, "").trim()}
+                                            </h5>
+                                          );
+                                        }
+                                        return (
+                                          <p key={idx} className="mb-1">
+                                            {line.startsWith("-") || line.startsWith("*") ? (
+                                              <span className="flex items-start">
+                                                <span className="text-amber-500/80 mr-1.5">•</span>
+                                                <span>{line.substring(2).trim()}</span>
+                                              </span>
+                                            ) : line}
+                                          </p>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })() : (
+                                  <p className="text-[10px] text-stone-500 font-mono italic">No active scrum alignments logged. Click the reload icon to generate.</p>
+                                )}
                               </div>
                             </div>
+
+
                           </div>
                         </div>
                       )}
@@ -1685,27 +2856,25 @@ export default function App() {
 
                     {/* Right Column: Unified Sync & Room Hub */}
                     <div className="space-y-6">
-                      <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} space-y-6 flex flex-col justify-between`}>
+                      <div className={`p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl ${bgCard} border ${borderRule} space-y-6 flex flex-col justify-between`}>
                         {/* Tab Switcher */}
                         <div className="flex items-center justify-between border-b dark:border-[#222227] border-stone-200/50 pb-4">
                           <div className="flex space-x-4">
                             <button
                               onClick={() => setHubTab("timeline")}
-                              className={`text-xs font-semibold font-mono tracking-widest uppercase pb-2 border-b-2 transition-all cursor-pointer ${
-                                hubTab === "timeline"
+                              className={`text-xs font-semibold font-mono tracking-widest uppercase pb-2 border-b-2 transition-all cursor-pointer ${hubTab === "timeline"
                                   ? "text-white border-white dark:border-white"
                                   : "text-zinc-500 border-transparent hover:text-zinc-300"
-                              }`}
+                                }`}
                             >
                               Timeline
                             </button>
                             <button
                               onClick={() => setHubTab("rooms")}
-                              className={`text-xs font-semibold font-mono tracking-widest uppercase pb-2 border-b-2 transition-all cursor-pointer ${
-                                hubTab === "rooms"
+                              className={`text-xs font-semibold font-mono tracking-widest uppercase pb-2 border-b-2 transition-all cursor-pointer ${hubTab === "rooms"
                                   ? "text-white border-white dark:border-white"
                                   : "text-zinc-500 border-transparent hover:text-zinc-300"
-                              }`}
+                                }`}
                             >
                               Rooms & Sync
                             </button>
@@ -1749,7 +2918,7 @@ export default function App() {
                                           <span className="font-mono text-[10px] text-zinc-500 shrink-0">{item.hoursText}</span>
                                         </div>
                                         <div className="h-1.5 bg-[#f5f4ef] dark:bg-stone-900 rounded-full overflow-hidden border dark:border-neutral-850 border-stone-200/50">
-                                          <div 
+                                          <div
                                             className={`h-full ${getAppColor(item.app)} rounded-full transition-all duration-700`}
                                             style={{ width: `${percent}%` }}
                                           />
@@ -1770,7 +2939,44 @@ export default function App() {
                                   <Target className="h-4 w-4 mr-1.5 text-zinc-500" />
                                   Recent Activity Logs
                                 </h4>
-                                <span className="text-[9px] font-mono text-zinc-550 dark:text-zinc-450">Timeline</span>
+                                {myActivity && (
+                                  <div className="flex items-center space-x-2 bg-neutral-100 dark:bg-zinc-800/60 border dark:border-neutral-800/80 border-stone-200/50 px-2.5 py-1 rounded-full shrink-0">
+                                    <div className="flex items-center text-[10px] font-mono font-bold text-stone-700 dark:text-stone-300">
+                                      <Clock className="h-3 w-3 text-stone-500 mr-1.5 shrink-0 animate-pulse" />
+                                      <span>{parsedDurationText(myActivity.durationSeconds || 0)}</span>
+                                    </div>
+                                    <span className="h-3 w-[1px] bg-neutral-300 dark:bg-neutral-850"></span>
+                                    <button
+                                      onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity.isPaused)}
+                                      className="text-stone-500 hover:text-stone-300 transition-all cursor-pointer bg-transparent border-0 p-0 flex items-center justify-center"
+                                      title={myActivity.isPaused ? "Resume focus tracking session" : "Temporarily pause activity tracker"}
+                                    >
+                                      {myActivity.isPaused ? (
+                                        <Play className="h-2.5 w-2.5 text-emerald-500 fill-emerald-500/20" />
+                                      ) : (
+                                        <Pause className="h-2.5 w-2.5 text-amber-500 fill-amber-500/20" />
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={async () => {
+                                        const res = await apiFetch("/api/my-activity", {
+                                          method: "POST",
+                                          body: JSON.stringify({ resetTimer: true })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                          setMyActivity(data.activity);
+                                          triggerToast("Focus session duration timer reset successfully");
+                                          fetchProfile();
+                                        }
+                                      }}
+                                      className="text-stone-550 hover:text-stone-350 transition-all cursor-pointer bg-transparent border-0 p-0 flex items-center justify-center"
+                                      title="Restart Timer"
+                                    >
+                                      <RefreshCw className="h-2.5 w-2.5" />
+                                    </button>
+                                  </div>
+                                )}
                               </div>
 
                               <div className="space-y-6 max-h-[350px] overflow-y-auto pr-1">
@@ -1834,8 +3040,8 @@ export default function App() {
                                 const lastMessage = roomsLastMessage[group.name];
 
                                 return (
-                                  <div 
-                                    key={group.id} 
+                                  <div
+                                    key={group.id}
                                     className={`p-4 rounded-2xl border ${bgInternal} dark:border-[#222227] space-y-4 transition-all hover:border-zinc-700/50`}
                                   >
                                     {/* Room Header with Toggle Sync */}
@@ -1854,16 +3060,14 @@ export default function App() {
                                         </span>
                                         <button
                                           onClick={() => toggleRoomSync(group.name, isSyncing)}
-                                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-zinc-700/30 transition-colors duration-200 ease-in-out focus:outline-none ${
-                                            isSyncing ? "bg-emerald-500" : "bg-zinc-800"
-                                          }`}
+                                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border border-zinc-700/30 transition-colors duration-200 ease-in-out focus:outline-none ${isSyncing ? "bg-emerald-500" : "bg-zinc-800"
+                                            }`}
                                           title={isSyncing ? "Turn off telemetry syncing to this room" : "Turn on telemetry syncing to this room"}
                                         >
                                           <span
                                             aria-hidden="true"
-                                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                                              isSyncing ? "translate-x-4" : "translate-x-0"
-                                            }`}
+                                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isSyncing ? "translate-x-4" : "translate-x-0"
+                                              }`}
                                           />
                                         </button>
                                       </div>
@@ -1886,14 +3090,13 @@ export default function App() {
                                               <div key={occ.id} className="flex items-center justify-between text-[11px] font-mono">
                                                 <div className="flex items-center space-x-2 min-w-0">
                                                   <div className="relative">
-                                                    <img 
-                                                      src={occ.avatarUrl} 
-                                                      alt={occ.name} 
-                                                      className="h-5 w-5 rounded-full object-cover border dark:border-neutral-850 border-neutral-200" 
+                                                    <img
+                                                      src={occ.avatarUrl}
+                                                      alt={occ.name}
+                                                      className="h-5 w-5 rounded-full object-cover border dark:border-neutral-850 border-neutral-200"
                                                     />
-                                                    <span className={`absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-black ${
-                                                      isOnline ? "bg-emerald-500" : "bg-zinc-650"
-                                                    }`} />
+                                                    <span className={`absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full border border-black ${isOnline ? "bg-emerald-500" : "bg-zinc-650"
+                                                      }`} />
                                                   </div>
                                                   <span className="font-semibold text-stone-300 truncate">{occ.name}</span>
                                                 </div>
@@ -1927,10 +3130,10 @@ export default function App() {
                                       <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest block">Latest Message</span>
                                       {lastMessage ? (
                                         <div className="bg-black/10 dark:bg-[#121215]/40 rounded-xl p-2.5 border dark:border-[#222227]/50 border-stone-200/30 flex items-start space-x-2">
-                                          <img 
-                                            src={lastMessage.avatarUrl} 
-                                            alt={lastMessage.userName} 
-                                            className="h-4.5 w-4.5 rounded-full object-cover shrink-0 mt-0.5" 
+                                          <img
+                                            src={lastMessage.avatarUrl}
+                                            alt={lastMessage.userName}
+                                            className="h-4.5 w-4.5 rounded-full object-cover shrink-0 mt-0.5"
                                           />
                                           <div className="min-w-0 flex-1 font-mono text-[10px]">
                                             <div className="flex justify-between items-center">
@@ -1992,7 +3195,7 @@ export default function App() {
 
                   {/* HIGH-END HAND-CRAFTED SVG VISUAL CHART BLOCKS */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    
+
                     {/* Circle chart */}
                     <div className={`p-6 rounded-2xl border ${bgCard} ${borderRule} space-y-6`}>
                       <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
@@ -2003,36 +3206,61 @@ export default function App() {
                         <div className="relative w-44 h-44 shrink-0">
                           <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
                             <circle cx="18" cy="18" r="15.915" fill="none" stroke={themeMode === "dark" ? "#1a1a20" : "#f1f0ea"} strokeWidth="3" />
-                            
-                            {/* VS Code: 45% */}
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="#787880" strokeWidth="3.5" 
-                                    strokeDasharray="45 100" strokeDashoffset="0" />
-                            {/* Figma: 20% */}
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="#bfb5a3" strokeWidth="3.5" 
-                                    strokeDasharray="20 100" strokeDashoffset="-45" />
-                            {/* Chrome: 18% */}
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="#d4af37" strokeWidth="3.5" 
-                                    strokeDasharray="18 100" strokeDashoffset="-65" />
-                            {/* Other: 10% */}
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="#6b7280" strokeWidth="3.5" 
-                                    strokeDasharray="10 100" strokeDashoffset="-83" />
+
+                            {(() => {
+                              let currentOffset = 0;
+                              const colors = ["#787880", "#bfb5a3", "#d4af37", "#6b7280", "#a855f7", "#3b82f6", "#10b981", "#f59e0b"];
+                              return analytics.appBreakdown.map((item, id) => {
+                                const percentage = item.value;
+                                const strokeDashoffset = -currentOffset;
+                                currentOffset += percentage;
+                                const strokeColor = item.color || colors[id % colors.length];
+
+                                return (
+                                  <circle
+                                    key={id}
+                                    cx="18"
+                                    cy="18"
+                                    r="15.915"
+                                    fill="none"
+                                    stroke={strokeColor}
+                                    strokeWidth="3.5"
+                                    strokeDasharray={`${percentage} 100`}
+                                    strokeDashoffset={strokeDashoffset}
+                                    className="transition-all duration-500"
+                                  />
+                                );
+                              });
+                            })()}
                           </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center">
-                            <span className="text-xl font-serif italic text-white dark:text-stone-300 font-bold">45%</span>
-                            <span className="text-[9px] uppercase font-mono tracking-widest text-[#a1a1aa] mt-0.5">Coding Focus</span>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                            <span className="text-xl font-serif italic text-white dark:text-stone-300 font-bold">
+                              {analytics.appBreakdown && analytics.appBreakdown.length > 0
+                                ? `${analytics.appBreakdown[0].value}%`
+                                : "0%"}
+                            </span>
+                            <span className="text-[9px] uppercase font-mono tracking-widest text-[#a1a1aa] mt-0.5 truncate max-w-[120px]">
+                              {analytics.appBreakdown && analytics.appBreakdown.length > 0
+                                ? `${analytics.appBreakdown[0].name} Focus`
+                                : "No Data"}
+                            </span>
                           </div>
                         </div>
 
                         <div className="space-y-2.5 flex-1 w-full sm:w-auto">
-                          {analytics.appBreakdown.map((item, id) => (
-                            <div key={id} className="flex justify-between items-center text-xs">
-                              <div className="flex items-center space-x-2">
-                                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: id === 0 ? "#787880" : id === 1 ? "#bfb5a3" : id === 2 ? "#d4af37" : "#4b5563" }}></span>
-                                <span className="font-mono text-[11px] text-stone-500 lowercase">{item.name}</span>
+                          {analytics.appBreakdown.map((item, id) => {
+                            const colors = ["#787880", "#bfb5a3", "#d4af37", "#6b7280", "#a855f7", "#3b82f6", "#10b981", "#f59e0b"];
+                            const color = item.color || colors[id % colors.length];
+                            return (
+                              <div key={id} className="flex justify-between items-center text-xs">
+                                <div className="flex items-center space-x-2">
+                                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }}></span>
+                                  <span className="font-mono text-[11px] text-stone-500 lowercase">{item.name}</span>
+                                </div>
+                                <span className="font-mono text-[11px] text-[#bfb5a3] font-bold">{item.value}%</span>
                               </div>
-                              <span className="font-mono text-[11px] text-[#bfb5a3] font-bold">{item.value}%</span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -2051,11 +3279,11 @@ export default function App() {
                               <span className="text-stone-500">score: // {item.score}% / ideal {item.ideal}%</span>
                             </div>
                             <div className="h-2 w-full bg-[#f5f4ef]/80 dark:bg-stone-900 rounded-full border dark:border-neutral-850 border-neutral-200/50 overflow-hidden relative">
-                              <div 
+                              <div
                                 className="h-full bg-stone-500 dark:bg-[#bfb5a3] rounded-full transition-all duration-300"
                                 style={{ width: `${item.score}%` }}
                               ></div>
-                              <div 
+                              <div
                                 className="absolute top-0 bottom-0 w-px bg-red-400 opacity-60"
                                 style={{ left: `${item.ideal}%` }}
                                 title="Goal baseline margin"
@@ -2081,7 +3309,7 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    
+
                     {/* Left: Pomodoro Timer circular card */}
                     <div className={`lg:col-span-2 p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} flex flex-col items-center justify-center space-y-8 relative overflow-hidden`}>
                       <div className="text-center space-y-2">
@@ -2097,29 +3325,28 @@ export default function App() {
                       <div className="relative w-64 h-64 flex items-center justify-center">
                         <svg className="w-full h-full transform -rotate-90">
                           <circle cx="128" cy="128" r="90" fill="none" stroke={themeMode === "dark" ? "#18181c" : "#f5f4ef"} strokeWidth="6" />
-                          <circle 
-                            cx="128" 
-                            cy="128" 
-                            r="90" 
-                            fill="none" 
-                            stroke={pomodoroMode === "focus" ? "#10b981" : "#3b82f6"} 
-                            strokeWidth="8" 
-                            strokeDasharray="565.48" 
-                            strokeDashoffset={(1 - ( (pomodoroMinutesLeft * 60 + pomodoroSecondsLeft) / (pomodoroMode === "focus" ? 1500 : 300) )) * 565.48} 
-                            strokeLinecap="round" 
+                          <circle
+                            cx="128"
+                            cy="128"
+                            r="90"
+                            fill="none"
+                            stroke={pomodoroMode === "focus" ? "#10b981" : "#3b82f6"}
+                            strokeWidth="8"
+                            strokeDasharray="565.48"
+                            strokeDashoffset={(1 - ((pomodoroMinutesLeft * 60 + pomodoroSecondsLeft) / (pomodoroMode === "focus" ? 1500 : 300))) * 565.48}
+                            strokeLinecap="round"
                             className="transition-all duration-1000 ease-linear"
                           />
                         </svg>
-                        
+
                         <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
                           <div className="text-4xl font-mono font-bold tracking-tight text-white dark:text-stone-300">
                             {String(pomodoroMinutesLeft).padStart(2, '0')}:{String(pomodoroSecondsLeft).padStart(2, '0')}
                           </div>
-                          <span className={`text-[9px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full ${
-                            pomodoroMode === "focus" 
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                          <span className={`text-[9px] uppercase font-mono tracking-widest px-2.5 py-0.5 rounded-full ${pomodoroMode === "focus"
+                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                               : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                          }`}>
+                            }`}>
                             {pomodoroMode === "focus" ? "Focusing" : "Resting"}
                           </span>
                         </div>
@@ -2127,18 +3354,17 @@ export default function App() {
 
                       {/* Controls Button Group */}
                       <div className="flex items-center space-x-4">
-                        <button 
+                        <button
                           onClick={() => setPomodoroActive(!pomodoroActive)}
-                          className={`px-8 py-3.5 rounded-xl text-xs font-mono uppercase tracking-wider font-semibold transition-all cursor-pointer ${
-                            pomodoroActive 
-                              ? "bg-stone-800 hover:bg-stone-700 text-stone-300 border border-neutral-700/50" 
+                          className={`px-8 py-3.5 rounded-xl text-xs font-mono uppercase tracking-wider font-semibold transition-all cursor-pointer ${pomodoroActive
+                              ? "bg-stone-800 hover:bg-stone-700 text-stone-300 border border-neutral-700/50"
                               : "bg-emerald-500 hover:bg-emerald-600 text-white"
-                          }`}
+                            }`}
                         >
                           {pomodoroActive ? "Pause Session" : "Start Focus"}
                         </button>
-                        
-                        <button 
+
+                        <button
                           onClick={() => {
                             setPomodoroActive(false);
                             setPomodoroMinutesLeft(pomodoroMode === "focus" ? 25 : 5);
@@ -2151,7 +3377,7 @@ export default function App() {
                           <RefreshCw className="h-4 w-4" />
                         </button>
 
-                        <button 
+                        <button
                           onClick={() => {
                             setPomodoroActive(false);
                             setPomodoroSecondsLeft(0);
@@ -2173,33 +3399,31 @@ export default function App() {
 
                       {/* Mode Quick Toggle */}
                       <div className="flex items-center bg-[#f5f4ef] dark:bg-[#18181c] p-1.5 rounded-xl border dark:border-[#222227] border-stone-200/50">
-                        <button 
+                        <button
                           onClick={() => {
                             setPomodoroActive(false);
                             setPomodoroMode("focus");
                             setPomodoroMinutesLeft(25);
                             setPomodoroSecondsLeft(0);
                           }}
-                          className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${
-                            pomodoroMode === "focus" 
-                              ? "bg-white dark:bg-stone-800 text-black dark:text-emerald-400 shadow-sm" 
+                          className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${pomodoroMode === "focus"
+                              ? "bg-white dark:bg-stone-800 text-black dark:text-emerald-400 shadow-sm"
                               : "text-stone-500 hover:text-stone-300"
-                          }`}
+                            }`}
                         >
                           Focus Mode (25m)
                         </button>
-                        <button 
+                        <button
                           onClick={() => {
                             setPomodoroActive(false);
                             setPomodoroMode("break");
                             setPomodoroMinutesLeft(5);
                             setPomodoroSecondsLeft(0);
                           }}
-                          className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${
-                            pomodoroMode === "break" 
-                              ? "bg-white dark:bg-stone-800 text-black dark:text-blue-400 shadow-sm" 
+                          className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${pomodoroMode === "break"
+                              ? "bg-white dark:bg-stone-800 text-black dark:text-blue-400 shadow-sm"
                               : "text-stone-500 hover:text-stone-300"
-                          }`}
+                            }`}
                         >
                           Break Mode (5m)
                         </button>
@@ -2209,14 +3433,14 @@ export default function App() {
                       <div className="w-full max-w-md border-t dark:border-neutral-850 border-stone-250/50 pt-6 space-y-3">
                         <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block text-center">Sync Task to Workstation Agent</label>
                         <div className="flex items-center space-x-2">
-                          <input 
+                          <input
                             type="text"
                             value={projectInput}
                             onChange={(e) => setProjectInput(e.target.value)}
                             className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput} transition-all`}
                             placeholder="Type active task name..."
                           />
-                          <button 
+                          <button
                             onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
                             className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-6 py-3 rounded-xl tracking-wide font-mono uppercase font-semibold transition-all cursor-pointer shrink-0"
                           >
@@ -2234,7 +3458,7 @@ export default function App() {
                           <Flame className="h-6 w-6 animate-pulse" />
                           <h4 className="text-xs font-semibold font-mono tracking-widest uppercase">Focus Streak</h4>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <div className="text-3xl font-serif italic font-semibold text-white dark:text-stone-300">
                             {user?.focusStreak || 0} Day Streak
@@ -2243,9 +3467,9 @@ export default function App() {
                             Maintain your streak by meeting your daily goal of {user?.productivityGoal || 6} hours. Pomodoro cycles completed automatically update this record.
                           </p>
                         </div>
-                        
+
                         <div className="h-1 bg-[#f5f4ef] dark:bg-stone-900 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
                             style={{ width: `${Math.min(100, ((user?.focusStreak || 0) / 7) * 100)}%` }}
                           ></div>
@@ -2260,13 +3484,12 @@ export default function App() {
                             <Activity className="h-5 w-5" />
                             <h4 className="text-xs font-semibold font-mono tracking-widest uppercase">Distraction Log</h4>
                           </div>
-                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider border ${
-                            (user?.distractionsCount || 0) === 0 
-                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
-                              : (user?.distractionsCount || 0) <= 3 
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20" 
-                              : "bg-red-500/10 text-red-400 border-red-500/20"
-                          }`}>
+                          <span className={`px-2.5 py-0.5 rounded text-[9px] font-mono uppercase tracking-wider border ${(user?.distractionsCount || 0) === 0
+                              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                              : (user?.distractionsCount || 0) <= 3
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                                : "bg-red-500/10 text-red-400 border-red-500/20"
+                            }`}>
                             {(user?.distractionsCount || 0) === 0 ? "Zen State" : (user?.distractionsCount || 0) <= 3 ? "Low Noise" : "High Noise"}
                           </span>
                         </div>
@@ -2283,13 +3506,13 @@ export default function App() {
                         </div>
 
                         <div className="flex items-center space-x-2">
-                          <button 
+                          <button
                             onClick={handleIncrementDistraction}
                             className="flex-1 text-center py-2.5 border dark:border-neutral-850 border-stone-250 text-[10px] font-mono uppercase tracking-wider rounded-xl text-stone-300 hover:text-white dark:hover:bg-[#18181c] hover:bg-stone-50 cursor-pointer transition-all"
                           >
                             Log Distraction
                           </button>
-                          <button 
+                          <button
                             onClick={handleResetDistractions}
                             className="px-4 py-2.5 border border-dashed dark:border-red-950/40 border-red-200/50 text-[10px] font-mono uppercase tracking-wider rounded-xl text-red-500 hover:text-red-400 dark:hover:bg-red-950/20 hover:bg-red-50/50 cursor-pointer transition-all"
                           >
@@ -2325,7 +3548,7 @@ export default function App() {
                         <form onSubmit={executeCreateGroup} className="grid grid-cols-1 md:grid-cols-2 gap-5">
                           <div className="space-y-2">
                             <label className="text-[10px] uppercase font-mono tracking-widest text-[#a1a1aa] block">Guild/Room Name</label>
-                            <input 
+                            <input
                               type="text"
                               required
                               value={newGroupName}
@@ -2337,14 +3560,14 @@ export default function App() {
                           <div className="space-y-2">
                             <label className="text-[10px] uppercase font-mono tracking-widest text-[#a1a1aa] block">Brief Channel Manifest</label>
                             <div className="flex items-center space-x-2">
-                              <input 
+                              <input
                                 type="text"
                                 value={newGroupDesc}
                                 onChange={(e) => setNewGroupDesc(e.target.value)}
                                 className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
                                 placeholder="Deep focus study group..."
                               />
-                              <button 
+                              <button
                                 type="submit"
                                 disabled={creatingGroup}
                                 className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-6 py-3 rounded-xl font-mono uppercase tracking-wide font-semibold shrink-0 cursor-pointer disabled:opacity-50"
@@ -2359,13 +3582,13 @@ export default function App() {
                       {/* Classroom Portal Card Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                         {groups.map(group => {
-                          const groupOnlineCount = user?.activeGroup === group.name 
-                            ? (friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0)) 
+                          const groupOnlineCount = user?.activeGroup === group.name
+                            ? (friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0))
                             : Math.max(1, Math.round(group.members.length * 0.6));
 
                           return (
-                            <div 
-                              key={group.id} 
+                            <div
+                              key={group.id}
                               className={`p-6 rounded-3xl border ${bgCard} ${borderRule} flex flex-col justify-between space-y-6`}
                             >
                               <div className="space-y-3">
@@ -2373,11 +3596,10 @@ export default function App() {
                                   <h4 className="font-serif italic text-lg font-bold text-stone-300 dark:text-white">
                                     {group.name}
                                   </h4>
-                                  <span className={`text-[9px] font-mono tracking-widest uppercase px-2.5 py-0.5 rounded border ${
-                                    user?.activeGroup === group.name 
-                                      ? "bg-stone-300 text-black border-stone-400" 
+                                  <span className={`text-[9px] font-mono tracking-widest uppercase px-2.5 py-0.5 rounded border ${user?.activeGroup === group.name
+                                      ? "bg-stone-300 text-black border-stone-400"
                                       : "text-stone-500 dark:border-neutral-800 border-stone-250"
-                                  }`}>
+                                    }`}>
                                     {user?.activeGroup === group.name ? "Connected" : "Inactive"}
                                   </span>
                                 </div>
@@ -2392,7 +3614,7 @@ export default function App() {
                                     {groupOnlineCount} Live Online
                                   </span>
                                 </div>
-                                <button 
+                                <button
                                   onClick={() => enterRoomChannel(group.name)}
                                   className="w-full text-center py-2.5 bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs font-mono uppercase tracking-wider font-semibold rounded-xl transition-all cursor-pointer"
                                 >
@@ -2408,7 +3630,7 @@ export default function App() {
                     <>
                       {/* Inside Room View */}
                       <div className="space-y-6">
-                        <button 
+                        <button
                           onClick={() => setSelectedRoomName(null)}
                           className="flex items-center space-x-2 text-xs font-mono text-stone-500 hover:text-stone-300 transition-colors cursor-pointer"
                         >
@@ -2423,7 +3645,7 @@ export default function App() {
                               {groups.find(g => g.name === selectedRoomName)?.description || "Collaborating workspace and focus channel."}
                             </p>
                           </div>
-                          
+
                           <div className="flex items-center space-x-4 bg-[#f5f4ef]/50 dark:bg-stone-900/40 px-4 py-2.5 rounded-xl border dark:border-neutral-850 border-stone-250/60 text-xs font-mono text-stone-400">
                             <span>Occupants: {groups.find(g => g.name === selectedRoomName)?.members.length || 0}</span>
                             <span className="h-3 w-px bg-zinc-700"></span>
@@ -2440,11 +3662,10 @@ export default function App() {
                             <button
                               key={tab}
                               onClick={() => setRoomTab(tab as any)}
-                              className={`pb-2 transition-all uppercase tracking-widest cursor-pointer ${
-                                roomTab === tab 
-                                  ? "border-b-2 border-stone-550 dark:border-stone-300 text-black dark:text-white font-semibold" 
+                              className={`pb-2 transition-all uppercase tracking-widest cursor-pointer ${roomTab === tab
+                                  ? "border-b-2 border-stone-550 dark:border-stone-300 text-black dark:text-white font-semibold"
                                   : "text-stone-500 hover:text-stone-300"
-                              }`}
+                                }`}
                             >
                               {tab.replace("-", " ")}
                             </button>
@@ -2453,7 +3674,7 @@ export default function App() {
 
                         {/* Room Tab Panels */}
                         <div className="space-y-6">
-                          
+
                           {/* OVERVIEW PANEL */}
                           {roomTab === "overview" && (
                             <div className="space-y-6">
@@ -2487,7 +3708,7 @@ export default function App() {
                                       AI CO-WORKING BRIEFING
                                     </h3>
                                   </div>
-                                  <button 
+                                  <button
                                     onClick={() => fetchAiBriefing(true)}
                                     disabled={loadingInsights}
                                     className="bg-transparent hover:bg-neutral-500/5 text-stone-500 hover:text-stone-300 border dark:border-[#222227] border-stone-250 p-2 rounded-xl transition-all cursor-pointer disabled:opacity-50"
@@ -2549,26 +3770,24 @@ export default function App() {
                                   const styleMeta = getStatusNodeMeta(friend.status as any);
 
                                   return (
-                                    <div 
+                                    <div
                                       key={friend.id}
                                       className={`p-6 rounded-2xl border ${bgCard} ${borderRule} transition-all duration-200 group relative block space-y-5`}
                                     >
                                       <div className="flex items-start justify-between">
                                         <div className="flex items-center space-x-3.5">
                                           <div className="relative">
-                                            <img 
-                                              src={friend.avatarUrl} 
+                                            <img
+                                              src={friend.avatarUrl}
                                               alt={friend.name}
-                                              className="h-10 w-10 rounded-full object-cover border dark:border-zinc-800 border-zinc-200" 
+                                              className="h-10 w-10 rounded-full object-cover border dark:border-zinc-800 border-zinc-200"
                                             />
-                                            <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${
-                                              themeMode === 'dark' ? 'border-[#121215]' : 'border-white'
-                                            } ${styleMeta.color}`}></span>
+                                            <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${themeMode === 'dark' ? 'border-[#121215]' : 'border-white'
+                                              } ${styleMeta.color}`}></span>
                                           </div>
                                           <div className="min-w-0">
-                                            <h4 className={`text-sm font-semibold truncate transition-colors ${
-                                              themeMode === 'dark' ? 'group-hover:text-stone-300' : 'group-hover:text-black'
-                                            }`}>
+                                            <h4 className={`text-sm font-semibold truncate transition-colors ${themeMode === 'dark' ? 'group-hover:text-stone-300' : 'group-hover:text-black'
+                                              }`}>
                                               {friend.name}
                                             </h4>
                                             <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block leading-none mt-1">
@@ -2592,10 +3811,10 @@ export default function App() {
                                         <div className="flex items-center space-x-3">
                                           <div className="h-8 w-8 rounded flex items-center justify-center border dark:border-neutral-800/60 border-neutral-200 select-none text-xs text-stone-400">
                                             {friend.currentActivity.app === "VS Code" ? "💻" :
-                                             friend.currentActivity.app === "Chrome" ? "🌐" :
-                                             friend.currentActivity.app === "Figma" ? "🎨" :
-                                             friend.currentActivity.app === "Terminal" ? "👾" :
-                                             friend.currentActivity.app === "Spotify" ? "🎵" : "💬"}
+                                              friend.currentActivity.app === "Chrome" ? "🌐" :
+                                                friend.currentActivity.app === "Figma" ? "🎨" :
+                                                  friend.currentActivity.app === "Terminal" ? "👾" :
+                                                    friend.currentActivity.app === "Spotify" ? "🎵" : "💬"}
                                           </div>
                                           <div className="min-w-0">
                                             <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block leading-none">Running App</span>
@@ -2619,7 +3838,7 @@ export default function App() {
                                       <div className="flex items-center justify-between pt-1">
                                         <div className="flex-1 mr-4">
                                           <div className="h-1 w-24 bg-stone-200 dark:bg-zinc-800 rounded-full overflow-hidden">
-                                            <div 
+                                            <div
                                               className="h-full bg-zinc-400 dark:bg-[#bfb5a3]"
                                               style={{ width: `${friend.focusScore}%` }}
                                             ></div>
@@ -2628,18 +3847,17 @@ export default function App() {
                                         </div>
 
                                         <div className="flex items-center space-x-2">
-                                          <button 
+                                          <button
                                             onClick={() => triggerPeerNudge(friend.name, friend.id)}
                                             disabled={nudgedFriendIds[friend.id]}
-                                            className={`px-3 py-1.5 border rounded-xl text-[10px] font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${
-                                              nudgedFriendIds[friend.id]
+                                            className={`px-3 py-1.5 border rounded-xl text-[10px] font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${nudgedFriendIds[friend.id]
                                                 ? "bg-zinc-100 text-[#1a1a1f] dark:bg-stone-300 dark:text-black"
                                                 : "bg-transparent text-stone-500 hover:text-stone-300 dark:border-neutral-800 border-stone-250 hover:border-neutral-500"
-                                            }`}
+                                              }`}
                                           >
                                             {nudgedFriendIds[friend.id] ? "Waved!" : "Nudge"}
                                           </button>
-                                          <button 
+                                          <button
                                             onClick={() => {
                                               setSelectedFriendId(friend.id);
                                               window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2670,7 +3888,7 @@ export default function App() {
                                 <div className="text-zinc-500">// Streaming Real-time workspace logs</div>
                                 {friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name }))).length > 0 ? (
                                   friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name })))
-                                    .sort((a,b) => b.time.localeCompare(a.time))
+                                    .sort((a, b) => b.time.localeCompare(a.time))
                                     .map((evt, idx) => (
                                       <div key={idx} className="flex justify-between items-center py-1.5 border-b dark:border-neutral-900 border-stone-200/40">
                                         <div className="flex items-center space-x-2">
@@ -2780,7 +3998,7 @@ export default function App() {
                                   <h3 className="text-xl font-serif italic font-bold">Gemini Room Summary Report</h3>
                                   <p className={`text-xs ${textSub}`}>Generative AI briefing compiled from room telemetry and activity statistics.</p>
                                 </div>
-                                <button 
+                                <button
                                   onClick={() => fetchAiBriefing(true)}
                                   disabled={loadingInsights}
                                   className="bg-transparent hover:bg-neutral-500/5 text-stone-500 hover:text-stone-300 border dark:border-[#222227] border-stone-250 p-2 rounded-xl transition-all cursor-pointer disabled:opacity-50"
@@ -2850,11 +4068,10 @@ export default function App() {
                                             <span>•</span>
                                             <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                           </div>
-                                          <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${
-                                            isMe 
-                                              ? "bg-stone-800 text-white dark:bg-stone-300 dark:text-black rounded-tr-none" 
+                                          <div className={`px-4 py-2.5 rounded-2xl text-xs leading-relaxed ${isMe
+                                              ? "bg-stone-800 text-white dark:bg-stone-300 dark:text-black rounded-tr-none"
                                               : `bg-[#18181c]/60 dark:bg-[#151518] text-stone-300 border ${borderRule} rounded-tl-none`
-                                          }`}>
+                                            }`}>
                                             {msg.message}
                                           </div>
                                         </div>
@@ -2871,7 +4088,7 @@ export default function App() {
 
                               {/* Chat message input form */}
                               <div className="flex gap-2">
-                                <input 
+                                <input
                                   type="text"
                                   value={roomChatInput}
                                   onChange={(e) => setRoomChatInput(e.target.value)}
@@ -2879,7 +4096,7 @@ export default function App() {
                                   className={`flex-1 rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
                                   placeholder="Type chat message to the room..."
                                 />
-                                <button 
+                                <button
                                   onClick={sendRoomChatMessage}
                                   className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-6 py-3 rounded-xl font-mono uppercase tracking-wide font-semibold cursor-pointer shrink-0"
                                 >
@@ -2907,12 +4124,12 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    
+
                     {/* Left aggregate info */}
                     <div className={`p-6 rounded-2xl border ${bgCard} text-center space-y-4 flex flex-col items-center justify-center`}>
-                      <img 
-                        src={user.avatarUrl} 
-                        alt="Avatar profile" 
+                      <img
+                        src={user.avatarUrl}
+                        alt="Avatar profile"
                         className="h-24 w-24 rounded-full object-cover border-2 dark:border-[#bfb5a3] border-zinc-300 shadow-xl"
                       />
                       <div className="space-y-1">
@@ -2943,30 +4160,34 @@ export default function App() {
                       </h4>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                        
+
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Workspace Display Username</label>
-                          <input 
+                          <input
                             type="text"
-                            value={user.name}
-                            onChange={(e) => submitProfileSettings({ name: e.target.value })}
+                            value={profileNameInput}
+                            onChange={(e) => setProfileNameInput(e.target.value)}
+                            onBlur={() => submitProfileSettings({ name: profileNameInput })}
+                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ name: profileNameInput })}
                             className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
                           />
                         </div>
 
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Avatar image pointer link</label>
-                          <input 
+                          <input
                             type="text"
-                            value={user.avatarUrl}
-                            onChange={(e) => submitProfileSettings({ avatarUrl: e.target.value })}
+                            value={profileAvatarInput}
+                            onChange={(e) => setProfileAvatarInput(e.target.value)}
+                            onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
+                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
                             className={`w-full rounded-xl px-4 py-3 text-xs font-mono lowercase ${formInput}`}
                           />
                         </div>
 
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Active Status Label</label>
-                          <input 
+                          <input
                             type="text"
                             value={statusInput}
                             onChange={(e) => setStatusInput(e.target.value)}
@@ -2978,7 +4199,7 @@ export default function App() {
 
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Focus hour target</label>
-                          <select 
+                          <select
                             value={user.productivityGoal}
                             onChange={(e) => submitProfileSettings({ productivityGoal: parseInt(e.target.value) })}
                             className={`w-full rounded-xl px-4 py-3 text-xs font-mono lowercase ${formInput}`}
@@ -2992,7 +4213,7 @@ export default function App() {
 
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Peer visibility mode</label>
-                          <select 
+                          <select
                             value={user.privacyMode}
                             onChange={(e) => submitProfileSettings({ privacyMode: e.target.value })}
                             className={`w-full rounded-xl px-4 py-3 text-xs font-mono lowercase ${formInput}`}
@@ -3006,10 +4227,12 @@ export default function App() {
 
                         <div className="space-y-2">
                           <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Workstation Machine Tag</label>
-                          <input 
+                          <input
                             type="text"
-                            value={user.deviceConnected}
-                            onChange={(e) => submitProfileSettings({ deviceConnected: e.target.value })}
+                            value={profileDeviceInput}
+                            onChange={(e) => setProfileDeviceInput(e.target.value)}
+                            onBlur={() => submitProfileSettings({ deviceConnected: profileDeviceInput })}
+                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ deviceConnected: profileDeviceInput })}
                             className={`w-full rounded-xl px-4 py-3 text-xs font-mono ${formInput}`}
                           />
                         </div>
@@ -3032,28 +4255,27 @@ export default function App() {
                   </div>
 
                   <div className={`p-6 rounded-2xl border ${bgCard} max-w-2xl space-y-6`}>
-                    
+
                     <div className="space-y-5">
                       <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
                         NOTIFICATION NOTIFIERS DIRECTIVES
                       </h3>
 
                       <div className="space-y-4">
-                        
+
                         <div className="flex items-center justify-between py-1.5 border-b dark:border-neutral-850 border-stone-200/50">
                           <div>
                             <span className="text-xs font-semibold text-stone-300 dark:text-white block">Waved peer indicators</span>
                             <p className="text-[11px] text-stone-500">Enable real-time wave push signals triggered from adjacent room co-workers.</p>
                           </div>
-                          <button 
+                          <button
                             onClick={() => submitProfileSettings({
                               notifications: { ...user.notifications, friendUpdates: !user.notifications.friendUpdates }
                             })}
-                            className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded border cursor-pointer ${
-                              user.notifications.friendUpdates 
+                            className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded border cursor-pointer ${user.notifications.friendUpdates
                                 ? (themeMode === 'dark' ? "bg-stone-300 text-black" : "bg-neutral-800 text-white")
                                 : "text-stone-500 dark:border-neutral-800"
-                            }`}
+                              }`}
                           >
                             {user.notifications.friendUpdates ? "Enabled" : "Muted"}
                           </button>
@@ -3064,15 +4286,14 @@ export default function App() {
                             <span className="text-xs font-semibold text-stone-300 dark:text-white block">Idle stretch recommendations</span>
                             <p className="text-[11px] text-stone-500">Receive active stretch reminders when workstation tracking runs past 45m.</p>
                           </div>
-                          <button 
+                          <button
                             onClick={() => submitProfileSettings({
                               notifications: { ...user.notifications, breakReminders: !user.notifications.breakReminders }
                             })}
-                            className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded border cursor-pointer ${
-                              user.notifications.breakReminders 
+                            className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded border cursor-pointer ${user.notifications.breakReminders
                                 ? (themeMode === 'dark' ? "bg-stone-300 text-black" : "bg-neutral-800 text-white")
                                 : "text-stone-500 dark:border-neutral-800"
-                            }`}
+                              }`}
                           >
                             {user.notifications.breakReminders ? "Enabled" : "Muted"}
                           </button>
@@ -3083,15 +4304,14 @@ export default function App() {
                             <span className="text-xs font-semibold text-stone-300 dark:text-white block">Generative AI compilation alerts</span>
                             <p className="text-[11px] text-stone-500">Show notification toasts on active compiling triggers with Gemini 3.5 Flash.</p>
                           </div>
-                          <button 
+                          <button
                             onClick={() => submitProfileSettings({
                               notifications: { ...user.notifications, aiNudges: !user.notifications.aiNudges }
                             })}
-                            className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded border cursor-pointer ${
-                              user.notifications.aiNudges 
+                            className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider rounded border cursor-pointer ${user.notifications.aiNudges
                                 ? (themeMode === 'dark' ? "bg-stone-300 text-black" : "bg-neutral-800 text-white")
                                 : "text-stone-500 dark:border-neutral-800"
-                            }`}
+                              }`}
                           >
                             {user.notifications.aiNudges ? "Enabled" : "Muted"}
                           </button>

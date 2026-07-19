@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -36,6 +36,8 @@ model User {
   activities                 Activity[]
   memberships                GroupMember[]
   activityLogs               ActivityLog[]
+  dailySummaries             DailySummary[]
+  focusSessions              FocusSession[]
 }
 
 model Group {
@@ -85,4 +87,25 @@ model ChatMessage {
   avatarUrl String   @default("")
   message   String
   timestamp DateTime @default(now())
+}
+
+model DailySummary {
+  id                String   @id @default(uuid())
+  userId            String
+  date              String   // YYYY-MM-DD
+  totalFocusSeconds Int      @default(0)
+  productivityScore Int      @default(0)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+}
+
+model FocusSession {
+  id              String   @id @default(uuid())
+  userId          String
+  taskName        String
+  durationMinutes Int
+  completed       Boolean  @default(false)
+  timestamp       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

@@ -9,8 +9,78 @@ import http from "http";
 import { Server } from "socket.io";
 import { prisma } from "./db";
 import { seedDatabase } from "./seed";
+import Redis from "ioredis";
 
 dotenv.config();
+
+// Connect to Redis Cache
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+redis.on("connect", () => {
+  console.log("🚀 Connected to Redis successfully");
+});
+redis.on("error", (err) => {
+  console.error("❌ Redis Connection Error:", err);
+});
+
+// Redis Caching Helpers
+async function getUserActiveActivity(userId: string) {
+  const cached = await redis.get(`user:active:${userId}`);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {
+      console.error("Error parsing user active cache:", e);
+    }
+  }
+
+  // Cache miss - query Postgres
+  let activity = await prisma.activity.findFirst({
+    where: { userId }
+  });
+
+  if (!activity) {
+    activity = await prisma.activity.create({
+      data: {
+        userId,
+        app: "Offline",
+        project: "None",
+        durationSeconds: 0,
+        isPaused: true,
+        startedAt: new Date()
+      }
+    });
+  }
+
+  const result = {
+    app: activity.app,
+    project: activity.project,
+    startedAt: activity.startedAt.getTime(),
+    durationSeconds: activity.durationSeconds,
+    isPaused: activity.isPaused,
+    lastHeartbeat: Date.now()
+  };
+
+  await redis.set(`user:active:${userId}`, JSON.stringify(result));
+  return result;
+}
+
+async function setUserActiveActivity(userId: string, activity: any) {
+  await redis.set(`user:active:${userId}`, JSON.stringify(activity));
+}
+
+async function getUserOpenApps(userId: string): Promise<string[]> {
+  const cached = await redis.get(`user:openapps:${userId}`);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {}
+  }
+  return [];
+}
+
+async function setUserOpenApps(userId: string, openApps: string[]) {
+  await redis.set(`user:openapps:${userId}`, JSON.stringify(openApps));
+}
 
 const app = express();
 const PORT = 3000;
@@ -211,86 +281,90 @@ function applyPrivacyMask(currentActivity: any, privacyMode: string) {
 }
 
 
-// Socket.io Connection Handler
-io.on("connection", (socket) => {
+// Socket.io Authentication Middleware
+io.use((socket, next) => {
   const token = socket.handshake.auth.token;
   if (!token) {
     console.log("Socket connection rejected: missing token");
-    socket.disconnect();
-    return;
+    return next(new Error("Authentication error: missing token"));
   }
 
   jwt.verify(token, JWT_SECRET, (err: any, decoded: any) => {
     if (err) {
       console.log("Socket connection rejected: invalid token");
-      socket.disconnect();
-      return;
+      return next(new Error("Authentication error: invalid token"));
     }
+    socket.data = socket.data || {};
+    socket.data.userId = decoded.id;
+    next();
+  });
+});
 
-    const userId = decoded.id;
-    userSockets.set(userId, socket.id);
-    console.log(`User ${userId} connected on socket ${socket.id}`);
+// Socket.io Connection Handler
+io.on("connection", (socket) => {
+  const userId = socket.data.userId;
+  userSockets.set(userId, socket.id);
+  console.log(`User ${userId} connected on socket ${socket.id}`);
 
-    socket.on("join-group", (groupName: string) => {
-      // Leave previous rooms
-      socket.rooms.forEach(room => {
-        if (room !== socket.id) socket.leave(room);
-      });
-      socket.join(groupName);
-      console.log(`User ${userId} joined room: ${groupName}`);
+  socket.on("join-group", (groupName: string) => {
+    // Leave previous rooms
+    socket.rooms.forEach(room => {
+      if (room !== socket.id) socket.leave(room);
     });
+    socket.join(groupName);
+    console.log(`User ${userId} joined room: ${groupName}`);
+  });
 
-    socket.on("send-nudge", async (data: { targetUserId: string }) => {
-      try {
-        const sender = await prisma.user.findUnique({ where: { id: userId } });
-        if (!sender) return;
+  socket.on("send-nudge", async (data: { targetUserId: string }) => {
+    try {
+      const sender = await prisma.user.findUnique({ where: { id: userId } });
+      if (!sender) return;
 
-        const targetSocketId = userSockets.get(data.targetUserId);
-        if (targetSocketId) {
-          io.to(targetSocketId).emit("peer-nudge", {
-            senderId: userId,
-            senderName: sender.name
-          });
+      const targetSocketId = userSockets.get(data.targetUserId);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit("peer-nudge", {
+          senderId: userId,
+          senderName: sender.name
+        });
+      }
+    } catch (err) {
+      console.error("Error sending peer nudge:", err);
+    }
+  });
+
+  socket.on("send-chat-message", async (data: { groupId: string, message: string }) => {
+    try {
+      const sender = await prisma.user.findUnique({ where: { id: userId } });
+      if (!sender) return;
+
+      const chatMsg = await prisma.chatMessage.create({
+        data: {
+          groupId: data.groupId,
+          userId: userId,
+          userName: sender.name,
+          avatarUrl: sender.avatarUrl,
+          message: data.message
         }
-      } catch (err) {
-        console.error("Error sending peer nudge:", err);
-      }
-    });
+      });
 
-    socket.on("send-chat-message", async (data: { groupId: string, message: string }) => {
-      try {
-        const sender = await prisma.user.findUnique({ where: { id: userId } });
-        if (!sender) return;
+      // Broadcast to everyone in the room (the activeGroup name)
+      io.to(sender.activeGroup).emit("room-chat-message", {
+        id: chatMsg.id,
+        groupId: chatMsg.groupId,
+        userId: chatMsg.userId,
+        userName: chatMsg.userName,
+        avatarUrl: chatMsg.avatarUrl,
+        message: chatMsg.message,
+        timestamp: chatMsg.timestamp.toISOString()
+      });
+    } catch (err) {
+      console.error("Error broadcasting chat message:", err);
+    }
+  });
 
-        const chatMsg = await prisma.chatMessage.create({
-          data: {
-            groupId: data.groupId,
-            userId: userId,
-            userName: sender.name,
-            avatarUrl: sender.avatarUrl,
-            message: data.message
-          }
-        });
-
-        // Broadcast to everyone in the room (the activeGroup name)
-        io.to(sender.activeGroup).emit("room-chat-message", {
-          id: chatMsg.id,
-          groupId: chatMsg.groupId,
-          userId: chatMsg.userId,
-          userName: chatMsg.userName,
-          avatarUrl: chatMsg.avatarUrl,
-          message: chatMsg.message,
-          timestamp: chatMsg.timestamp.toISOString()
-        });
-      } catch (err) {
-        console.error("Error broadcasting chat message:", err);
-      }
-    });
-
-    socket.on("disconnect", () => {
-      userSockets.delete(userId);
-      console.log(`User ${userId} disconnected`);
-    });
+  socket.on("disconnect", () => {
+    userSockets.delete(userId);
+    console.log(`User ${userId} disconnected`);
   });
 });
 
@@ -300,7 +374,6 @@ async function broadcastActivityUpdate(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        activities: true,
         activityLogs: {
           orderBy: { timestamp: "desc" },
           take: 10
@@ -310,34 +383,47 @@ async function broadcastActivityUpdate(userId: string) {
 
     if (!user) return;
 
-    const currentAct = user.activities[0] || {
-      app: "Offline",
-      project: "None",
-      startedAt: new Date()
-    };
+    const currentAct = await getUserActiveActivity(userId);
 
-    const secondsDiff = Math.floor((Date.now() - currentAct.startedAt.getTime()) / 1000);
+    // Calculate duration text based on Redis accumulated duration
+    const totalDurationSeconds = currentAct.durationSeconds;
     let durationText = "0m";
-    if (secondsDiff < 60) {
-      durationText = `${secondsDiff}s`;
+    if (totalDurationSeconds < 60) {
+      durationText = `${totalDurationSeconds}s`;
     } else {
-      durationText = `${Math.floor(secondsDiff / 60)}m`;
+      durationText = `${Math.floor(totalDurationSeconds / 60)}m`;
     }
 
     const rawActivity = {
       app: currentAct.app,
       project: currentAct.project,
-      startedAt: currentAct.startedAt.getTime(),
+      startedAt: currentAct.startedAt,
       durationText: durationText
     };
 
     // Apply privacy masking
     const maskedActivity = applyPrivacyMask(rawActivity, user.privacyMode);
 
-    // Calculate focus time and dynamic score based on real user activity
-    const userActivities = await prisma.activity.findMany({ where: { userId: user.id } });
-    const activeSeconds = userActivities.reduce((acc, act) => acc + act.durationSeconds, 0);
-    const hours = parseFloat((activeSeconds / 3600).toFixed(1));
+    // Calculate focus time and dynamic score based on real user activity (today's logs + current activity)
+    const todayStart = new Date();
+    todayStart.setHours(0,0,0,0);
+    const todayLogs = await prisma.activityLog.findMany({
+      where: {
+        userId: user.id,
+        timestamp: { gte: todayStart }
+      }
+    });
+    let totalTodaySeconds = 0;
+    todayLogs.forEach(log => {
+      totalTodaySeconds += parseDurationText(log.durationText);
+    });
+
+    // Add current active session seconds (if online and not paused)
+    if (currentAct.app !== "Offline" && !currentAct.isPaused) {
+      totalTodaySeconds += currentAct.durationSeconds;
+    }
+
+    const hours = parseFloat((totalTodaySeconds / 3600).toFixed(1));
     const todayFocusTime = `${hours}h`;
     const goalHours = user.productivityGoal || 6;
     const focusScore = await calculateProductivityScore(user.id, hours, goalHours, user.distractionsCount);
@@ -379,59 +465,135 @@ async function broadcastActivityUpdate(userId: string) {
 }
 
 // -------------------------------------------------------------
-// Background tick simulator for mock friends and timer updates
+// Background Redis caching tickers and sync daemon
 // -------------------------------------------------------------
+
+// 1. Ticker for Redis active activities (runs every 5 seconds)
 setInterval(async () => {
   try {
-    // 1. Increment active duration timers (excluding paused tasks)
-    const activeActivities = await prisma.activity.findMany({
-      where: { isPaused: false }
-    });
+    const keys = await redis.keys("user:active:*");
+    for (const key of keys) {
+      const userId = key.split(":").pop();
+      if (!userId) continue;
 
-    for (const act of activeActivities) {
-      await prisma.activity.update({
-        where: { id: act.id },
-        data: {
-          durationSeconds: act.durationSeconds + 5
-        }
-      });
-      // Periodically update active UI timers
-      broadcastActivityUpdate(act.userId);
-    }
+      const data = await redis.get(key);
+      if (!data) continue;
 
-    // 1.5. Check for disconnected users (no heartbeat in 15 seconds AND no active website connection)
-    const cutOffTime = new Date(Date.now() - 15000);
-    const activeUsers = await prisma.user.findMany({
-      where: {
-        status: { not: "offline" },
-        lastHeartbeat: { lt: cutOffTime }
-      }
-    });
+      const act = JSON.parse(data);
+      let changed = false;
 
-    for (const u of activeUsers) {
-      if (!userSockets.has(u.id)) {
+      // Check for heartbeat timeout (no activity update in 15 seconds)
+      const now = Date.now();
+      const heartbeatElapsed = now - act.lastHeartbeat;
+
+      if (act.app !== "Offline" && heartbeatElapsed > 15000) {
+        // Mark user offline
+        act.app = "Offline";
+        act.project = "None";
+        act.isPaused = true;
+        changed = true;
+
         await prisma.user.update({
-          where: { id: u.id },
+          where: { id: userId },
           data: { status: "offline" }
         });
-        // Pause their activity in the database
-        const act = await prisma.activity.findFirst({ where: { userId: u.id } });
-        if (act && !act.isPaused) {
-          await prisma.activity.update({
-            where: { id: act.id },
-            data: { isPaused: true }
-          });
-        }
-        // Broadcast offline update
-        broadcastActivityUpdate(u.id);
+      } else if (!act.isPaused && act.app !== "Offline") {
+        act.durationSeconds += 5;
+        changed = true;
+      }
+
+      if (changed) {
+        await redis.set(key, JSON.stringify(act));
+        broadcastActivityUpdate(userId);
       }
     }
-
-    // No mock friend simulations
   } catch (error) {
-    console.error("Background simulation error:", error);
+    console.error("Redis background ticker error:", error);
   }
 }, 5000);
+
+// 2. Periodic sync of Redis active sessions to PostgreSQL (runs every 60 seconds)
+setInterval(async () => {
+  try {
+    const keys = await redis.keys("user:active:*");
+    for (const key of keys) {
+      const userId = key.split(":").pop();
+      if (!userId) continue;
+
+      const data = await redis.get(key);
+      if (!data) continue;
+
+      const act = JSON.parse(data);
+
+      const dbAct = await prisma.activity.findFirst({ where: { userId } });
+      if (dbAct) {
+        await prisma.activity.update({
+          where: { id: dbAct.id },
+          data: {
+            app: act.app,
+            project: act.project,
+            durationSeconds: act.durationSeconds,
+            isPaused: act.isPaused,
+            startedAt: new Date(act.startedAt)
+          }
+        });
+      }
+
+      // Sync focus summaries to DailySummary for analytics heatmap
+      const todayStart = new Date();
+      todayStart.setHours(0,0,0,0);
+      const todayDateStr = todayStart.toISOString().split("T")[0];
+
+      const todayLogs = await prisma.activityLog.findMany({
+        where: {
+          userId,
+          timestamp: { gte: todayStart }
+        }
+      });
+
+      let totalTodaySeconds = 0;
+      todayLogs.forEach(log => {
+        totalTodaySeconds += parseDurationText(log.durationText);
+      });
+
+      if (act.app !== "Offline" && !act.isPaused) {
+        totalTodaySeconds += act.durationSeconds;
+      }
+
+      const userRec = await prisma.user.findUnique({ where: { id: userId } });
+      if (userRec) {
+        const hours = parseFloat((totalTodaySeconds / 3600).toFixed(1));
+        const productivityScore = await calculateProductivityScore(
+          userId,
+          hours,
+          userRec.productivityGoal || 6,
+          userRec.distractionsCount
+        );
+
+        await prisma.dailySummary.upsert({
+          where: {
+            userId_date: {
+              userId,
+              date: todayDateStr
+            }
+          },
+          create: {
+            userId,
+            date: todayDateStr,
+            totalFocusSeconds: totalTodaySeconds,
+            productivityScore
+          },
+          update: {
+            totalFocusSeconds: totalTodaySeconds,
+            productivityScore
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error("PostgreSQL sync worker error:", error);
+  }
+}, 60000);
 
 // -------------------------------------------------------------
 // API Endpoints
@@ -513,6 +675,29 @@ app.post("/api/auth/login", async (req, res) => {
     res.json({ success: true, token, user: formatUserProfile(user) });
   } catch (error: any) {
     res.status(500).json({ error: error.message || "Login failed" });
+  }
+});
+
+// Health & Services Diagnostics Endpoint
+app.get("/api/health", async (req, res) => {
+  try {
+    // Check Database connection
+    await prisma.$queryRaw`SELECT 1`;
+    
+    // Check if Gemini API key is configured
+    const geminiKeySet = !!process.env.GEMINI_API_KEY;
+    
+    res.json({
+      status: "healthy",
+      database: "connected",
+      ai: geminiKeySet ? "configured" : "missing_key"
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      status: "error",
+      database: "error",
+      error: error.message
+    });
   }
 });
 
@@ -663,28 +848,15 @@ app.post("/api/user/broadcast-groups", authenticateToken, async (req: any, res) 
 // 2. Your current activity status
 app.get("/api/my-activity", authenticateToken, async (req: any, res) => {
   try {
-    let activity = await prisma.activity.findFirst({
-      where: { userId: req.user.id }
-    });
-
-    if (!activity) {
-      activity = await prisma.activity.create({
-        data: {
-          userId: req.user.id,
-          app: "VS Code",
-          project: "EndoCore Workspace",
-          durationSeconds: 0,
-          isPaused: false
-        }
-      });
-    }
-
+    const activity = await getUserActiveActivity(req.user.id);
+    const openAppsList = await getUserOpenApps(req.user.id);
     res.json({
       app: activity.app,
       project: activity.project,
-      startedAt: activity.startedAt.getTime(),
+      startedAt: activity.startedAt,
       durationSeconds: activity.durationSeconds,
-      isPaused: activity.isPaused
+      isPaused: activity.isPaused,
+      openApps: openAppsList
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -694,7 +866,11 @@ app.get("/api/my-activity", authenticateToken, async (req: any, res) => {
 // Update your current activity
 app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
   try {
-    const { app: selectedApp, project, isPaused, togglePause, resetTimer, incrementDistraction, resetDistractions, completeFocusSession } = req.body;
+    const { app: selectedApp, project, isPaused, togglePause, resetTimer, incrementDistraction, resetDistractions, completeFocusSession, openApps } = req.body;
+
+    if (Array.isArray(openApps)) {
+      await setUserOpenApps(req.user.id, openApps);
+    }
     const sanitizedProject = project !== undefined ? sanitizeTitle(project) : undefined;
 
     // Update user heartbeat and set status back to Focused if it was offline
@@ -733,6 +909,16 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
           updatePayload.focusStreak = newStreak;
           updatePayload.lastFocusDate = today;
         }
+
+        // Insert a new FocusSession record in Supabase PostgreSQL
+        await prisma.focusSession.create({
+          data: {
+            userId: req.user.id,
+            taskName: project || "Pomodoro Focus Sprint",
+            durationMinutes: 25,
+            completed: true
+          }
+        });
       }
 
       await prisma.user.update({
@@ -741,109 +927,92 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
       });
     }
 
-    let activity = await prisma.activity.findFirst({
-      where: { userId: req.user.id }
-    });
+    const activity = await getUserActiveActivity(req.user.id);
 
-    if (!activity) {
-      activity = await prisma.activity.create({
-        data: {
-          userId: req.user.id,
-          app: "VS Code",
-          project: "EndoCore Workspace",
-          durationSeconds: 0,
-          isPaused: false
-        }
-      });
-    }
-
-    const hasChanged = selectedApp !== undefined && (selectedApp !== activity.app) ||
-                       sanitizedProject !== undefined && (sanitizedProject !== activity.project);
+    const hasChanged = (selectedApp !== undefined && selectedApp !== activity.app) ||
+                       (sanitizedProject !== undefined && sanitizedProject !== activity.project);
 
     if (hasChanged) {
-      // 1. Create a log entry for the *previous* activity session
-      const durationMin = Math.floor(activity.durationSeconds / 60);
-      const durationText = durationMin > 0 ? `${durationMin}m` : `${activity.durationSeconds}s`;
+      // 1. Create a log entry for the *previous* activity session if valid
+      if (activity.app !== "Offline" && activity.durationSeconds > 0) {
+        const durationMin = Math.floor(activity.durationSeconds / 60);
+        const durationText = durationMin > 0 ? `${durationMin}m` : `${activity.durationSeconds}s`;
 
-      await prisma.activityLog.create({
-        data: {
-          userId: req.user.id,
-          app: activity.app,
-          project: activity.project,
-          durationText: durationText,
-          timestamp: new Date()
-        }
-      });
-
-      // Trim user activity logs to maximum of 10 records
-      const logCount = await prisma.activityLog.count({ where: { userId: req.user.id } });
-      if (logCount > 10) {
-        const oldestLogs = await prisma.activityLog.findMany({
-          where: { userId: req.user.id },
-          orderBy: { timestamp: "asc" },
-          take: logCount - 10
+        await prisma.activityLog.create({
+          data: {
+            userId: req.user.id,
+            app: activity.app,
+            project: activity.project,
+            durationText: durationText,
+            timestamp: new Date()
+          }
         });
-        for (const oldLog of oldestLogs) {
-          await prisma.activityLog.delete({ where: { id: oldLog.id } });
+
+        // Trim user activity logs to maximum of 10 records
+        const logCount = await prisma.activityLog.count({ where: { userId: req.user.id } });
+        if (logCount > 10) {
+          const oldestLogs = await prisma.activityLog.findMany({
+            where: { userId: req.user.id },
+            orderBy: { timestamp: "asc" },
+            take: logCount - 10
+          });
+          for (const oldLog of oldestLogs) {
+            await prisma.activityLog.delete({ where: { id: oldLog.id } });
+          }
         }
       }
 
-      // 2. Set the current activity to the new app/project with durationSeconds = 0
-      const updated = await prisma.activity.update({
-        where: { id: activity.id },
-        data: {
-          app: selectedApp !== undefined ? selectedApp : activity.app,
-          project: sanitizedProject !== undefined ? sanitizedProject : activity.project,
-          durationSeconds: 0,
-          startedAt: new Date(),
-          isPaused: isPaused !== undefined ? isPaused : (togglePause !== undefined ? togglePause : (wasOffline ? false : activity.isPaused))
-        }
-      });
+      // 2. Set the current activity to the new app/project with durationSeconds = 0 in cache
+      activity.app = selectedApp !== undefined ? selectedApp : activity.app;
+      activity.project = sanitizedProject !== undefined ? sanitizedProject : activity.project;
+      activity.durationSeconds = 0;
+      activity.startedAt = Date.now();
+      activity.isPaused = isPaused !== undefined ? isPaused : (togglePause !== undefined ? togglePause : (wasOffline ? false : activity.isPaused));
+      activity.lastHeartbeat = Date.now();
+
+      await setUserActiveActivity(req.user.id, activity);
 
       broadcastActivityUpdate(req.user.id);
 
       return res.json({
         success: true,
         activity: {
-          app: updated.app,
-          project: updated.project,
-          startedAt: updated.startedAt.getTime(),
-          durationSeconds: updated.durationSeconds,
-          isPaused: updated.isPaused
+          app: activity.app,
+          project: activity.project,
+          startedAt: activity.startedAt,
+          durationSeconds: activity.durationSeconds,
+          isPaused: activity.isPaused
         }
       });
     }
 
     // If there is no change, but we are pausing/unpausing or resetting
-    const updateData: any = {};
     if (togglePause !== undefined) {
-      updateData.isPaused = togglePause;
+      activity.isPaused = togglePause;
     } else if (isPaused !== undefined) {
-      updateData.isPaused = isPaused;
+      activity.isPaused = isPaused;
     } else if (wasOffline) {
-      updateData.isPaused = false;
+      activity.isPaused = false;
     }
 
     if (resetTimer) {
-      updateData.startedAt = new Date();
-      updateData.durationSeconds = 0;
+      activity.startedAt = Date.now();
+      activity.durationSeconds = 0;
     }
 
-    const updated = await prisma.activity.update({
-      where: { id: activity.id },
-      data: updateData
-    });
+    activity.lastHeartbeat = Date.now();
+    await setUserActiveActivity(req.user.id, activity);
 
     broadcastActivityUpdate(req.user.id);
 
     res.json({
       success: true,
       activity: {
-        app: updated.app,
-        project: updated.project,
-        startedAt: updated.startedAt.getTime(),
-        durationSeconds: updated.durationSeconds,
-        isPaused: updated.isPaused
+        app: activity.app,
+        project: activity.project,
+        startedAt: activity.startedAt,
+        durationSeconds: activity.durationSeconds,
+        isPaused: activity.isPaused
       }
     });
   } catch (error: any) {
@@ -873,7 +1042,6 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
       include: {
         user: {
           include: {
-            activities: true,
             activityLogs: {
               orderBy: { timestamp: "desc" },
               take: 10
@@ -883,36 +1051,50 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
       }
     });
 
+    const todayStart = new Date();
+    todayStart.setHours(0,0,0,0);
+
     const friendPromises = members
       .filter(m => m.userId !== req.user.id)
       .map(async m => {
         const u = m.user;
-        const currentAct = u.activities[0] || {
-          app: "Offline",
-          project: "None",
-          startedAt: new Date()
-        };
+        const currentAct = await getUserActiveActivity(u.id);
 
-        const secondsDiff = Math.floor((Date.now() - currentAct.startedAt.getTime()) / 1000);
+        const totalDurationSeconds = currentAct.durationSeconds;
         let durationText = "0m";
-        if (secondsDiff < 60) {
-          durationText = `${secondsDiff}s`;
+        if (totalDurationSeconds < 60) {
+          durationText = `${totalDurationSeconds}s`;
         } else {
-          durationText = `${Math.floor(secondsDiff / 60)}m`;
+          durationText = `${Math.floor(totalDurationSeconds / 60)}m`;
         }
 
         const rawActivity = {
           app: currentAct.app,
           project: currentAct.project,
-          startedAt: currentAct.startedAt.getTime(),
+          startedAt: currentAct.startedAt,
           durationText: durationText
         };
 
         // Apply privacy masking
         const maskedActivity = applyPrivacyMask(rawActivity, u.privacyMode);
 
-        const uActiveSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
-        const uHours = parseFloat((uActiveSeconds / 3600).toFixed(1));
+        const uTodayLogs = await prisma.activityLog.findMany({
+          where: {
+            userId: u.id,
+            timestamp: { gte: todayStart }
+          }
+        });
+        let uTodaySeconds = 0;
+        uTodayLogs.forEach(log => {
+          uTodaySeconds += parseDurationText(log.durationText);
+        });
+
+        // Add current active session duration if online and not paused
+        if (currentAct.app !== "Offline" && !currentAct.isPaused) {
+          uTodaySeconds += currentAct.durationSeconds;
+        }
+
+        const uHours = parseFloat((uTodaySeconds / 3600).toFixed(1));
         const todayFocusTime = `${uHours}h`;
         const focusScore = await calculateProductivityScore(u.id, uHours, u.productivityGoal || 6, u.distractionsCount);
 
@@ -952,18 +1134,32 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
 });
 
 // 4. Analytics Data
-app.get("/api/analytics", authenticateToken, async (req: any, res) => {
+app.get("/api/analytics", authenticateToken, async (req: any, res: any) => {
   try {
+    const todayStart = new Date();
+    todayStart.setHours(0,0,0,0);
+
     const logs = await prisma.activityLog.findMany({
-      where: { userId: req.user.id }
+      where: {
+        userId: req.user.id,
+        timestamp: { gte: todayStart }
+      }
     });
 
-    const appCounts: Record<string, number> = {};
-    let totalApps = 0;
+    const appDurations: Record<string, number> = {};
     logs.forEach(log => {
-      appCounts[log.app] = (appCounts[log.app] || 0) + 1;
-      totalApps++;
+      const seconds = parseDurationText(log.durationText);
+      appDurations[log.app] = (appDurations[log.app] || 0) + seconds;
     });
+
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.id }
+    });
+
+    const currentAct = await getUserActiveActivity(req.user.id);
+    if (currentAct && currentAct.app !== "Offline" && !currentAct.isPaused) {
+      appDurations[currentAct.app] = (appDurations[currentAct.app] || 0) + currentAct.durationSeconds;
+    }
 
     const colorsMap: Record<string, string> = {
       "VS Code": "#2563EB",
@@ -974,44 +1170,69 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
       "Spotify": "#A855F7"
     };
 
-    let appBreakdown = Object.entries(appCounts).map(([name, count]) => ({
+    let appBreakdown = Object.entries(appDurations).map(([name, seconds]) => ({
       name,
-      value: Math.round((count / (totalApps || 1)) * 100),
+      value: Math.max(1, Math.round(seconds / 60)), // duration in minutes
       color: colorsMap[name] || "#6B7280"
-    }));
+    })).sort((a, b) => b.value - a.value);
 
     if (appBreakdown.length === 0) {
       appBreakdown = [];
     }
 
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      include: { activities: true }
-    });
     let focusScore = 0;
     let focusTimeHours = 0;
     if (user) {
-      const activeSeconds = user.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
-      focusTimeHours = parseFloat((activeSeconds / 3600).toFixed(1));
+      let totalTodaySeconds = 0;
+      logs.forEach(log => {
+        totalTodaySeconds += parseDurationText(log.durationText);
+      });
+      const activeSeconds = (currentAct && currentAct.app !== "Offline" && !currentAct.isPaused) ? currentAct.durationSeconds : 0;
+      totalTodaySeconds += activeSeconds;
+
+      focusTimeHours = parseFloat((totalTodaySeconds / 3600).toFixed(1));
       focusScore = await calculateProductivityScore(user.id, focusTimeHours, user.productivityGoal || 6, user.distractionsCount);
     }
 
     const daysOfWeek = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const todayIndex = new Date().getDay();
+    
+    // Get start of this week (Sunday 00:00:00)
+    const sunday = new Date();
+    sunday.setDate(sunday.getDate() - todayIndex);
+    sunday.setHours(0, 0, 0, 0);
+
+    const weekSummaries = await prisma.dailySummary.findMany({
+      where: {
+        userId: req.user.id,
+        date: {
+          gte: sunday.toISOString().split("T")[0]
+        }
+      }
+    });
+
     const focusScoreHistory = daysOfWeek.map((day, idx) => {
+      const targetDate = new Date(sunday);
+      targetDate.setDate(sunday.getDate() + idx);
+      const dateStr = targetDate.toISOString().split("T")[0];
+      
+      const summary = weekSummaries.find(s => s.date === dateStr);
       if (idx === todayIndex) {
         return { day, score: focusScore, ideal: 80 };
       }
-      return { day, score: 0, ideal: 80 };
+      return {
+        day,
+        score: summary ? summary.productivityScore : 0,
+        ideal: 80
+      };
     });
 
-    const allUsers = await prisma.user.findMany({
-      include: { activities: true }
-    });
+    const allUsers = await prisma.user.findMany();
 
     const comparisonStatsPromises = allUsers.map(async u => {
-      const durationSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
-      const hours = parseFloat((durationSeconds / 3600).toFixed(1));
+      const uAct = await getUserActiveActivity(u.id);
+      const activeSeconds = (uAct && uAct.app !== "Offline" && !uAct.isPaused) ? uAct.durationSeconds : 0;
+      const hours = parseFloat((activeSeconds / 3600).toFixed(1));
       const score = await calculateProductivityScore(u.id, hours, u.productivityGoal || 6, u.distractionsCount);
 
       return {
@@ -1027,15 +1248,18 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
       const match = log.durationText.match(/(\d+)m/);
       totalLogSeconds += (match ? parseInt(match[1]) * 60 : 300);
     });
-    if (user) {
-      user.activities.forEach(act => {
-        totalLogSeconds += act.durationSeconds;
-      });
+    if (currentAct && currentAct.app !== "Offline" && !currentAct.isPaused) {
+      totalLogSeconds += currentAct.durationSeconds;
     }
 
     const weeklyTotalHours = parseFloat((totalLogSeconds / 3600).toFixed(1));
     const weeklyProdGoalAchieved = Math.min(100, Math.round((weeklyTotalHours / 35) * 100)) || 0;
     const averageDailyFocus = parseFloat((weeklyTotalHours / 7).toFixed(1));
+
+    // Fetch all DailySummaries to drive the 365-day heatmap calendar
+    const dailySummaries = await prisma.dailySummary.findMany({
+      where: { userId: req.user.id }
+    });
 
     res.json({
       appBreakdown,
@@ -1043,7 +1267,8 @@ app.get("/api/analytics", authenticateToken, async (req: any, res) => {
       comparisonStats,
       weeklyTotalHours,
       weeklyProdGoalAchieved,
-      averageDailyFocus
+      averageDailyFocus,
+      dailySummaries
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1279,18 +1504,18 @@ app.get("/api/leaderboard", authenticateToken, async (req: any, res) => {
       include: {
         user: {
           include: {
-            activities: true,
             activityLogs: true
           }
         }
       }
     });
 
-    const leaderboard = members.map(m => {
+    const leaderboardPromises = members.map(async m => {
       const u = m.user;
+      const currentAct = await getUserActiveActivity(u.id);
       
-      // Calculate active seconds: current session + logged activities
-      let totalSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
+      // Calculate active seconds: current session from Redis + logged activities from PostgreSQL
+      let totalSeconds = (currentAct && currentAct.app !== "Offline" && !currentAct.isPaused) ? currentAct.durationSeconds : 0;
       
       u.activityLogs.forEach(log => {
         const matchMin = log.durationText.match(/(\d+)m/);
@@ -1312,6 +1537,8 @@ app.get("/api/leaderboard", authenticateToken, async (req: any, res) => {
         hours
       };
     });
+
+    const leaderboard = await Promise.all(leaderboardPromises);
 
     // Sort by hours in descending order
     leaderboard.sort((a, b) => b.hours - a.hours);
@@ -1369,37 +1596,82 @@ function getPersonalFallbackInsights(user: any, logs: any[], todayHours: number)
 *   **Recommendation**: Start a 45-minute deep work session.`;
 }
 
-function getRoomFallbackInsights(activeGroup: string, members: any[]): string {
-  const categories: Record<string, number> = {};
-  let totalHours = 0;
+function getRoomFallbackInsights(activeGroup: string, currentUser: any, members: any[]): string {
+  // Calculate dynamic stats
+  const safeMembers = (members || []).filter(m => m && m.id);
+  const activeColleagues = safeMembers.filter(m => m.status && m.status !== "offline");
+  const totalCount = safeMembers.length + 1; // plus currentUser
+  const myActivity = currentUser.activities?.[0] || { app: "Offline", project: "None", durationSeconds: 0 };
+  const myActive = myActivity.app !== "Offline";
+  const activeCount = activeColleagues.length + (myActive ? 1 : 0);
+  const roomProdPercentage = Math.round((activeCount / totalCount) * 100) || 50;
+
+  // Find top performer
+  let topPerfName = currentUser.name || "Tawfeeq Bahur";
+  let topPerfTime = (myActivity.durationSeconds / 3600).toFixed(1) + "h";
+  let topPerfApps = [myActivity.app].filter(a => a !== "Offline");
+  let topPerfScore = 90;
+  let topPerfReason = "Consistent coding activity on active projects.";
+
+  let maxHours = myActivity.durationSeconds / 3600;
+  safeMembers.forEach(m => {
+    const act = m.activities?.[0] || { app: "Offline", project: "None", durationSeconds: 0 };
+    const h = act.durationSeconds / 3600;
+    if (h > maxHours) {
+      maxHours = h;
+      topPerfName = m.name;
+      topPerfTime = h.toFixed(1) + "h";
+      topPerfApps = [act.app].filter(a => a !== "Offline");
+      topPerfScore = 85;
+      topPerfReason = `Maintained focused tracking session in ${act.app}.`;
+    }
+  });
+  if (topPerfApps.length === 0) topPerfApps = ["VS Code"];
+
+  // Find needs attention
+  let needsAttName = "None";
+  let needsAttIdle = "0m";
+  let needsAttReason = "No issues detected. Team is on track.";
   
-  members.forEach(m => {
-    const currentAct = m.activities ? m.activities[0] : null;
-    if (currentAct) {
-      const category = getAppCategory(currentAct.app, currentAct.project);
-      categories[category] = (categories[category] || 0) + 1;
-    }
-    
-    // Calculate total hours
-    let memberSeconds = m.activities ? m.activities.reduce((acc: number, act: any) => acc + act.durationSeconds, 0) : 0;
-    totalHours += memberSeconds / 3600;
-  });
+  const offlineColleagues = safeMembers.filter(m => m.status === "offline");
+  if (offlineColleagues.length > 0) {
+    needsAttName = offlineColleagues[0].name;
+    needsAttIdle = "Offline";
+    needsAttReason = "Colleague is currently offline.";
+  }
 
-  let topCategory = "Development";
-  let maxCount = 0;
-  Object.entries(categories).forEach(([cat, count]) => {
-    if (count > maxCount) {
-      maxCount = count;
-      topCategory = cat;
-    }
-  });
+  const payload = {
+    roomSummary: {
+      status: activeCount > 0 ? "Focused Development Session" : "Quiet Room Sprints",
+      productivityPercentage: roomProdPercentage,
+      description: `${activeGroup} has been actively working for the past 2 hours.`,
+      activeCount: activeCount,
+      totalCount: totalCount
+    },
+    topPerformer: {
+      name: topPerfName,
+      focusTime: topPerfTime,
+      apps: topPerfApps,
+      score: topPerfScore,
+      reason: topPerfReason
+    },
+    needsAttention: {
+      name: needsAttName,
+      idleTime: needsAttIdle,
+      reason: needsAttReason
+    },
+    recommendations: [
+      `Encourage focused sprint sessions for ${activeGroup}.`,
+      "Review context switching frequency."
+    ],
+    prediction: {
+      completionPercentage: Math.max(60, 60 + activeCount * 8),
+      description: "Sprint tasks are progressing normally."
+    },
+    summary: `Daily Scrum Briefing: ${activeGroup} showed steady activity with ${activeCount} members online focusing on core tasks. Overall momentum is on schedule.`
+  };
 
-  const targetHours = Math.max(50, Math.ceil(totalHours * 1.2));
-
-  return `### 👥 TEAM PRODUCTIVITY INSIGHTS
-*   **Vibe Check**: Most members of **${activeGroup}** are currently in **${topCategory}** work.
-*   **Team Performance**: Team focus increased by **12%** this week.
-*   **Suggested Goal**: Reach **${targetHours} focus hours** today.`;
+  return JSON.stringify(payload);
 }
 
 // 6. smart AI briefing with Gemini 3.5 Flash!
@@ -1424,12 +1696,12 @@ app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
   let activeGroup = "Engineering Team";
   let friendsList: any[] = [];
   let myHours = 0;
+  let myActivity: any = null;
 
   try {
     user = await prisma.user.findUnique({
       where: { id: req.user.id },
       include: {
-        activities: true,
         activityLogs: true
       }
     });
@@ -1445,26 +1717,26 @@ app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
       const members = await prisma.groupMember.findMany({
         where: { groupId: group.id },
         include: {
-          user: {
-            include: { activities: true }
-          }
+          user: true
         }
       });
-      friendsList = members.filter(m => m.userId !== req.user.id).map(m => m.user);
+      const friendPromises = members
+        .filter(m => m.userId !== req.user.id)
+        .map(async m => {
+          const u = m.user as any;
+          const currentAct = await getUserActiveActivity(u.id);
+          u.activities = [currentAct]; // Mock for compatibility
+          return u;
+        });
+      friendsList = await Promise.all(friendPromises);
     }
 
-    const myActivity = user.activities[0] || {
-      app: "VS Code",
-      project: "EndoCore Workspace",
-      durationSeconds: 0,
-      isPaused: false
-    };
-
-    const myActiveSeconds = user.activities.reduce((acc: number, act: any) => acc + act.durationSeconds, 0);
+    myActivity = await getUserActiveActivity(req.user.id);
+    const myActiveSeconds = (myActivity.app !== "Offline" && !myActivity.isPaused) ? myActivity.durationSeconds : 0;
     myHours = parseFloat((myActiveSeconds / 3600).toFixed(1));
 
     const key = process.env.GEMINI_API_KEY;
-    if (!key || key === "MY_GEMINI_API_KEY") {
+    if (!key || key.includes("your-gemini-api-key") || key === "MY_GEMINI_API_KEY") {
       throw new Error("Missing valid GEMINI_API_KEY environment variable. Defaulting to high-quality fallback.");
     }
 
@@ -1495,35 +1767,56 @@ Format your output in clean, eye-catching Markdown with the following structured
 
 Keep it extremely concise, engaging, and professional but full of developer humor! Limit the entire response to exactly 100-130 words. Do not praise yourself or write self-referential introductory statements. Start directly with the pulse.`;
     } else {
-      const myStateStr = `My Core state: User name: ${user.name}, active tracking: ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}). My goal is ${user.productivityGoal} focus hours. Custom status: "${user.customStatus}".`;
+      const myStateStr = `User name: ${user.name}, active tracking: ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}). Focus goal is ${user.productivityGoal} hours.`;
       
       const friendsStateStr = friendsList.map(u => {
-        const currentAct = u.activities[0] || { app: "Offline", project: "None" };
-        const uActiveSeconds = u.activities.reduce((acc, act) => acc + act.durationSeconds, 0);
+        const currentAct = u.activities[0] || { app: "Offline", project: "None", durationSeconds: 0 };
+        const uActiveSeconds = u.activities.reduce((acc: number, act: any) => acc + act.durationSeconds, 0);
         const uHours = (uActiveSeconds / 3600).toFixed(1);
         const todayFocusTime = `${uHours}h`;
         const focusScore = Math.min(100, Math.round((parseFloat(uHours) / (u.productivityGoal || 6)) * 100)) || 0;
 
-        return `Friend "${u.name}" (${u.role}) is current status: "${u.status}" using "${currentAct.app}" for project "${currentAct.project}". Today total focus time: ${todayFocusTime}, productivity score: ${focusScore}%.`;
+        return `Friend "${u.name}" (${u.role}) is status: "${u.status}" using "${currentAct.app}" for project "${currentAct.project}". Today total focus time: ${todayFocusTime}, focus score: ${focusScore}%.`;
       }).join("\n");
 
-      prompt = `You are a helpful, extremely clever, and witty developer co-working assistant companion.
-Here is the current real-time activity status in our co-working group "${activeGroup}":
----
-${myStateStr}
-
----
-Our team members:
+      prompt = `You are the EndoCore AI Scrum Coordinator.
+You receive live telemetry from every user in the current room:
+- My state: ${myStateStr}
+- Colleagues:
 ${friendsStateStr}
----
 
-Please generate a premium Daily Focus & Co-working Briefing.
-Format your output in clean, eye-catching Markdown with the following structured sections:
-1.  **⚡ TEAM PULSE SUMMARY**: A quick, enthusiastic 2-sentence summary of what the vibe of the channel is right now (e.g., "Most members are currently in development work.").
-2.  **🎮 INDIVIDUAL NUDGES & COMPLIMENTS**: Mention at least 2 specific friends. Offer a witty or helpful comment on what they are working on.
-3.  **💪 SUGGESTED GOAL**: A dynamic daily goal for the team (e.g., "Reach 50 focus hours today.").
-
-Keep the brief extremely visual, using bullet points, bold keywords, emoji highlights, and clean layouts. Keep it concise, engaging, and professional but full of developer humor! Limit the entire response to exactly 120-150 words. Do not praise yourself or write self-referential introductory statements. Start directly with the pulse.`;
+Provide a concise, data-driven daily focus and scrum coordination briefing for the channel "${activeGroup}".
+You must output a single, flat JSON object.
+Return exactly the following JSON structure (do not wrap in markdown tags, return only raw JSON):
+{
+  "roomSummary": {
+    "status": "A short focused status indicator (e.g. Focused Development Session, Average Productivity, High Multitasking Vibe)",
+    "productivityPercentage": number (calculate average focus percentage of the room members based on goals achieved),
+    "description": "A short summary paragraph of the overall room activity level, mentioning active vs idle users.",
+    "activeCount": number (number of active online developers in the room),
+    "totalCount": number (total number of members in the room)
+  },
+  "topPerformer": {
+    "name": "Name of the user with the most focus hours or best deep work streak today",
+    "focusTime": "Formated focus duration (e.g. 5h 48m)",
+    "apps": ["List of top 2-3 active tools used by this top performer, e.g. VS Code, Chrome"],
+    "score": number (focus score out of 100),
+    "reason": "Detailed metric-driven reason why they are the top performer (e.g. Low switching, completed 27 events)"
+  },
+  "needsAttention": {
+    "name": "Name of user with long idle times, offline status, or high app switching. If none, write 'None'",
+    "idleTime": "Formatted idle duration, e.g. 48 mins or '0 mins'",
+    "reason": "Reason why they need attention, or 'No issues detected' if none"
+  },
+  "recommendations": [
+    "List of 2 specific actionable recommendations for the team or individuals (e.g. suggest a break, pairing, review task allocation)"
+  ],
+  "prediction": {
+    "completionPercentage": number (estimated sprint completion or room daily goal completion percentage),
+    "description": "Scrum master estimation on whether team tasks will finish on time based on current focus levels."
+  },
+  "summary": "A professional Scrum-style closing paragraph summarizing today's overall team status, workspace mood, and momentum."
+}`;
     }
 
     const response = await ai.models.generateContent({
@@ -1531,6 +1824,7 @@ Keep the brief extremely visual, using bullet points, bold keywords, emoji highl
       contents: prompt,
       config: {
         temperature: 0.85,
+        responseMimeType: type === "room" ? "application/json" : undefined
       }
     });
 
@@ -1549,13 +1843,15 @@ Keep the brief extremely visual, using bullet points, bold keywords, emoji highl
   } catch (error: any) {
     console.error("Gemini API Error:", error.message || error);
     
+    const fallbackUser = user || { name: "Developer", productivityGoal: 6, distractionsCount: 0, focusStreak: 0, status: "Offline", activityLogs: [] };
     if (type === "personal") {
-      const fallback = getPersonalFallbackInsights(user, user ? user.activityLogs : [], myHours);
+      const fallback = getPersonalFallbackInsights(fallbackUser, fallbackUser.activityLogs || [], myHours);
       lastAiInsightsPersonal = fallback;
       lastAiTimestampPersonal = Date.now();
       res.json({ text: fallback, cached: true, error: true, details: error.message });
     } else {
-      const fallback = getRoomFallbackInsights(activeGroup || "Engineering Team", friendsList);
+      fallbackUser.activities = [myActivity || { app: "Offline", project: "None", durationSeconds: 0 }];
+      const fallback = getRoomFallbackInsights(activeGroup || "Engineering Team", fallbackUser, friendsList);
       lastAiInsightsRoom = fallback;
       lastAiTimestampRoom = Date.now();
       res.json({ text: fallback, cached: true, error: true, details: error.message });

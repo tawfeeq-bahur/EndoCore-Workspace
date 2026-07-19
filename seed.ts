@@ -188,5 +188,30 @@ export async function seedDatabase() {
     await prisma.activityLog.create({ data: log });
   }
 
+  // 6. Seed DailySummaries for the past 60 days to populate the contribution heatmap
+  console.log("Seeding historical DailySummary metrics...");
+  const users = ["u1", "u2", "u3"];
+  for (const userId of users) {
+    for (let i = 1; i <= 60; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateString = date.toISOString().split("T")[0]; // YYYY-MM-DD
+
+      // Generate random daily focus hours between 1 and 8 hours (in seconds)
+      const hours = 1 + Math.random() * 7;
+      const totalFocusSeconds = Math.round(hours * 3600);
+      const productivityScore = Math.round(40 + Math.random() * 55); // 40% to 95%
+
+      await prisma.dailySummary.create({
+        data: {
+          userId,
+          date: dateString,
+          totalFocusSeconds,
+          productivityScore
+        }
+      });
+    }
+  }
+
   console.log("Database successfully seeded with realistic profiles and groups!");
 }

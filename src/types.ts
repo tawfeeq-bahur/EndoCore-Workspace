@@ -5,6 +5,7 @@ export interface Activity {
   durationText?: string;
   durationSeconds?: number;
   isPaused?: boolean;
+  openApps?: string[];
 }
 
 export interface UserProfile {
@@ -81,6 +82,14 @@ export interface ComparisonItem {
   score: number;
 }
 
+export interface DailySummaryItem {
+  id: string;
+  userId: string;
+  date: string;
+  totalFocusSeconds: number;
+  productivityScore: number;
+}
+
 export interface AnalyticsData {
   appBreakdown: AppBreakdownItem[];
   focusScoreHistory: FocusHistoryItem[];
@@ -88,6 +97,7 @@ export interface AnalyticsData {
   weeklyTotalHours: number;
   weeklyProdGoalAchieved: number;
   averageDailyFocus: number;
+  dailySummaries?: DailySummaryItem[];
 }
 
 export interface ChatMessage {
