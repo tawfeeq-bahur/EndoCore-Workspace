@@ -125,6 +125,7 @@ export interface PublicUserProfile {
   id: string;
   name: string;
   username: string;
+  email?: string;
   avatarUrl?: string;
   headline?: string;
 }

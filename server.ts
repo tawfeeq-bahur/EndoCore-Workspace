@@ -10,6 +10,8 @@ import { Server } from "socket.io";
 import { prisma } from "./db";
 import { seedDatabase } from "./seed";
 import Redis from "ioredis";
+import { createRoomTransactional, recordTrackingConsent } from "./src/services/roomService";
+import { requireRoomRole, requireRoomPermission } from "./src/middleware/roomAuth";
 
 dotenv.config();
 
@@ -663,20 +665,25 @@ app.post("/api/auth/register", async (req, res) => {
     }
 
     const passwordHash = bcrypt.hashSync(password, 10);
+    const username = email.split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "");
+    
     const user = await prisma.user.create({
       data: {
         name,
         email,
         passwordHash,
-        activeGroup: "Engineering Group",
+        username,
+        headline: "Software Developer",
+        activeGroup: "Engineering Team",
         privacyMode: "Level 1: Full Detail",
-        customStatus: "Just joined the EndoCore Workspace! 👋",
+        customStatus: "Just joined EndoCore Workspace! 👋",
         status: "online",
-        role: "Software Developer"
+        role: "Software Developer",
+        broadcastGroups: "Engineering Team,Focus Guild"
       }
     });
 
-    // Automatically join the default "Engineering Group" (g1)
+    // Automatically join default rooms ("Engineering Team" g1 and "Focus Guild" g4)
     await prisma.groupMember.create({
       data: {
         userId: user.id,
@@ -684,17 +691,36 @@ app.post("/api/auth/register", async (req, res) => {
         role: "member"
       }
     });
+    await prisma.groupMember.create({
+      data: {
+        userId: user.id,
+        groupId: "g4",
+        role: "member"
+      }
+    });
 
-    // Create an initial empty activity
+    // Create initial active activity
+    const initialActivity = {
+      app: "VS Code",
+      project: "EndoCore Workspace",
+      startedAt: Date.now(),
+      durationSeconds: 0,
+      isPaused: false,
+      lastHeartbeat: Date.now()
+    };
+
     await prisma.activity.create({
       data: {
         userId: user.id,
-        app: "VS Code",
-        project: "EndoCore Workspace",
+        app: initialActivity.app,
+        project: initialActivity.project,
         durationSeconds: 0,
         isPaused: false
       }
     });
+
+    await setUserActiveActivity(user.id, initialActivity);
+    await syncPresenceToRedis(user.id, initialActivity, user.status, user.activeGroup);
 
     const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
     res.json({ success: true, token, user: formatUserProfile(user) });
@@ -748,6 +774,121 @@ app.get("/api/health", async (req, res) => {
       database: "error",
       error: error.message
     });
+  }
+});
+
+// -------------------------------------------------------------
+// EndoCore Room System 2.0 API Endpoints
+// -------------------------------------------------------------
+
+// 1. Create Room Endpoint (5-Step Wizard with Transaction)
+app.post("/api/rooms", authenticateToken, async (req: any, res) => {
+  try {
+    const ownerId = req.user.id;
+    const room = await createRoomTransactional({
+      ...req.body,
+      ownerId
+    });
+    res.json({ success: true, room });
+  } catch (error: any) {
+    console.error("Error creating room:", error);
+    res.status(400).json({ error: error.message || "Failed to create room" });
+  }
+});
+
+// 2. List Rooms for Current User
+app.get("/api/rooms", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const memberships = await prisma.roomMember.findMany({
+      where: { userId, membershipStatus: "ACTIVE" },
+      include: {
+        room: {
+          include: {
+            members: {
+              include: {
+                user: {
+                  select: { id: true, name: true, avatarUrl: true, headline: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    const rooms = memberships.map(m => ({
+      id: m.room.id,
+      name: m.room.name,
+      description: m.room.description,
+      iconEmoji: m.room.iconEmoji,
+      category: m.room.category,
+      timezone: m.room.timezone,
+      accessMode: m.room.accessMode,
+      role: m.role,
+      memberCount: m.room.members.length,
+      members: m.room.members.map(rm => ({
+        id: rm.user.id,
+        name: rm.user.name,
+        avatarUrl: rm.user.avatarUrl,
+        role: rm.role,
+        status: rm.membershipStatus
+      }))
+    }));
+
+    res.json({ success: true, rooms });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Failed to list rooms" });
+  }
+});
+
+// 3. Get Room Details
+app.get("/api/rooms/:id", authenticateToken, requireRoomRole(["OWNER", "ADMIN", "MANAGER", "MEMBER", "OBSERVER"]), async (req: any, res) => {
+  try {
+    const roomId = req.params.id;
+    const room = await prisma.room.findUnique({
+      where: { id: roomId },
+      include: {
+        members: {
+          include: {
+            user: {
+              select: { id: true, name: true, avatarUrl: true, headline: true, username: true }
+            }
+          }
+        },
+        teamTargets: {
+          where: { effectiveUntil: null },
+          orderBy: { effectiveFrom: "desc" },
+          take: 1
+        },
+        memberTargets: {
+          where: { effectiveUntil: null }
+        }
+      }
+    });
+
+    if (!room) return res.status(404).json({ error: "Room not found" });
+
+    res.json({
+      success: true,
+      room,
+      userRole: req.roomMember.role
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Failed to fetch room details" });
+  }
+});
+
+// 4. Accept / Versioned Tracking Consent Endpoint
+app.post("/api/rooms/:id/consent", authenticateToken, async (req: any, res) => {
+  try {
+    const roomId = req.params.id;
+    const userId = req.user.id;
+
+    const consent = await recordTrackingConsent(roomId, userId);
+    res.json({ success: true, consent });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || "Failed to record tracking consent" });
   }
 });
 
@@ -1768,6 +1909,7 @@ app.get("/api/connections", authenticateToken, async (req: any, res) => {
             id: otherUser.id,
             name: otherUser.name,
             username: otherUser.username || otherUser.email.split("@")[0],
+            email: otherUser.email,
             avatarUrl: otherUser.avatarUrl,
             headline: otherUser.headline
           },
@@ -1782,6 +1924,7 @@ app.get("/api/connections", authenticateToken, async (req: any, res) => {
             id: otherUser.id,
             name: otherUser.name,
             username: otherUser.username || otherUser.email.split("@")[0],
+            email: otherUser.email,
             avatarUrl: otherUser.avatarUrl,
             headline: otherUser.headline
           },
@@ -1825,14 +1968,14 @@ app.get("/api/connections/search", authenticateToken, async (req: any, res) => {
       blocks.map(b => b.blockerId === myId ? b.blockedId : b.blockerId)
     );
 
-    // Search matches (only allow exact email search, username match, or display name match)
+    // Search matches by display name, username, or email substring
     const matchingUsers = await prisma.user.findMany({
       where: {
         id: { not: myId },
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
           { username: { contains: query, mode: 'insensitive' } },
-          { email: { equals: query, mode: 'insensitive' } }
+          { email: { contains: query, mode: 'insensitive' } }
         ]
       },
       take: 20
@@ -1868,6 +2011,7 @@ app.get("/api/connections/search", authenticateToken, async (req: any, res) => {
         id: u.id,
         name: u.name,
         username: u.username || u.email.split("@")[0],
+        email: u.email,
         avatarUrl: u.avatarUrl,
         headline: u.headline,
         connectionStatus,

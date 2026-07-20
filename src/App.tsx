@@ -44,8 +44,13 @@ import {
   Group,
   AnalyticsData,
   TimelineItem,
-  ChatMessage
+  ChatMessage,
+  ConnectionItem,
+  ConnectionRequestItem,
+  FocusChallengeItem
 } from "./types";
+import { RoomCreationWizard } from "./components/RoomCreationWizard";
+import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
 
 export default function App() {
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -155,6 +160,7 @@ export default function App() {
 
   // Responsive layout state
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [isRoomWizardOpen, setIsRoomWizardOpen] = useState<boolean>(false);
 
   useEffect(() => {
     groupsRef.current = groups;
@@ -3813,45 +3819,28 @@ export default function App() {
                         </p>
                       </div>
 
-                      {/* Room creation dialog form */}
-                      <div className={`p-6 rounded-3xl ${bgCard} border ${borderRule}`}>
-                        <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400 flex items-center mb-4">
-                          <Plus className="h-4.5 w-4.5 mr-1" />
-                          COMMISSION NEW CHANNEL
-                        </h3>
+                      {/* 5-Step Room Creation Wizard Launch Card */}
+                      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border border-cyan-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xl relative overflow-hidden">
+                        <div className="space-y-2 z-10">
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-semibold">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            5-STEP ROOM INTELLIGENCE WIZARD
+                          </div>
+                          <h3 className="text-xl sm:text-2xl font-serif italic font-bold text-white">
+                            Commission a New Intelligence Room
+                          </h3>
+                          <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+                            Configure room basics, access permissions, roles, individual & team work expectations, and versioned AI privacy policies in a guided 5-step setup experience.
+                          </p>
+                        </div>
 
-                        <form onSubmit={executeCreateGroup} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-mono tracking-widest text-[#a1a1aa] block">Guild/Room Name</label>
-                            <input
-                              type="text"
-                              required
-                              value={newGroupName}
-                              onChange={(e) => setNewGroupName(e.target.value)}
-                              className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
-                              placeholder="e.g. Research Team"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-[10px] uppercase font-mono tracking-widest text-[#a1a1aa] block">Brief Channel Manifest</label>
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="text"
-                                value={newGroupDesc}
-                                onChange={(e) => setNewGroupDesc(e.target.value)}
-                                className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
-                                placeholder="Deep focus study group..."
-                              />
-                              <button
-                                type="submit"
-                                disabled={creatingGroup}
-                                className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-6 py-3 rounded-xl font-mono uppercase tracking-wide font-semibold shrink-0 cursor-pointer disabled:opacity-50"
-                              >
-                                {creatingGroup ? "Deploying..." : "Launch"}
-                              </button>
-                            </div>
-                          </div>
-                        </form>
+                        <button
+                          onClick={() => setIsRoomWizardOpen(true)}
+                          className="px-6 py-3.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs rounded-2xl shadow-lg shadow-cyan-500/25 font-mono uppercase tracking-wider transition-all transform hover:scale-105 cursor-pointer shrink-0 flex items-center justify-center gap-2 z-10"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Launch 5-Step Wizard
+                        </button>
                       </div>
 
                       {/* Classroom Portal Card Grid */}
@@ -3953,26 +3942,14 @@ export default function App() {
                           {/* OVERVIEW PANEL */}
                           {roomTab === "overview" && (
                             <div className="space-y-6">
-                              {/* 3 metrics cards */}
-                              {analytics && (
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                  <div className={`p-6 rounded-2xl border ${bgCard} ${borderRule}`}>
-                                    <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block mb-1">Active Guild Average</span>
-                                    <div className="text-3xl font-serif italic font-semibold">{analytics.averageDailyFocus} hrs</div>
-                                    <p className="text-[10px] text-zinc-500 font-mono mt-1">// Group focus duration average</p>
-                                  </div>
-                                  <div className={`p-6 rounded-2xl border ${bgCard} ${borderRule}`}>
-                                    <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block mb-1">Total Room Focus</span>
-                                    <div className="text-3xl font-serif italic font-semibold">{analytics.weeklyTotalHours} hrs</div>
-                                    <p className="text-[10px] text-zinc-500 font-mono mt-1">// Accumulated group hours</p>
-                                  </div>
-                                  <div className={`p-6 rounded-2xl border ${bgCard} ${borderRule}`}>
-                                    <span className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block mb-1">Group Goal Progress</span>
-                                    <div className="text-3xl font-serif italic font-semibold">{analytics.weeklyProdGoalAchieved}%</div>
-                                    <p className="text-[10px] text-zinc-500 font-mono mt-1">// Room productivity index</p>
-                                  </div>
-                                </div>
-                              )}
+                              <OwnerRoomDashboard
+                                roomName={selectedRoomName}
+                                roomDetails={groups.find(g => g.name === selectedRoomName)}
+                                occupants={friends}
+                                userRole="OWNER"
+                                onRefreshAi={() => fetchAiBriefing(true)}
+                                onNudgeMember={(name, id) => triggerPeerNudge(name, id)}
+                              />
 
                               {/* Quick AI co-working briefing */}
                               <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} relative overflow-hidden`}>
@@ -4432,6 +4409,127 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* 🔍 TOP-LEVEL ADD CONNECTION SEARCH BAR */}
+                  <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-3`}>
+                    <label className="text-[10px] font-mono uppercase tracking-widest text-stone-400 font-bold block">
+                      Add Connection — Search User Profile by Email or Username
+                    </label>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                      <div className="relative flex-1">
+                        <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-stone-500" />
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={(e) => {
+                            setSearchQuery(e.target.value);
+                            executeSearchUsers(e.target.value);
+                          }}
+                          className={`w-full rounded-xl pl-10 pr-4 py-2.5 text-xs tracking-wide ${formInput}`}
+                          placeholder="Enter user email address (e.g. ravi@example.com)..."
+                        />
+                      </div>
+                      <button
+                        onClick={() => executeSearchUsers(searchQuery)}
+                        disabled={searchingUsers || !searchQuery.trim()}
+                        className="bg-black hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-xs px-6 py-2.5 rounded-xl font-mono uppercase tracking-wide font-semibold cursor-pointer shrink-0 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        <span>{searchingUsers ? "Searching..." : "Find & Connect"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* ⚡ REAL-TIME SEARCH RESULTS CARD (when typing email/name) */}
+                  {searchQuery.trim() && (
+                    <div className={`p-6 rounded-2xl border ${bgCard} border-amber-500/30 space-y-4 shadow-lg`}>
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-amber-500 flex items-center gap-2">
+                          <Search className="h-3.5 w-3.5" />
+                          <span>Matching Profiles in User Database ("{searchQuery}")</span>
+                        </h3>
+                        <button
+                          onClick={() => { setSearchQuery(""); setSearchResults([]); }}
+                          className="text-[10px] font-mono text-stone-500 hover:text-stone-300 underline cursor-pointer"
+                        >
+                          Clear Results
+                        </button>
+                      </div>
+
+                      {searchingUsers ? (
+                        <div className="text-center py-6 text-xs font-mono text-stone-500 animate-pulse">
+                          Querying user database records...
+                        </div>
+                      ) : searchResults.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {searchResults.map((userItem) => (
+                            <div key={userItem.id} className="p-4 rounded-xl bg-stone-900/60 border border-neutral-800 flex items-center justify-between gap-3">
+                              <div className="flex items-center space-x-3 min-w-0">
+                                <img
+                                  src={userItem.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                                  alt={userItem.name}
+                                  className="h-10 w-10 rounded-full object-cover shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <h4 className="text-xs font-semibold text-white truncate">{userItem.name}</h4>
+                                  <p className="text-[10px] font-mono text-amber-400/90 truncate">{userItem.email}</p>
+                                  <p className="text-[10px] font-mono text-stone-500 truncate">@{userItem.username}</p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                {userItem.connectionStatus === "friends" ? (
+                                  <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono uppercase tracking-wider rounded-lg font-semibold">
+                                    ✓ Connected
+                                  </span>
+                                ) : userItem.connectionStatus === "pending_sent" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono uppercase tracking-wider rounded-lg font-semibold">
+                                      ⏳ Pending
+                                    </span>
+                                    <button
+                                      onClick={() => cancelConnectionRequest(userItem.requestId)}
+                                      className="px-2 py-1.5 text-stone-500 hover:text-red-400 text-[10px] font-mono uppercase underline cursor-pointer"
+                                      title="Cancel pending request"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : userItem.connectionStatus === "pending_received" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => respondConnectionRequest(userItem.requestId, "accept")}
+                                      className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-mono uppercase font-semibold rounded-lg cursor-pointer"
+                                    >
+                                      Accept
+                                    </button>
+                                    <button
+                                      onClick={() => respondConnectionRequest(userItem.requestId, "decline")}
+                                      className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] font-mono uppercase rounded-lg cursor-pointer"
+                                    >
+                                      Decline
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => sendConnectionRequest(userItem.id)}
+                                    className="px-3.5 py-1.5 bg-white text-black hover:bg-neutral-200 text-[10px] font-mono uppercase font-semibold rounded-lg cursor-pointer transition-all shadow-sm flex items-center gap-1"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    <span>Send Request</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-xs font-mono text-stone-500 italic">
+                          No registered user found for "{searchQuery}".
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Incoming Challenge Invites Bar */}
                   {incomingChallenges.length > 0 && (
                     <div className="space-y-4">
@@ -4576,9 +4674,14 @@ export default function App() {
                                       <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
                                         {friend.profile.name}
                                       </h4>
-                                      <span className="text-[10px] font-mono text-stone-500 block truncate max-w-[150px]">
-                                        @{friend.profile.username}
-                                      </span>
+                                      <p className="text-[10px] font-mono text-[#D4AF37] block truncate max-w-[170px]">
+                                        {friend.profile.email || `@${friend.profile.username}`}
+                                      </p>
+                                      {friend.profile.headline && (
+                                        <p className="text-[10px] text-stone-500 truncate max-w-[170px]">
+                                          {friend.profile.headline}
+                                        </p>
+                                      )}
                                     </div>
                                   </div>
 
@@ -4672,7 +4775,7 @@ export default function App() {
                         </div>
                       ) : (
                         <div className="text-center py-20 text-xs font-mono text-stone-500 italic">
-                          No connected peers online. Switch to "Discover" tab to add coworkers using this workspace.
+                          No connected peers online. Use the Search Bar above to find user emails and connect.
                         </div>
                       )}
                     </div>
@@ -4694,7 +4797,7 @@ export default function App() {
                               executeSearchUsers(e.target.value);
                             }}
                             className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
-                            placeholder="Type to search e.g. tawfeeq.dev..."
+                            placeholder="Type user email (e.g. ravi@example.com)..."
                           />
                         </div>
                       </div>
@@ -4717,6 +4820,9 @@ export default function App() {
                                   <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
                                     {userItem.name}
                                   </h4>
+                                  <p className="text-[10px] font-mono text-amber-400/90 truncate">
+                                    {userItem.email}
+                                  </p>
                                   <p className="text-[10px] font-mono text-stone-500 truncate">
                                     @{userItem.username}
                                   </p>
@@ -4737,9 +4843,9 @@ export default function App() {
                                 ) : userItem.connectionStatus === "pending_sent" ? (
                                   <button
                                     onClick={() => cancelConnectionRequest(userItem.requestId)}
-                                    className="px-3 py-1.5 bg-stone-800 text-stone-500 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer"
+                                    className="px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer"
                                   >
-                                    Pending Sent
+                                    ⏳ Pending Sent
                                   </button>
                                 ) : userItem.connectionStatus === "pending_received" ? (
                                   <div className="flex items-center gap-1.5">
@@ -4759,9 +4865,10 @@ export default function App() {
                                 ) : (
                                   <button
                                     onClick={() => sendConnectionRequest(userItem.id)}
-                                    className="px-3 py-1.5 bg-white text-black dark:bg-stone-300 dark:hover:bg-neutral-200 text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer transition-all"
+                                    className="px-3 py-1.5 bg-white text-black dark:bg-stone-300 dark:hover:bg-neutral-200 text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer transition-all flex items-center gap-1"
                                   >
-                                    Connect
+                                    <Plus className="h-3 w-3" />
+                                    <span>Connect</span>
                                   </button>
                                 )}
 
@@ -4782,7 +4889,7 @@ export default function App() {
                         </div>
                       ) : (
                         <div className="text-center py-16 text-xs font-mono text-stone-500 italic">
-                          Search by username or exact email coordinates above to index active users.
+                          Search by email address above to index active users.
                         </div>
                       )}
                     </div>
@@ -4810,8 +4917,8 @@ export default function App() {
                                     <h5 className="text-sm font-semibold truncate text-white dark:text-stone-300">
                                       {item.profile.name}
                                     </h5>
-                                    <p className="text-[10px] font-mono text-stone-500 truncate">
-                                      @{item.profile.username}
+                                    <p className="text-[10px] font-mono text-amber-400/90 truncate">
+                                      {item.profile.email || `@${item.profile.username}`}
                                     </p>
                                   </div>
                                 </div>
@@ -4859,9 +4966,12 @@ export default function App() {
                                     <h5 className="text-sm font-semibold truncate text-white dark:text-stone-300">
                                       {item.profile.name}
                                     </h5>
-                                    <p className="text-[10px] font-mono text-stone-500 truncate">
-                                      @{item.profile.username}
+                                    <p className="text-[10px] font-mono text-amber-400/90 truncate">
+                                      {item.profile.email || `@${item.profile.username}`}
                                     </p>
+                                    <span className="text-[9px] font-mono text-amber-400 block mt-0.5">
+                                      ⏳ Request Pending...
+                                    </span>
                                   </div>
                                 </div>
 
@@ -5186,6 +5296,15 @@ export default function App() {
         </div>
       </main>
 
+      {/* 5-Step Room Creation Wizard Modal */}
+      <RoomCreationWizard
+        isOpen={isRoomWizardOpen}
+        onClose={() => setIsRoomWizardOpen(false)}
+        onSuccess={(newRoom) => {
+          fetchGroups();
+          triggerToast(`🚀 Room ${newRoom.name} created successfully!`);
+        }}
+      />
     </div>
   );
 }
