@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
 }
 
 model User {
@@ -33,11 +33,41 @@ model User {
   focusStreak                Int            @default(0)
   lastFocusDate              String         @default("")
 
+  // New Fields for Connections
+  username                   String         @unique @default(uuid())
+  headline                   String         @default("Software Developer")
+
+  // Privacy preferences
+  presenceVisibility         String         @default("connections")    // everyone, connections, room_members, nobody
+  activityVisibility         String         @default("status_only")    // status_only, app_category, app_name
+  showDailyFocusTime         Boolean        @default(false)
+  showCurrentRoom            Boolean        @default(false)
+  allowFocusInvites          Boolean        @default(true)
+  allowRoomInvites           Boolean        @default(true)
+  allowJoinRequests          Boolean        @default(true)
+
+  // Relations
   activities                 Activity[]
   memberships                GroupMember[]
   activityLogs               ActivityLog[]
   dailySummaries             DailySummary[]
   focusSessions              FocusSession[]
+
+  // Connections relations
+  sentConnections            Connection[]   @relation("ConnectionRequester")
+  connectionsA               Connection[]   @relation("ConnectionUserA")
+  connectionsB               Connection[]   @relation("ConnectionUserB")
+  blocksSent                 UserBlock[]    @relation("UserBlocker")
+  blocksReceived             UserBlock[]    @relation("UserBlocked")
+
+  // Group join requests & invitations
+  joinRequests               GroupJoinRequest[]
+  sentGroupInvites           GroupInvitation[] @relation("GroupInviter")
+  receivedGroupInvites       GroupInvitation[] @relation("GroupInvitee")
+
+  // Focus challenges
+  challengesCreated          FocusChallenge[] @relation("ChallengeCreator")
+  challengesInvited          FocusChallenge[] @relation("ChallengeInvited")
 }
 
 model Group {
@@ -45,7 +75,10 @@ model Group {
   name        String        @unique
   description String
   createdAt   DateTime      @default(now())
+  accessType  String        @default("PUBLIC") // PUBLIC, PRIVATE, REQUIRE_APPROVAL, INVITE_ONLY
   members     GroupMember[]
+  joinRequests GroupJoinRequest[]
+  invitations  GroupInvitation[]
 }
 
 model GroupMember {
@@ -108,4 +141,114 @@ model FocusSession {
   completed       Boolean  @default(false)
   timestamp       DateTime @default(now())
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELED
+}
+
+model Connection {
+  id            String           @id @default(uuid())
+  pairKey       String           @unique // canonical form: userAId:userBId where userAId < userBId
+
+  userAId       String
+  userBId       String
+  requestedById String
+
+  status        ConnectionStatus @default(PENDING)
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  respondedAt   DateTime?
+  acceptedAt    DateTime?
+
+  userA         User @relation("ConnectionUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB         User @relation("ConnectionUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  requester     User @relation("ConnectionRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  @@index([userAId, status])
+  @@index([userBId, status])
+  @@index([requestedById])
+}
+
+model UserBlock {
+  id        String   @id @default(uuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker   User     @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+enum FocusChallengeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELED
+  EXPIRED
+  ACTIVE
+  COMPLETED
+}
+
+model FocusChallenge {
+  id               String               @id @default(uuid())
+  createdById      String
+  invitedUserId    String
+
+  durationMinutes  Int
+  challengeMode    String               @default("co_focus") // "co_focus", "sprint", "accountability"
+  creatorObjective String               @default("")
+  invitedObjective String               @default("")
+  creatorStatus    String               @default("pending") // "pending", "completed", "partial", "failed"
+  invitedStatus    String               @default("pending")
+
+  status           FocusChallengeStatus @default(PENDING)
+
+  createdAt        DateTime             @default(now())
+  expiresAt        DateTime
+  respondedAt      DateTime?
+  startAt          DateTime?
+  endAt            DateTime?
+  completedAt      DateTime?
+
+  creator          User                 @relation("ChallengeCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  invited          User                 @relation("ChallengeInvited", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([createdById, status])
+  @@index([invitedUserId, status])
+}
+
+model GroupJoinRequest {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt DateTime @default(now())
+
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+}
+
+model GroupInvitation {
+  id         String   @id @default(uuid())
+  groupId    String
+  inviterId  String
+  inviteeId  String
+  status     String   @default("PENDING") // PENDING, ACCEPTED, DECLINED
+  createdAt  DateTime @default(now())
+
+  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviter    User     @relation("GroupInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee    User     @relation("GroupInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, inviteeId])
 }

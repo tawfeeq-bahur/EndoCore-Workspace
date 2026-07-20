@@ -31,6 +31,8 @@ export async function seedDatabase() {
       role: "Lead Software Developer",
       broadcastGroups: "Engineering Team,Design Team,Research Team,Focus Guild",
       focusStreak: 3,
+      username: "tawfeeq.dev",
+      headline: "Lead Software Developer",
     }
   });
 
@@ -52,6 +54,8 @@ export async function seedDatabase() {
       role: "UI/UX Designer",
       broadcastGroups: "Engineering Team,Design Team,Focus Guild",
       focusStreak: 5,
+      username: "ravi.dev",
+      headline: "UI/UX Designer",
     }
   });
 
@@ -73,6 +77,8 @@ export async function seedDatabase() {
       role: "Research Associate",
       broadcastGroups: "Engineering Team,Research Team,Focus Guild",
       focusStreak: 2,
+      username: "arun.dev",
+      headline: "Research Associate",
     }
   });
 
@@ -81,7 +87,8 @@ export async function seedDatabase() {
     data: {
       id: "g1",
       name: "Engineering Team",
-      description: "Development operations, API integrations, and scaling core infrastructure."
+      description: "Development operations, API integrations, and scaling core infrastructure.",
+      accessType: "PUBLIC"
     }
   });
 
@@ -89,7 +96,8 @@ export async function seedDatabase() {
     data: {
       id: "g2",
       name: "Design Team",
-      description: "UI refinement, interactive layouts, wireframes, and design specs."
+      description: "UI refinement, interactive layouts, wireframes, and design specs.",
+      accessType: "REQUIRE_APPROVAL"
     }
   });
 
@@ -97,7 +105,8 @@ export async function seedDatabase() {
     data: {
       id: "g3",
       name: "Research Team",
-      description: "Literature reviews, machine learning modeling, and experimental metrics."
+      description: "Literature reviews, machine learning modeling, and experimental metrics.",
+      accessType: "INVITE_ONLY"
     }
   });
 
@@ -105,7 +114,8 @@ export async function seedDatabase() {
     data: {
       id: "g4",
       name: "Focus Guild",
-      description: "Deep study hall for silent execution and Pomodoro sprints."
+      description: "Deep study hall for silent execution and Pomodoro sprints.",
+      accessType: "PUBLIC"
     }
   });
 
@@ -130,6 +140,29 @@ export async function seedDatabase() {
   for (const m of memberships) {
     await prisma.groupMember.create({ data: m });
   }
+
+  // 3.5. Create Connections
+  console.log("Seeding friendships and requests...");
+  await prisma.connection.create({
+    data: {
+      pairKey: "u1:u2", // u1 < u2
+      userAId: "u1",
+      userBId: "u2",
+      requestedById: "u1",
+      status: "ACCEPTED",
+      acceptedAt: new Date()
+    }
+  });
+
+  await prisma.connection.create({
+    data: {
+      pairKey: "u1:u3", // u1 < u3
+      userAId: "u1",
+      userBId: "u3",
+      requestedById: "u3",
+      status: "PENDING"
+    }
+  });
 
   // 4. Create Active Activities (current session details)
   // Tawfeeq: VS Code, Farm2Bag Backend API Development

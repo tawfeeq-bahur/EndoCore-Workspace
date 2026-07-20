@@ -23,6 +23,46 @@ redis.on("error", (err) => {
 });
 
 // Redis Caching Helpers
+async function getPresence(userId: string): Promise<any> {
+  const cached = await redis.get(`presence:user:${userId}`);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch (e) {}
+  }
+  return { state: "offline" };
+}
+
+async function setPresence(userId: string, data: any) {
+  // Save with 60s expiration (TTL)
+  await redis.set(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
+}
+
+async function syncPresenceToRedis(userId: string, activity: any, userStatus: string, activeGroup: string) {
+  const currentStatus = (userStatus || "online").toLowerCase();
+  let presenceState: "online" | "focusing" | "break" | "busy" | "offline" = "online";
+  
+  if (!activity || activity.app === "Offline") {
+    presenceState = "offline";
+  } else if (activity.isPaused) {
+    presenceState = "break";
+  } else if (currentStatus === "busy" || currentStatus === "focus" || currentStatus === "focused") {
+    presenceState = "busy";
+  } else {
+    presenceState = "focusing";
+  }
+
+  const presencePayload = {
+    state: presenceState,
+    appCategory: getAppCategory(activity ? activity.app : "Offline", (activity ? activity.project : "") || ""),
+    appName: activity ? activity.app : "Offline",
+    roomId: activeGroup || "",
+    focusStartedAt: activity ? new Date(activity.startedAt).toISOString() : new Date().toISOString(),
+    lastHeartbeatAt: Date.now()
+  };
+  await setPresence(userId, presencePayload);
+}
+
 async function getUserActiveActivity(userId: string) {
   const cached = await redis.get(`user:active:${userId}`);
   if (cached) {
@@ -137,7 +177,16 @@ function formatUserProfile(user: any) {
       friendUpdates: user.friendUpdatesNotification,
       breakReminders: user.breakRemindersNotification,
       aiNudges: user.aiNudgesNotification
-    }
+    },
+    username: user.username,
+    headline: user.headline,
+    presenceVisibility: user.presenceVisibility,
+    activityVisibility: user.activityVisibility,
+    showDailyFocusTime: user.showDailyFocusTime,
+    showCurrentRoom: user.showCurrentRoom,
+    allowFocusInvites: user.allowFocusInvites,
+    allowRoomInvites: user.allowRoomInvites,
+    allowJoinRequests: user.allowJoinRequests
   };
 }
 
@@ -306,10 +355,13 @@ io.on("connection", (socket) => {
   userSockets.set(userId, socket.id);
   console.log(`User ${userId} connected on socket ${socket.id}`);
 
+  // Join user room for multi-device delivery
+  socket.join(`user:${userId}`);
+
   socket.on("join-group", (groupName: string) => {
-    // Leave previous rooms
+    // Leave previous rooms (except private user room and socket ID room)
     socket.rooms.forEach(room => {
-      if (room !== socket.id) socket.leave(room);
+      if (room !== socket.id && room !== `user:${userId}`) socket.leave(room);
     });
     socket.join(groupName);
     console.log(`User ${userId} joined room: ${groupName}`);
@@ -320,13 +372,11 @@ io.on("connection", (socket) => {
       const sender = await prisma.user.findUnique({ where: { id: userId } });
       if (!sender) return;
 
-      const targetSocketId = userSockets.get(data.targetUserId);
-      if (targetSocketId) {
-        io.to(targetSocketId).emit("peer-nudge", {
-          senderId: userId,
-          senderName: sender.name
-        });
-      }
+      // Target the user-specific room
+      io.to(`user:${data.targetUserId}`).emit("peer-nudge", {
+        senderId: userId,
+        senderName: sender.name
+      });
     } catch (err) {
       console.error("Error sending peer nudge:", err);
     }
@@ -788,7 +838,12 @@ app.get("/api/user", authenticateToken, async (req: any, res) => {
 // Update settings
 app.post("/api/user/settings", authenticateToken, async (req: any, res) => {
   try {
-    const { name, avatarUrl, activeGroup, privacyMode, deviceConnected, productivityGoal, customStatus, theme, notifications, status } = req.body;
+    const { 
+      name, avatarUrl, activeGroup, privacyMode, deviceConnected, productivityGoal, 
+      customStatus, theme, notifications, status, username, headline,
+      presenceVisibility, activityVisibility, showDailyFocusTime, showCurrentRoom,
+      allowFocusInvites, allowRoomInvites, allowJoinRequests
+    } = req.body;
     
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
@@ -800,6 +855,16 @@ app.post("/api/user/settings", authenticateToken, async (req: any, res) => {
     if (customStatus !== undefined) updateData.customStatus = customStatus;
     if (theme !== undefined) updateData.theme = theme;
     if (status !== undefined) updateData.status = status;
+    
+    if (username !== undefined) updateData.username = username;
+    if (headline !== undefined) updateData.headline = headline;
+    if (presenceVisibility !== undefined) updateData.presenceVisibility = presenceVisibility;
+    if (activityVisibility !== undefined) updateData.activityVisibility = activityVisibility;
+    if (showDailyFocusTime !== undefined) updateData.showDailyFocusTime = showDailyFocusTime;
+    if (showCurrentRoom !== undefined) updateData.showCurrentRoom = showCurrentRoom;
+    if (allowFocusInvites !== undefined) updateData.allowFocusInvites = allowFocusInvites;
+    if (allowRoomInvites !== undefined) updateData.allowRoomInvites = allowRoomInvites;
+    if (allowJoinRequests !== undefined) updateData.allowJoinRequests = allowJoinRequests;
     
     if (notifications !== undefined) {
       if (notifications.friendUpdates !== undefined) updateData.friendUpdatesNotification = notifications.friendUpdates;
@@ -974,6 +1039,10 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
 
       broadcastActivityUpdate(req.user.id);
 
+      if (currentUser) {
+        await syncPresenceToRedis(req.user.id, activity, currentUser.status, currentUser.activeGroup);
+      }
+
       return res.json({
         success: true,
         activity: {
@@ -1004,6 +1073,10 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
     await setUserActiveActivity(req.user.id, activity);
 
     broadcastActivityUpdate(req.user.id);
+
+    if (currentUser) {
+      await syncPresenceToRedis(req.user.id, activity, currentUser.status, currentUser.activeGroup);
+    }
 
     res.json({
       success: true,
@@ -1544,6 +1617,790 @@ app.get("/api/leaderboard", authenticateToken, async (req: any, res) => {
     leaderboard.sort((a, b) => b.hours - a.hours);
 
     res.json(leaderboard);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// -------------------------------------------------------------
+// Connections, Blocks, and Focus Challenges API Endpoints
+// -------------------------------------------------------------
+
+// Get connections (friends, incoming, outgoing)
+app.get("/api/connections", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+
+    // Get block lists (exclude blocked users)
+    const myBlocks = await prisma.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: myId },
+          { blockedId: myId }
+        ]
+      }
+    });
+    const blockedUserIds = new Set(
+      myBlocks.map(b => b.blockerId === myId ? b.blockedId : b.blockerId)
+    );
+
+    // Get all connection records
+    const connections = await prisma.connection.findMany({
+      where: {
+        OR: [
+          { userAId: myId },
+          { userBId: myId }
+        ]
+      },
+      include: {
+        userA: true,
+        userB: true
+      }
+    });
+
+    const friends: any[] = [];
+    const incoming: any[] = [];
+    const outgoing: any[] = [];
+
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    for (const conn of connections) {
+      const otherUser = conn.userAId === myId ? conn.userB : conn.userA;
+      
+      // Skip if blocked
+      if (blockedUserIds.has(otherUser.id)) continue;
+
+      if (conn.status === "ACCEPTED") {
+        // Enforce presence visibility privacy preference
+        const presenceVisibility = otherUser.presenceVisibility || "connections";
+        let isPresenceVisible = false;
+
+        if (presenceVisibility === "everyone" || presenceVisibility === "connections") {
+          isPresenceVisible = true;
+        } else if (presenceVisibility === "room_members") {
+          const sharedGroupsCount = await prisma.groupMember.count({
+            where: {
+              userId: myId,
+              groupId: {
+                in: (await prisma.groupMember.findMany({
+                  where: { userId: otherUser.id },
+                  select: { groupId: true }
+                })).map(gm => gm.groupId)
+              }
+            }
+          });
+          isPresenceVisible = sharedGroupsCount > 0;
+        }
+
+        let presence: any = { state: "offline" };
+        if (isPresenceVisible) {
+          const rawPresence = await getPresence(otherUser.id);
+          if (rawPresence && rawPresence.state !== "offline") {
+            const activityVisibility = otherUser.activityVisibility || "status_only";
+            presence = {
+              state: rawPresence.state,
+              focusStartedAt: rawPresence.focusStartedAt,
+              lastSeenAt: rawPresence.focusStartedAt
+            };
+
+            if (activityVisibility === "app_category" || activityVisibility === "app_name") {
+              presence.appCategory = rawPresence.appCategory;
+            }
+            if (activityVisibility === "app_name") {
+              presence.appName = rawPresence.appName;
+            }
+          }
+        }
+
+        // Enforce showDailyFocusTime
+        let focusMinutesToday = undefined;
+        if (otherUser.showDailyFocusTime) {
+          const dailySummary = await prisma.dailySummary.findUnique({
+            where: {
+              userId_date: {
+                userId: otherUser.id,
+                date: todayStr
+              }
+            }
+          });
+          let activeSeconds = 0;
+          const activeAct = await getUserActiveActivity(otherUser.id);
+          if (activeAct && activeAct.app !== "Offline" && !activeAct.isPaused) {
+            activeSeconds = activeAct.durationSeconds;
+          }
+          const totalSeconds = (dailySummary ? dailySummary.totalFocusSeconds : 0) + activeSeconds;
+          focusMinutesToday = Math.round(totalSeconds / 60);
+        }
+
+        // Enforce showCurrentRoom / visibleRoom check
+        let visibleRoom = undefined;
+        if (otherUser.showCurrentRoom && presence.state !== "offline" && otherUser.activeGroup) {
+          const group = await prisma.group.findUnique({
+            where: { name: otherUser.activeGroup }
+          });
+          if (group && group.accessType !== "PRIVATE") {
+            const isMember = await prisma.groupMember.count({
+              where: { userId: myId, groupId: group.id }
+            }) > 0;
+
+            let accessAction: "open" | "join" | "request" | "ask_for_invite" = "ask_for_invite";
+            if (isMember) {
+              accessAction = "open";
+            } else if (group.accessType === "PUBLIC") {
+              accessAction = "join";
+            } else if (group.accessType === "REQUIRE_APPROVAL") {
+              accessAction = "request";
+            } else if (group.accessType === "INVITE_ONLY") {
+              accessAction = "ask_for_invite";
+            }
+
+            visibleRoom = {
+              id: group.id,
+              name: group.name,
+              accessAction
+            };
+          }
+        }
+
+        friends.push({
+          connectionId: conn.id,
+          profile: {
+            id: otherUser.id,
+            name: otherUser.name,
+            username: otherUser.username || otherUser.email.split("@")[0],
+            avatarUrl: otherUser.avatarUrl,
+            headline: otherUser.headline
+          },
+          presence,
+          focusMinutesToday,
+          visibleRoom
+        });
+      } else if (conn.status === "PENDING") {
+        const item = {
+          requestId: conn.id,
+          profile: {
+            id: otherUser.id,
+            name: otherUser.name,
+            username: otherUser.username || otherUser.email.split("@")[0],
+            avatarUrl: otherUser.avatarUrl,
+            headline: otherUser.headline
+          },
+          direction: conn.requestedById === myId ? "outgoing" : "incoming",
+          createdAt: conn.createdAt.toISOString()
+        };
+        if (conn.requestedById === myId) {
+          outgoing.push(item);
+        } else {
+          incoming.push(item);
+        }
+      }
+    }
+
+    res.json({ friends, incoming, outgoing });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Search users
+app.get("/api/connections/search", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const query = (req.query.q as string || "").trim().toLowerCase();
+    
+    if (!query) {
+      return res.json([]);
+    }
+
+    // Get block lists
+    const blocks = await prisma.userBlock.findMany({
+      where: {
+        OR: [
+          { blockerId: myId },
+          { blockedId: myId }
+        ]
+      }
+    });
+    const blockedUserIds = new Set(
+      blocks.map(b => b.blockerId === myId ? b.blockedId : b.blockerId)
+    );
+
+    // Search matches (only allow exact email search, username match, or display name match)
+    const matchingUsers = await prisma.user.findMany({
+      where: {
+        id: { not: myId },
+        OR: [
+          { name: { contains: query, mode: 'insensitive' } },
+          { username: { contains: query, mode: 'insensitive' } },
+          { email: { equals: query, mode: 'insensitive' } }
+        ]
+      },
+      take: 20
+    });
+
+    const searchResults: any[] = [];
+
+    for (const u of matchingUsers) {
+      if (blockedUserIds.has(u.id)) continue;
+
+      const pairKey = [myId, u.id].sort().join(":");
+      const conn = await prisma.connection.findUnique({
+        where: { pairKey }
+      });
+
+      let connectionStatus: "none" | "pending_sent" | "pending_received" | "friends" = "none";
+      let requestId = undefined;
+
+      if (conn) {
+        requestId = conn.id;
+        if (conn.status === "ACCEPTED") {
+          connectionStatus = "friends";
+        } else if (conn.status === "PENDING") {
+          if (conn.requestedById === myId) {
+            connectionStatus = "pending_sent";
+          } else {
+            connectionStatus = "pending_received";
+          }
+        }
+      }
+
+      searchResults.push({
+        id: u.id,
+        name: u.name,
+        username: u.username || u.email.split("@")[0],
+        avatarUrl: u.avatarUrl,
+        headline: u.headline,
+        connectionStatus,
+        requestId
+      });
+    }
+
+    res.json(searchResults);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send connection request
+app.post("/api/connection-requests", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { targetUserId } = req.body;
+
+    if (!targetUserId || targetUserId === myId) {
+      return res.status(400).json({ error: "Invalid target user ID" });
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: targetUserId }
+    });
+    if (!targetUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if blocked
+    const blockExists = await prisma.userBlock.count({
+      where: {
+        OR: [
+          { blockerId: myId, blockedId: targetUserId },
+          { blockerId: targetUserId, blockedId: myId }
+        ]
+      }
+    }) > 0;
+
+    if (blockExists) {
+      return res.status(403).json({ error: "Cannot send request: blocked connection" });
+    }
+
+    const pairKey = [myId, targetUserId].sort().join(":");
+    const existing = await prisma.connection.findUnique({
+      where: { pairKey }
+    });
+
+    if (existing) {
+      if (existing.status === "ACCEPTED") {
+        return res.status(400).json({ error: "Already connected" });
+      } else if (existing.status === "PENDING") {
+        return res.status(400).json({ error: "Request already pending" });
+      }
+    }
+
+    const newConnection = await prisma.connection.create({
+      data: {
+        pairKey,
+        userAId: pairKey.split(":")[0],
+        userBId: pairKey.split(":")[1],
+        requestedById: myId,
+        status: "PENDING"
+      }
+    });
+
+    // Notify target via sockets in real-time
+    const myProfile = await prisma.user.findUnique({ where: { id: myId } });
+    if (myProfile) {
+      io.to("user:" + targetUserId).emit("connection:received", {
+        requestId: newConnection.id,
+        profile: {
+          id: myId,
+          name: myProfile.name,
+          username: myProfile.username,
+          avatarUrl: myProfile.avatarUrl,
+          headline: myProfile.headline
+        },
+        direction: "incoming",
+        createdAt: newConnection.createdAt.toISOString()
+      });
+    }
+
+    res.json({ success: true, connection: newConnection });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Accept/Decline request
+app.patch("/api/connection-requests/:requestId", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { requestId } = req.params;
+    const { action } = req.body;
+
+    if (action !== "accept" && action !== "decline") {
+      return res.status(400).json({ error: "Action must be 'accept' or 'decline'" });
+    }
+
+    const conn = await prisma.connection.findUnique({
+      where: { id: requestId }
+    });
+
+    if (!conn || conn.status !== "PENDING") {
+      return res.status(404).json({ error: "Connection request not found or not pending" });
+    }
+
+    if (action === "accept" && conn.requestedById === myId) {
+      return res.status(403).json({ error: "Cannot accept your own outgoing request" });
+    }
+
+    if (action === "accept") {
+      const updated = await prisma.connection.update({
+        where: { id: requestId },
+        data: {
+          status: "ACCEPTED",
+          acceptedAt: new Date(),
+          respondedAt: new Date()
+        }
+      });
+
+      io.to("user:" + conn.requestedById).emit("connection:accepted", {
+        connectionId: conn.id,
+        friendId: myId
+      });
+
+      return res.json({ success: true, connection: updated });
+    } else {
+      await prisma.connection.delete({
+        where: { id: requestId }
+      });
+
+      io.to("user:" + conn.requestedById).emit("connection:declined", {
+        requestId: conn.id
+      });
+
+      return res.json({ success: true, message: "Request declined" });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancel outgoing request
+app.delete("/api/connection-requests/:requestId", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { requestId } = req.params;
+
+    const conn = await prisma.connection.findUnique({
+      where: { id: requestId }
+    });
+
+    if (!conn || conn.status !== "PENDING") {
+      return res.status(404).json({ error: "Pending request not found" });
+    }
+
+    if (conn.requestedById !== myId) {
+      return res.status(403).json({ error: "Unauthorized to cancel this request" });
+    }
+
+    await prisma.connection.delete({
+      where: { id: requestId }
+    });
+
+    const targetUserId = conn.userAId === myId ? conn.userBId : conn.userAId;
+    io.to("user:" + targetUserId).emit("connection:canceled", {
+      requestId: conn.id
+    });
+
+    res.json({ success: true, message: "Request canceled successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Remove connection (unfriend)
+app.delete("/api/connections/:connectionId", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { connectionId } = req.params;
+
+    const conn = await prisma.connection.findUnique({
+      where: { id: connectionId }
+    });
+
+    if (!conn || conn.status !== "ACCEPTED") {
+      return res.status(404).json({ error: "Friend connection not found" });
+    }
+
+    if (conn.userAId !== myId && conn.userBId !== myId) {
+      return res.status(403).json({ error: "Unauthorized to remove this connection" });
+    }
+
+    await prisma.connection.delete({
+      where: { id: connectionId }
+    });
+
+    const targetUserId = conn.userAId === myId ? conn.userBId : conn.userAId;
+    io.to("user:" + targetUserId).emit("connection:removed", {
+      connectionId: conn.id,
+      friendId: myId
+    });
+
+    res.json({ success: true, message: "Connection removed successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Block user
+app.post("/api/users/:userId/block", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const targetUserId = req.params.userId;
+
+    if (myId === targetUserId) {
+      return res.status(400).json({ error: "Cannot block yourself" });
+    }
+
+    await prisma.userBlock.upsert({
+      where: {
+        blockerId_blockedId: {
+          blockerId: myId,
+          blockedId: targetUserId
+        }
+      },
+      create: {
+        blockerId: myId,
+        blockedId: targetUserId
+      },
+      update: {}
+    });
+
+    const pairKey = [myId, targetUserId].sort().join(":");
+    await prisma.connection.deleteMany({
+      where: { pairKey }
+    });
+
+    io.to("user:" + targetUserId).emit("user:blocked", { blockerId: myId });
+
+    res.json({ success: true, message: "User blocked successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unblock user
+app.delete("/api/users/:userId/block", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const targetUserId = req.params.userId;
+
+    await prisma.userBlock.deleteMany({
+      where: {
+        blockerId: myId,
+        blockedId: targetUserId
+      }
+    });
+
+    res.json({ success: true, message: "User unblocked successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create Focus Challenge (Invite)
+app.post("/api/focus-challenges", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { invitedUserId, durationMinutes, challengeMode, creatorObjective } = req.body;
+
+    if (!invitedUserId || myId === invitedUserId) {
+      return res.status(400).json({ error: "Invalid target user" });
+    }
+
+    const pairKey = [myId, invitedUserId].sort().join(":");
+    const conn = await prisma.connection.findUnique({
+      where: { pairKey }
+    });
+
+    if (!conn || conn.status !== "ACCEPTED") {
+      return res.status(403).json({ error: "Must be friends to send focus challenges" });
+    }
+
+    const blockExists = await prisma.userBlock.count({
+      where: { blockerId: invitedUserId, blockedId: myId }
+    }) > 0;
+    if (blockExists) {
+      return res.status(403).json({ error: "Cannot invite this user" });
+    }
+
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    const newChallenge = await prisma.focusChallenge.create({
+      data: {
+        createdById: myId,
+        invitedUserId,
+        durationMinutes: durationMinutes || 25,
+        challengeMode: challengeMode || "co_focus",
+        creatorObjective: creatorObjective || "",
+        status: "PENDING",
+        expiresAt
+      },
+      include: {
+        creator: true,
+        invited: true
+      }
+    });
+
+    const myProfile = await prisma.user.findUnique({ where: { id: myId } });
+
+    io.to("user:" + invitedUserId).emit("challenge:received", {
+      challengeId: newChallenge.id,
+      creator: {
+        id: myId,
+        name: myProfile?.name || "Friend",
+        username: myProfile?.username || "friend",
+        avatarUrl: myProfile?.avatarUrl,
+        headline: myProfile?.headline
+      },
+      durationMinutes: newChallenge.durationMinutes,
+      challengeMode: newChallenge.challengeMode,
+      creatorObjective: newChallenge.creatorObjective,
+      expiresAt: expiresAt.toISOString()
+    });
+
+    res.json({ success: true, challenge: newChallenge });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Respond to Focus Challenge
+app.patch("/api/focus-challenges/:challengeId/respond", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { challengeId } = req.params;
+    const { action, invitedObjective } = req.body;
+
+    const challenge = await prisma.focusChallenge.findUnique({
+      where: { id: challengeId },
+      include: { creator: true, invited: true }
+    });
+
+    if (!challenge || challenge.status !== "PENDING") {
+      return res.status(404).json({ error: "Challenge not found or not pending" });
+    }
+
+    if (challenge.invitedUserId !== myId) {
+      return res.status(403).json({ error: "Unauthorized to respond to this challenge" });
+    }
+
+    if (new Date() > challenge.expiresAt) {
+      await prisma.focusChallenge.update({
+        where: { id: challengeId },
+        data: { status: "EXPIRED" }
+      });
+      return res.status(400).json({ error: "Challenge has expired" });
+    }
+
+    if (action === "accept") {
+      const startAt = new Date();
+      const endAt = new Date(Date.now() + challenge.durationMinutes * 60 * 1000);
+
+      const updated = await prisma.focusChallenge.update({
+        where: { id: challengeId },
+        data: {
+          status: "ACTIVE",
+          respondedAt: new Date(),
+          startAt,
+          endAt,
+          invitedObjective: invitedObjective || ""
+        }
+      });
+
+      const startPayload = {
+        challengeId: challenge.id,
+        challengeMode: challenge.challengeMode,
+        durationMinutes: challenge.durationMinutes,
+        startAt: startAt.toISOString(),
+        endAt: endAt.toISOString(),
+        creatorObjective: challenge.creatorObjective,
+        invitedObjective: updated.invitedObjective,
+        creator: {
+          id: challenge.creator.id,
+          name: challenge.creator.name,
+          username: challenge.creator.username
+        },
+        invited: {
+          id: challenge.invited.id,
+          name: challenge.invited.name,
+          username: challenge.invited.username
+        }
+      };
+
+      io.to("user:" + challenge.createdById).emit("challenge:started", startPayload);
+      io.to("user:" + challenge.invitedUserId).emit("challenge:started", startPayload);
+
+      res.json({ success: true, challenge: updated });
+    } else {
+      const updated = await prisma.focusChallenge.update({
+        where: { id: challengeId },
+        data: {
+          status: "DECLINED",
+          respondedAt: new Date()
+        }
+      });
+
+      io.to("user:" + challenge.createdById).emit("challenge:responded", {
+        challengeId: challenge.id,
+        action: "decline"
+      });
+
+      res.json({ success: true, challenge: updated });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancel active or pending challenge
+app.post("/api/focus-challenges/:challengeId/cancel", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { challengeId } = req.params;
+
+    const challenge = await prisma.focusChallenge.findUnique({
+      where: { id: challengeId }
+    });
+
+    if (!challenge) {
+      return res.status(404).json({ error: "Challenge not found" });
+    }
+
+    if (challenge.createdById !== myId && challenge.invitedUserId !== myId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const updated = await prisma.focusChallenge.update({
+      where: { id: challengeId },
+      data: { status: "CANCELED" }
+    });
+
+    const otherUserId = challenge.createdById === myId ? challenge.invitedUserId : challenge.createdById;
+    io.to("user:" + otherUserId).emit("challenge:canceled", { challengeId: challenge.id });
+
+    res.json({ success: true, challenge: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Invite connection to a private/invite-only room
+app.post("/api/rooms/:roomId/invitations", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { roomId } = req.params;
+    const { inviteeId } = req.body;
+
+    const isMember = await prisma.groupMember.count({
+      where: { userId: myId, groupId: roomId }
+    }) > 0;
+    if (!isMember) {
+      return res.status(403).json({ error: "Unauthorized to invite to this room" });
+    }
+
+    const invitation = await prisma.groupInvitation.create({
+      data: {
+        groupId: roomId,
+        inviterId: myId,
+        inviteeId,
+        status: "PENDING"
+      },
+      include: {
+        group: true,
+        inviter: true
+      }
+    });
+
+    io.to("user:" + inviteeId).emit("room:invited", {
+      invitationId: invitation.id,
+      roomId,
+      roomName: invitation.group.name,
+      inviterName: invitation.inviter.name
+    });
+
+    res.json({ success: true, invitation });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Request to join a REQUIRE_APPROVAL room
+app.post("/api/rooms/:roomId/join-requests", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { roomId } = req.params;
+
+    const group = await prisma.group.findUnique({ where: { id: roomId } });
+    if (!group) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+
+    if (group.accessType === "PRIVATE") {
+      return res.status(403).json({ error: "Cannot request to join a private room" });
+    }
+
+    const joinRequest = await prisma.groupJoinRequest.create({
+      data: {
+        groupId: roomId,
+        userId: myId,
+        status: "PENDING"
+      },
+      include: {
+        user: true
+      }
+    });
+
+    const admins = await prisma.groupMember.findMany({
+      where: { groupId: roomId, role: "admin" }
+    });
+    for (const admin of admins) {
+      io.to("user:" + admin.userId).emit("room:join-requested", {
+        requestId: joinRequest.id,
+        roomId,
+        roomName: group.name,
+        requesterName: joinRequest.user.name
+      });
+    }
+
+    res.json({ success: true, joinRequest });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

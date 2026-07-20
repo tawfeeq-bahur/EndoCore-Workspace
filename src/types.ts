@@ -29,6 +29,17 @@ export interface UserProfile {
     aiNudges: boolean;
   };
   timeline?: TimelineItem[];
+
+  // Extended Connections Parameters
+  username: string;
+  headline: string;
+  presenceVisibility: string;
+  activityVisibility: string;
+  showDailyFocusTime: boolean;
+  showCurrentRoom: boolean;
+  allowFocusInvites: boolean;
+  allowRoomInvites: boolean;
+  allowJoinRequests: boolean;
 }
 
 export interface TimelineItem {
@@ -108,6 +119,62 @@ export interface ChatMessage {
   avatarUrl: string;
   message: string;
   timestamp: string;
+}
+
+export interface PublicUserProfile {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl?: string;
+  headline?: string;
+}
+
+export interface PresenceSnapshot {
+  state: "online" | "focusing" | "break" | "busy" | "offline";
+  appCategory?: string;
+  appName?: string;
+  focusStartedAt?: string;
+  lastSeenAt?: string;
+}
+
+export interface ConnectionItem {
+  connectionId: string;
+  profile: PublicUserProfile;
+  presence: PresenceSnapshot;
+  focusMinutesToday?: number;
+  visibleRoom?: {
+    id: string;
+    name: string;
+    accessAction: "open" | "join" | "request" | "ask_for_invite";
+  };
+}
+
+export interface ConnectionRequestItem {
+  requestId: string;
+  profile: PublicUserProfile;
+  direction: "incoming" | "outgoing";
+  createdAt: string;
+}
+
+export interface FocusChallengeItem {
+  id: string;
+  createdById: string;
+  invitedUserId: string;
+  durationMinutes: number;
+  challengeMode: string; // "co_focus" | "sprint" | "accountability"
+  creatorObjective: string;
+  invitedObjective: string;
+  creatorStatus: string;
+  invitedStatus: string;
+  status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELED" | "EXPIRED" | "ACTIVE" | "COMPLETED";
+  createdAt: string;
+  expiresAt: string;
+  respondedAt?: string;
+  startAt?: string;
+  endAt?: string;
+  completedAt?: string;
+  creator: PublicUserProfile;
+  invited: PublicUserProfile;
 }
 
 declare global {

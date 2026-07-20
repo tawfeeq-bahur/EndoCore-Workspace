@@ -33,7 +33,8 @@ import {
   Flame,
   MessageSquare,
   Menu,
-  Send
+  Send,
+  VolumeX
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -112,10 +113,29 @@ export default function App() {
   const [profileNameInput, setProfileNameInput] = useState<string>("");
   const [profileAvatarInput, setProfileAvatarInput] = useState<string>("");
   const [profileDeviceInput, setProfileDeviceInput] = useState<string>("");
+  const [usernameInput, setUsernameInput] = useState<string>("");
+  const [headlineInput, setHeadlineInput] = useState<string>("");
   const [currentTimeText, setCurrentTimeText] = useState<string>("");
 
   // Nudge reaction status Map
   const [nudgedFriendIds, setNudgedFriendIds] = useState<Record<string, boolean>>({});
+
+  // Connections and focus challenges states
+  const [connectionsData, setConnectionsData] = useState<{
+    friends: any[];
+    incoming: any[];
+    outgoing: any[];
+  }>({ friends: [], incoming: [], outgoing: [] });
+  const [loadingConnections, setLoadingConnections] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState<boolean>(false);
+  
+  const [activeChallenge, setActiveChallenge] = useState<any | null>(null);
+  const [incomingChallenges, setIncomingChallenges] = useState<any[]>([]);
+  const [challengeObjectiveInput, setChallengeObjectiveInput] = useState<string>("");
+  const [challengeSecondsLeft, setChallengeSecondsLeft] = useState<number>(0);
+  const [activeConnectionsTab, setActiveConnectionsTab] = useState<"lobby" | "discover" | "requests">("lobby");
 
   // Authentication states
   const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
@@ -192,6 +212,7 @@ export default function App() {
     fetchGroups();
     fetchAiBriefing();
     checkHealth();
+    fetchConnections();
 
     const updateTime = () => {
       const now = new Date();
@@ -206,6 +227,7 @@ export default function App() {
       fetchActivity();
       silentFetchAnalytics();
       fetchProfile();
+      fetchConnections();
       if (groupsRef.current.length > 0) {
         fetchAllRoomsDetails(groupsRef.current);
       }
@@ -249,6 +271,8 @@ export default function App() {
         next[index] = updatedFriend;
         return next;
       });
+      // also refresh connections list to update presence status in "My Connections" panel
+      fetchConnections();
     });
 
     socket.on("peer-nudge", (data: { senderId: string; senderName: string }) => {
@@ -260,6 +284,50 @@ export default function App() {
         if (prev.some(m => m.id === data.id)) return prev;
         return [...prev, data];
       });
+    });
+
+    // Connections Sockets
+    socket.on("connection:received", (reqItem: any) => {
+      triggerToast(`✨ Friend request received from ${reqItem.profile.name}!`);
+      fetchConnections();
+    });
+
+    socket.on("connection:accepted", (data: any) => {
+      triggerToast("🤝 Friend request accepted! You are now connected.");
+      fetchConnections();
+    });
+
+    socket.on("connection:declined", () => {
+      fetchConnections();
+    });
+
+    socket.on("connection:canceled", () => {
+      fetchConnections();
+    });
+
+    socket.on("connection:removed", (data: any) => {
+      triggerToast("Connection removed.");
+      fetchConnections();
+    });
+
+    // Focus Challenge Sockets
+    socket.on("challenge:received", (challenge: any) => {
+      triggerToast(`⚔️ Focus challenge invitation from ${challenge.creator.name}!`);
+      setIncomingChallenges(prev => {
+        if (prev.some(c => c.challengeId === challenge.challengeId)) return prev;
+        return [...prev, challenge];
+      });
+    });
+
+    socket.on("challenge:started", (challenge: any) => {
+      triggerToast("🚀 Focus challenge has started!");
+      setActiveChallenge(challenge);
+    });
+
+    socket.on("challenge:canceled", (data: any) => {
+      triggerToast("⚠️ Focus challenge was canceled.");
+      setActiveChallenge(prev => prev && prev.challengeId === data.challengeId ? null : prev);
+      setIncomingChallenges(prev => prev.filter(c => c.challengeId !== data.challengeId));
     });
 
     return () => {
@@ -309,6 +377,26 @@ export default function App() {
     }
   }, [user?.activeGroup]);
 
+  // Synchronized challenge timer countdown
+  useEffect(() => {
+    if (!activeChallenge || !activeChallenge.endAt) {
+      setChallengeSecondsLeft(0);
+      return;
+    }
+    const updateChallengeTimer = () => {
+      const end = new Date(activeChallenge.endAt).getTime();
+      const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      setChallengeSecondsLeft(left);
+      if (left === 0) {
+        triggerToast("🏆 Focus challenge completed!");
+        setActiveChallenge(null);
+      }
+    };
+    updateChallengeTimer();
+    const interval = setInterval(updateChallengeTimer, 1000);
+    return () => clearInterval(interval);
+  }, [activeChallenge]);
+
   // Soft toast alert trigger
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -329,6 +417,8 @@ export default function App() {
           setProfileNameInput(data.name || "");
           setProfileAvatarInput(data.avatarUrl || "");
           setProfileDeviceInput(data.deviceConnected || "");
+          setUsernameInput(data.username || "");
+          setHeadlineInput(data.headline || "");
           if (data.theme === "light") {
             setThemeMode("light");
           }
@@ -497,6 +587,174 @@ export default function App() {
       }
     } catch (e) {
       console.error("API Broadcast Groups Update Error:", e);
+    }
+  };
+
+  // Connections REST interactions
+  const fetchConnections = async () => {
+    try {
+      setLoadingConnections(true);
+      const res = await apiFetch("/api/connections");
+      if (res.ok) {
+        const data = await res.json();
+        setConnectionsData(data);
+      }
+    } catch (e) {
+      console.error("Error fetching connections:", e);
+    } finally {
+      setLoadingConnections(false);
+    }
+  };
+
+  const executeSearchUsers = async (q: string) => {
+    if (!q.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      setSearchingUsers(true);
+      const res = await apiFetch(`/api/connections/search?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults(data);
+      }
+    } catch (e) {
+      console.error("Error searching users:", e);
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  const sendConnectionRequest = async (targetUserId: string) => {
+    try {
+      const res = await apiFetch("/api/connection-requests", {
+        method: "POST",
+        body: JSON.stringify({ targetUserId })
+      });
+      if (res.ok) {
+        triggerToast("Friend request sent successfully!");
+        fetchConnections();
+        if (searchQuery) executeSearchUsers(searchQuery);
+      } else {
+        const err = await res.json();
+        triggerToast(err.error || "Failed to send friend request.");
+      }
+    } catch (e) {
+      console.error("Error sending connection request:", e);
+    }
+  };
+
+  const respondConnectionRequest = async (requestId: string, action: "accept" | "decline") => {
+    try {
+      const res = await apiFetch(`/api/connection-requests/${requestId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action })
+      });
+      if (res.ok) {
+        triggerToast(`Friend request ${action}ed!`);
+        fetchConnections();
+        if (searchQuery) executeSearchUsers(searchQuery);
+      }
+    } catch (e) {
+      console.error("Error responding to connection request:", e);
+    }
+  };
+
+  const cancelConnectionRequest = async (requestId: string) => {
+    try {
+      const res = await apiFetch(`/api/connection-requests/${requestId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        triggerToast("Friend request canceled.");
+        fetchConnections();
+        if (searchQuery) executeSearchUsers(searchQuery);
+      }
+    } catch (e) {
+      console.error("Error canceling connection request:", e);
+    }
+  };
+
+  const removeConnection = async (connectionId: string) => {
+    if (!confirm("Are you sure you want to remove this connection?")) return;
+    try {
+      const res = await apiFetch(`/api/connections/${connectionId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        triggerToast("Connection removed.");
+        fetchConnections();
+      }
+    } catch (e) {
+      console.error("Error removing connection:", e);
+    }
+  };
+
+  const blockUser = async (userId: string) => {
+    if (!confirm("Are you sure you want to block this user?")) return;
+    try {
+      const res = await apiFetch(`/api/users/${userId}/block`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        triggerToast("User blocked.");
+        fetchConnections();
+        if (searchQuery) executeSearchUsers(searchQuery);
+      }
+    } catch (e) {
+      console.error("Error blocking user:", e);
+    }
+  };
+
+  const sendFocusChallenge = async (friendId: string, duration: number, mode: string, objective: string) => {
+    try {
+      const res = await apiFetch("/api/focus-challenges", {
+        method: "POST",
+        body: JSON.stringify({ invitedUserId: friendId, durationMinutes: duration, challengeMode: mode, creatorObjective: objective })
+      });
+      if (res.ok) {
+        triggerToast("Challenge invitation sent!");
+      } else {
+        const err = await res.json();
+        triggerToast(err.error || "Failed to send focus challenge.");
+      }
+    } catch (e) {
+      console.error("Error sending focus challenge:", e);
+    }
+  };
+
+  const respondFocusChallenge = async (challengeId: string, action: "accept" | "decline", objective: string) => {
+    try {
+      const res = await apiFetch(`/api/focus-challenges/${challengeId}/respond`, {
+        method: "PATCH",
+        body: JSON.stringify({ action, invitedObjective: objective })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (action === "accept") {
+          triggerToast("Focus challenge started!");
+          setActiveChallenge(data.challenge);
+        } else {
+          triggerToast("Focus challenge declined.");
+        }
+        setIncomingChallenges(prev => prev.filter(c => c.challengeId !== challengeId));
+      }
+    } catch (e) {
+      console.error("Error responding to focus challenge:", e);
+    }
+  };
+
+  const cancelFocusChallenge = async (challengeId: string) => {
+    try {
+      const res = await apiFetch(`/api/focus-challenges/${challengeId}/cancel`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        triggerToast("Challenge canceled.");
+        setActiveChallenge(null);
+      }
+    } catch (e) {
+      console.error("Error canceling focus challenge:", e);
     }
   };
 
@@ -1223,6 +1481,23 @@ export default function App() {
             >
               <Target className="h-4 w-4 shrink-0 opacity-80" />
               <span>My Goals</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("connections");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                fetchConnections();
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${activeTab === "connections"
+                  ? (themeMode === 'dark' ? "bg-[#1c1c22] text-[#D4AF37] font-semibold" : "bg-[#f3f2eb] text-[#D4AF37] font-semibold")
+                  : `text-stone-500 hover:${themeMode === 'dark' ? 'text-white' : 'text-black'}`
+                }`}
+            >
+              <Users className="h-4 w-4 shrink-0 opacity-80" />
+              <span>My Connections</span>
             </button>
           </div>
 
@@ -4113,6 +4388,503 @@ export default function App() {
                 </div>
               )}
 
+              {/* 🤝 MY CONNECTIONS VIEWPORT */}
+              {activeTab === "connections" && (
+                <div className="space-y-8">
+                  {/* Title & Description */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-2">
+                      <h2 className="text-4xl font-serif italic tracking-tight font-medium">My Connections</h2>
+                      <p className={`text-xs ${textSub}`}>
+                        Co-work and challenge peers in real-time Pomodoro sessions.
+                      </p>
+                    </div>
+
+                    {/* Sub-tabs switch */}
+                    <div className="flex bg-[#f5f4ef] dark:bg-[#18181c] p-1 rounded-xl border dark:border-[#222227] border-stone-200/50 select-none">
+                      <button
+                        onClick={() => setActiveConnectionsTab("lobby")}
+                        className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${activeConnectionsTab === "lobby"
+                          ? "bg-white dark:bg-stone-800 text-black dark:text-white shadow-sm font-semibold"
+                          : "text-stone-500 hover:text-stone-305"
+                        }`}
+                      >
+                        Lobby
+                      </button>
+                      <button
+                        onClick={() => setActiveConnectionsTab("discover")}
+                        className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${activeConnectionsTab === "discover"
+                          ? "bg-white dark:bg-stone-800 text-black dark:text-white shadow-sm font-semibold"
+                          : "text-stone-500 hover:text-stone-305"
+                        }`}
+                      >
+                        Discover
+                      </button>
+                      <button
+                        onClick={() => setActiveConnectionsTab("requests")}
+                        className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${activeConnectionsTab === "requests"
+                          ? "bg-white dark:bg-stone-800 text-black dark:text-white shadow-sm font-semibold"
+                          : "text-stone-500 hover:text-stone-305"
+                        }`}
+                      >
+                        Requests ({connectionsData.incoming.length + connectionsData.outgoing.length})
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Incoming Challenge Invites Bar */}
+                  {incomingChallenges.length > 0 && (
+                    <div className="space-y-4">
+                      {incomingChallenges.map((chal) => (
+                        <div key={chal.challengeId} className="p-6 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 block font-bold">// Incoming 1v1 Challenge Invite</span>
+                            <h4 className="text-sm font-semibold text-white">
+                              {chal.creator.name} has challenged you to a {chal.durationMinutes}m {chal.challengeMode.replace("_", " ")} session!
+                            </h4>
+                            <p className="text-xs text-stone-400 italic">Objective: "{chal.creatorObjective || "Co-focus Pomodoro Sprints"}"</p>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                            <input
+                              type="text"
+                              placeholder="Your objective..."
+                              value={challengeObjectiveInput}
+                              onChange={(e) => setChallengeObjectiveInput(e.target.value)}
+                              className={`rounded-xl px-4 py-2.5 text-xs ${formInput}`}
+                            />
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => respondFocusChallenge(chal.challengeId, "accept", challengeObjectiveInput)}
+                                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-mono uppercase font-semibold cursor-pointer transition-all"
+                              >
+                                Accept
+                              </button>
+                              <button
+                                onClick={() => respondFocusChallenge(chal.challengeId, "decline", "")}
+                                className="px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-xl text-xs font-mono uppercase cursor-pointer transition-all border border-stone-700"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Active focus challenge dashboard */}
+                  {activeChallenge && (
+                    <div className="p-8 rounded-3xl bg-gradient-to-br from-neutral-900 to-stone-900 border border-amber-500/20 space-y-6 relative overflow-hidden shadow-2xl">
+                      <div className="absolute top-0 right-0 h-40 w-40 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
+                      
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-[#D4AF37] block font-bold">
+                            // ACTIVE FOCUS CHALLENGE MODE: {activeChallenge.challengeMode.replace("_", " ")}
+                          </span>
+                          <h3 className="text-xl font-serif italic text-white">
+                            Pomodoro Co-Working Session
+                          </h3>
+                        </div>
+
+                        <button
+                          onClick={() => cancelFocusChallenge(activeChallenge.challengeId)}
+                          className="px-4 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
+                        >
+                          Terminate Challenge
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                        <div className="p-4 rounded-xl bg-stone-900/60 border border-neutral-800">
+                          <span className="text-[9px] font-mono text-stone-500 uppercase font-semibold">Creator Objective ({activeChallenge.creator.name})</span>
+                          <p className="text-xs text-white font-medium mt-1 truncate">
+                            "{activeChallenge.creatorObjective || "Co-focus"}"
+                          </p>
+                        </div>
+                        <div className="p-4 rounded-xl bg-stone-900/60 border border-neutral-800">
+                          <span className="text-[9px] font-mono text-stone-500 uppercase font-semibold">Invited Objective ({activeChallenge.invited.name})</span>
+                          <p className="text-xs text-white font-medium mt-1 truncate">
+                            "{activeChallenge.invitedObjective || "Co-focus"}"
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-center justify-center py-6 space-y-3">
+                        <div className="text-6xl font-mono font-bold tracking-tighter text-white">
+                          {String(Math.floor(challengeSecondsLeft / 60)).padStart(2, '0')}:
+                          {String(challengeSecondsLeft % 60).padStart(2, '0')}
+                        </div>
+                        <span className="text-[10px] font-mono tracking-widest uppercase text-stone-400">
+                          remaining challenge countdown
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 1. LOBBY TAB */}
+                  {activeConnectionsTab === "lobby" && (
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
+                          presence lobby
+                        </h3>
+                        <span className="text-[10px] font-mono text-stone-500 lowercase">
+                          {connectionsData.friends.length} connections synced
+                        </span>
+                      </div>
+
+                      {connectionsData.friends.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {connectionsData.friends.map((friend) => {
+                            const presence = friend.presence || { state: "offline" };
+                            const stateStr = presence.state.toLowerCase();
+                            
+                            let statusColor = "bg-stone-500";
+                            let statusText = "Offline";
+                            let cardBorder = "border-neutral-800/60";
+                            
+                            if (stateStr === "online") {
+                              statusColor = "bg-emerald-500";
+                              statusText = "Online";
+                            } else if (stateStr === "focusing") {
+                              statusColor = "bg-indigo-500 animate-pulse";
+                              statusText = "Focusing";
+                              cardBorder = "border-indigo-500/20";
+                            } else if (stateStr === "break") {
+                              statusColor = "bg-sky-500";
+                              statusText = "Resting";
+                            } else if (stateStr === "busy") {
+                              statusColor = "bg-rose-500";
+                              statusText = "Do Not Disturb";
+                            }
+
+                            return (
+                              <div key={friend.connectionId} className={`p-6 rounded-2xl border ${bgCard} ${cardBorder} flex flex-col justify-between space-y-6 transition-all duration-200 group`}>
+                                <div className="flex items-start justify-between">
+                                  <div className="flex items-center space-x-3.5">
+                                    <div className="relative">
+                                      <img
+                                        src={friend.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                                        alt={friend.profile.name}
+                                        className="h-10 w-10 rounded-full object-cover border dark:border-zinc-800 border-zinc-200"
+                                      />
+                                      <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${themeMode === 'dark' ? 'border-[#121215]' : 'border-white'} ${statusColor}`}></span>
+                                    </div>
+                                    <div className="min-w-0">
+                                      <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
+                                        {friend.profile.name}
+                                      </h4>
+                                      <span className="text-[10px] font-mono text-stone-500 block truncate max-w-[150px]">
+                                        @{friend.profile.username}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right">
+                                    <span className="inline-block text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border border-neutral-700 text-stone-400">
+                                      {statusText}
+                                    </span>
+                                    {friend.focusMinutesToday !== undefined && (
+                                      <span className="text-[9px] font-mono text-stone-500 block mt-1.5 leading-none">
+                                        {friend.focusMinutesToday}m Focused Today
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {presence.state !== "offline" && (presence.appName || presence.appCategory) ? (
+                                  <div className={`p-3.5 rounded-xl border dark:border-[#1e1e23] border-stone-200/50 flex items-center justify-between ${bgInternal}`}>
+                                    <div className="min-w-0">
+                                      <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block leading-none">Activity telemetry</span>
+                                      <span className="text-xs font-semibold text-stone-300 dark:text-white truncate block mt-1 leading-none">
+                                        {presence.appName || presence.appCategory}
+                                      </span>
+                                      {presence.appCategory && presence.appName && (
+                                        <p className="text-[10px] font-mono text-zinc-500 truncate max-w-[200px] mt-1 leading-none">
+                                          Category: {presence.appCategory}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-3 border-t dark:border-neutral-850/60 border-stone-200/50">
+                                  {friend.visibleRoom ? (
+                                    <div className="flex-1 flex items-center justify-between">
+                                      <span className="text-[9px] font-mono text-stone-500 uppercase">Room: {friend.visibleRoom.name}</span>
+                                      
+                                      {friend.visibleRoom.accessAction === "open" ? (
+                                        <button
+                                          onClick={() => enterRoomChannel(friend.visibleRoom!.name)}
+                                          className="px-3 py-1.5 bg-[#D4AF37] hover:bg-amber-600 text-black text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer"
+                                        >
+                                          Enter Room
+                                        </button>
+                                      ) : friend.visibleRoom.accessAction === "join" ? (
+                                        <button
+                                          onClick={() => submitProfileSettings({ activeGroup: friend.visibleRoom!.name })}
+                                          className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer"
+                                        >
+                                          Join Room
+                                        </button>
+                                      ) : (
+                                        <span className="text-[9px] font-mono text-stone-500 italic uppercase">
+                                          {friend.visibleRoom.accessAction.replace("_", " ")}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <div className="flex-1 text-[9px] font-mono text-stone-500 italic uppercase">
+                                      No visible room workspace
+                                    </div>
+                                  )}
+
+                                  <div className="flex items-center space-x-2 shrink-0">
+                                    <button
+                                      onClick={() => triggerPeerNudge(friend.profile.name, friend.profile.id)}
+                                      disabled={nudgedFriendIds[friend.profile.id]}
+                                      className={`px-3 py-1.5 border rounded-lg text-[9px] font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${nudgedFriendIds[friend.profile.id]
+                                        ? "bg-stone-800 text-stone-400"
+                                        : "bg-transparent text-stone-400 dark:border-neutral-850 hover:text-stone-300"
+                                      }`}
+                                    >
+                                      {nudgedFriendIds[friend.profile.id] ? "Waved!" : "Wave"}
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        const obj = prompt("Enter objective for this challenge session (e.g. Code database schemas):");
+                                        if (obj !== null) {
+                                          sendFocusChallenge(friend.profile.id, 25, "co_focus", obj);
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 bg-black hover:bg-neutral-900 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-[9px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer transition-all"
+                                    >
+                                      Challenge 1v1
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-20 text-xs font-mono text-stone-500 italic">
+                          No connected peers online. Switch to "Discover" tab to add coworkers using this workspace.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 2. DISCOVER TAB */}
+                  {activeConnectionsTab === "discover" && (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase font-mono tracking-widest text-[#a1a1aa] block">
+                          discover coworkers by display name, username or email
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => {
+                              setSearchQuery(e.target.value);
+                              executeSearchUsers(e.target.value);
+                            }}
+                            className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
+                            placeholder="Type to search e.g. tawfeeq.dev..."
+                          />
+                        </div>
+                      </div>
+
+                      {searchingUsers ? (
+                        <div className="text-center py-8 text-xs font-mono text-stone-500 animate-pulse">
+                          Querying developer registry indexes...
+                        </div>
+                      ) : searchResults.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                          {searchResults.map((userItem) => (
+                            <div key={userItem.id} className={`p-6 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between gap-4`}>
+                              <div className="flex items-center space-x-3">
+                                <img
+                                  src={userItem.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                                  alt={userItem.name}
+                                  className="h-10 w-10 rounded-full object-cover"
+                                />
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
+                                    {userItem.name}
+                                  </h4>
+                                  <p className="text-[10px] font-mono text-stone-500 truncate">
+                                    @{userItem.username}
+                                  </p>
+                                  {userItem.headline && (
+                                    <p className="text-[10px] text-zinc-500 mt-1 truncate">{userItem.headline}</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center space-x-2 shrink-0">
+                                {userItem.connectionStatus === "friends" ? (
+                                  <button
+                                    onClick={() => removeConnection(userItem.requestId)}
+                                    className="px-3 py-1.5 border border-dashed border-red-950/40 text-red-500 hover:text-red-400 hover:bg-red-950/20 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer transition-all"
+                                  >
+                                    Unfriend
+                                  </button>
+                                ) : userItem.connectionStatus === "pending_sent" ? (
+                                  <button
+                                    onClick={() => cancelConnectionRequest(userItem.requestId)}
+                                    className="px-3 py-1.5 bg-stone-800 text-stone-500 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer"
+                                  >
+                                    Pending Sent
+                                  </button>
+                                ) : userItem.connectionStatus === "pending_received" ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => respondConnectionRequest(userItem.requestId, "accept")}
+                                      className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer"
+                                    >
+                                      Accept
+                                    </button>
+                                    <button
+                                      onClick={() => respondConnectionRequest(userItem.requestId, "decline")}
+                                      className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer border border-stone-700"
+                                    >
+                                      Decline
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => sendConnectionRequest(userItem.id)}
+                                    className="px-3 py-1.5 bg-white text-black dark:bg-stone-300 dark:hover:bg-neutral-200 text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer transition-all"
+                                  >
+                                    Connect
+                                  </button>
+                                )}
+
+                                <button
+                                  onClick={() => blockUser(userItem.id)}
+                                  className="p-1.5 text-stone-500 hover:text-red-400 rounded-lg hover:bg-stone-800/40 cursor-pointer"
+                                  title="Block Coworker"
+                                >
+                                  <VolumeX className="h-4 w-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : searchQuery ? (
+                        <div className="text-center py-12 text-xs font-mono text-stone-500 italic">
+                          No matching developer records discovered.
+                        </div>
+                      ) : (
+                        <div className="text-center py-16 text-xs font-mono text-stone-500 italic">
+                          Search by username or exact email coordinates above to index active users.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 3. REQUESTS TAB */}
+                  {activeConnectionsTab === "requests" && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Incoming Requests */}
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
+                          incoming connection requests ({connectionsData.incoming.length})
+                        </h4>
+
+                        {connectionsData.incoming.length > 0 ? (
+                          <div className="space-y-4">
+                            {connectionsData.incoming.map((item) => (
+                              <div key={item.requestId} className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between gap-4`}>
+                                <div className="flex items-center space-x-3">
+                                  <img
+                                    src={item.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                                    className="h-10 w-10 rounded-full object-cover"
+                                  />
+                                  <div className="min-w-0">
+                                    <h5 className="text-sm font-semibold truncate text-white dark:text-stone-300">
+                                      {item.profile.name}
+                                    </h5>
+                                    <p className="text-[10px] font-mono text-stone-500 truncate">
+                                      @{item.profile.username}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() => respondConnectionRequest(item.requestId, "accept")}
+                                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer"
+                                  >
+                                    Accept
+                                  </button>
+                                  <button
+                                    onClick={() => respondConnectionRequest(item.requestId, "decline")}
+                                    className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer border border-stone-700"
+                                  >
+                                    Decline
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-10 border border-dashed dark:border-neutral-850 border-stone-250/60 rounded-2xl text-xs font-mono text-stone-500 italic">
+                            No incoming requests pending.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Outgoing Requests */}
+                      <div className="space-y-4">
+                        <h4 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
+                          sent connection requests ({connectionsData.outgoing.length})
+                        </h4>
+
+                        {connectionsData.outgoing.length > 0 ? (
+                          <div className="space-y-4">
+                            {connectionsData.outgoing.map((item) => (
+                              <div key={item.requestId} className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between gap-4`}>
+                                <div className="flex items-center space-x-3">
+                                  <img
+                                    src={item.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                                    className="h-10 w-10 rounded-full object-cover"
+                                  />
+                                  <div className="min-w-0">
+                                    <h5 className="text-sm font-semibold truncate text-white dark:text-stone-300">
+                                      {item.profile.name}
+                                    </h5>
+                                    <p className="text-[10px] font-mono text-stone-500 truncate">
+                                      @{item.profile.username}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => cancelConnectionRequest(item.requestId)}
+                                  className="px-3 py-1.5 bg-stone-850 hover:bg-neutral-800 text-stone-450 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer shrink-0"
+                                >
+                                  Cancel Request
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-10 border border-dashed dark:border-neutral-850 border-stone-250/60 rounded-2xl text-xs font-mono text-stone-500 italic">
+                            No sent requests pending.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 4️⃣ PROFILE PARAMETERS EDIT TAB VIEW */}
               {activeTab === "profile" && user && (
                 <div className="space-y-8">
@@ -4162,13 +4934,37 @@ export default function App() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
                         <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Workspace Display Username</label>
+                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Workspace Display Name</label>
                           <input
                             type="text"
                             value={profileNameInput}
                             onChange={(e) => setProfileNameInput(e.target.value)}
                             onBlur={() => submitProfileSettings({ name: profileNameInput })}
                             onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ name: profileNameInput })}
+                            className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Connections Username</label>
+                          <input
+                            type="text"
+                            value={usernameInput}
+                            onChange={(e) => setUsernameInput(e.target.value)}
+                            onBlur={() => submitProfileSettings({ username: usernameInput })}
+                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ username: usernameInput })}
+                            className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Connections Headline/Role</label>
+                          <input
+                            type="text"
+                            value={headlineInput}
+                            onChange={(e) => setHeadlineInput(e.target.value)}
+                            onBlur={() => submitProfileSettings({ headline: headlineInput })}
+                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ headline: headlineInput })}
                             className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
                           />
                         </div>
@@ -4212,16 +5008,29 @@ export default function App() {
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Peer visibility mode</label>
+                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Presence Visibility Rule</label>
                           <select
-                            value={user.privacyMode}
-                            onChange={(e) => submitProfileSettings({ privacyMode: e.target.value })}
+                            value={user.presenceVisibility || "connections"}
+                            onChange={(e) => submitProfileSettings({ presenceVisibility: e.target.value })}
                             className={`w-full rounded-xl px-4 py-3 text-xs font-mono lowercase ${formInput}`}
                           >
-                            <option value="Level 1: Full Detail">Level 1: Full Detail (Friends)</option>
-                            <option value="Level 2: Category Only">Level 2: Category Only (Family)</option>
-                            <option value="Level 3: Summary Only">Level 3: Summary Only (Parents)</option>
-                            <option value="Level 4: Private">Level 4: Private (Self)</option>
+                            <option value="everyone">Everyone</option>
+                            <option value="connections">Connections Only</option>
+                            <option value="room_members">Focus Room Members Only</option>
+                            <option value="nobody">Nobody (Invisible)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase font-mono tracking-widest text-stone-500 block">Activity Telemetry Detail Level</label>
+                          <select
+                            value={user.activityVisibility || "status_only"}
+                            onChange={(e) => submitProfileSettings({ activityVisibility: e.target.value })}
+                            className={`w-full rounded-xl px-4 py-3 text-xs font-mono lowercase ${formInput}`}
+                          >
+                            <option value="app_name">Full App Name & Category</option>
+                            <option value="app_category">App Category Only</option>
+                            <option value="status_only">Presence Status Only</option>
                           </select>
                         </div>
 
@@ -4235,6 +5044,40 @@ export default function App() {
                             onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ deviceConnected: profileDeviceInput })}
                             className={`w-full rounded-xl px-4 py-3 text-xs font-mono ${formInput}`}
                           />
+                        </div>
+
+                        <div className="sm:col-span-2 border-t dark:border-neutral-850 border-stone-200/50 pt-5 space-y-4">
+                          <h5 className="text-[10px] uppercase font-mono tracking-widest text-stone-400 font-bold">Connections Privacy Directives</h5>
+                          
+                          <div className="flex items-center justify-between text-xs py-1 border-b dark:border-neutral-850/40 border-stone-200/30">
+                            <span className="text-stone-300">Show focus duration today to connections</span>
+                            <button
+                              onClick={() => submitProfileSettings({ showDailyFocusTime: !user.showDailyFocusTime })}
+                              className={`px-3 py-1 text-[9px] font-mono uppercase tracking-wider rounded border cursor-pointer ${user.showDailyFocusTime ? "bg-white text-black" : "text-stone-550"}`}
+                            >
+                              {user.showDailyFocusTime ? "Shown" : "Hidden"}
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs py-1 border-b dark:border-neutral-850/40 border-stone-200/30">
+                            <span className="text-stone-300">Show active room shortcut to connections</span>
+                            <button
+                              onClick={() => submitProfileSettings({ showCurrentRoom: !user.showCurrentRoom })}
+                              className={`px-3 py-1 text-[9px] font-mono uppercase tracking-wider rounded border cursor-pointer ${user.showCurrentRoom ? "bg-white text-black" : "text-stone-550"}`}
+                            >
+                              {user.showCurrentRoom ? "Shown" : "Hidden"}
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between text-xs py-1 border-b dark:border-neutral-850/40 border-stone-200/30">
+                            <span className="text-stone-300">Allow connections to send focus challenges</span>
+                            <button
+                              onClick={() => submitProfileSettings({ allowFocusInvites: !user.allowFocusInvites })}
+                              className={`px-3 py-1 text-[9px] font-mono uppercase tracking-wider rounded border cursor-pointer ${user.allowFocusInvites ? "bg-white text-black" : "text-stone-550"}`}
+                            >
+                              {user.allowFocusInvites ? "Allowed" : "Muted"}
+                            </button>
+                          </div>
                         </div>
 
                       </div>
