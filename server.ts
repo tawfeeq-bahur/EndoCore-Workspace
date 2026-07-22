@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
@@ -2898,24 +2899,29 @@ async function startServer() {
     console.error("Database seeding failed:", err);
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    // Development Mode
+  const distPath = path.join(process.cwd(), "dist");
+  const hasDist = fs.existsSync(path.join(distPath, "index.html"));
+  const isDevMode = process.env.NODE_ENV === "development";
+
+  if (hasDist && !isDevMode) {
+    // Production Mode: Serve static dist assets
+    console.log("📦 Serving built static frontend from:", distPath);
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  } else {
+    // Development Mode: Use Vite dev middleware
+    console.log("⚡ Running in Vite Dev Middleware mode");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    // Production Mode
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 EndoCore Workspace express server running at http://localhost:${PORT}`);
+    console.log(`🚀 EndoCore Workspace express server running at http://0.0.0.0:${PORT}`);
   });
 }
 

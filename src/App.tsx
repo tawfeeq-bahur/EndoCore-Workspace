@@ -433,12 +433,15 @@ export default function App() {
           return;
         }
       }
-      if (res.status === 401) {
+      if (res.status === 401 || res.status === 403) {
         setToken(null);
         localStorage.removeItem("token");
       }
     } catch (e) {
       console.error("API Fetch Error (Profile):", e);
+      // On network error or session expiration, fallback to login
+      setToken(null);
+      localStorage.removeItem("token");
     }
   };
 
