@@ -51,6 +51,8 @@ import {
 } from "./types";
 import { RoomCreationWizard } from "./components/RoomCreationWizard";
 import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
+import { MobileCompanionShell } from "./mobile/MobileCompanionShell";
+import { usePlatformMode } from "./mobile/hooks/usePlatformMode";
 
 export default function App() {
   const [isMobile, setIsMobile] = useState<boolean>(false);
@@ -2291,11 +2293,25 @@ export default function App() {
     );
   };
 
+  const platformMode = usePlatformMode();
+
   // Mobile layout branch check
-  if (isMobile) {
-    return renderMobileView();
+  if (platformMode === "mobile-companion" || platformMode === "responsive-web") {
+    return (
+      <MobileCompanionShell
+        userName={user?.name || "Tawfeeq Bahur"}
+        userEmail={user?.email || "tawfeeq@example.com"}
+        avatarUrl={user?.avatarUrl}
+        workstationName={user?.deviceConnected || "WS-WORKSTATION-11"}
+        isConnected={electronTracking}
+        onSignOut={handleLogout}
+        themeMode={themeMode}
+        onToggleTheme={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
+      />
+    );
   }
   // --- END OF MOBILE COMPANION VIEW ---
+
 
   return (
     <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-350 ease-out font-sans ${bgMain}`}>
