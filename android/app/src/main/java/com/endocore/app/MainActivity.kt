@@ -45,7 +45,7 @@ fun EndoCoreApp() {
     val context = LocalContext.current
     val sharedPref = remember { context.getSharedPreferences("EndoCorePrefs", Context.MODE_PRIVATE) }
 
-    val defaultCloudUrl = "https://endocore.vercel.app?platform=mobile"
+    val defaultCloudUrl = "https://endocore-workspace.vercel.app?platform=mobile"
     var ipAddress by remember { mutableStateOf(sharedPref.getString("ip_address", "") ?: "") }
     var port by remember { mutableStateOf(sharedPref.getString("port", "3000") ?: "3000") }
     var isConnected by remember { mutableStateOf(true) }
