@@ -2320,6 +2320,27 @@ export default function App() {
   }
   // --- END OF MOBILE COMPANION VIEW ---
 
+  // Loading splash – shown after login while profile data is being fetched
+  if (!user) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center transition-colors duration-350 ease-out font-sans ${bgMain}`}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center space-y-6"
+        >
+          <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
+          <div className="flex items-center space-x-2">
+            <span className="h-2 w-2 rounded-full bg-[#D4AF37] animate-ping"></span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-stone-500">
+              Loading workspace…
+            </span>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
 
   return (
     <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-350 ease-out font-sans ${bgMain}`}>
