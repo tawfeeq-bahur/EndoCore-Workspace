@@ -129,6 +129,7 @@ const PORT = Number(process.env.PORT) || 3000;
 
 const allowedOrigins = [
   process.env.FRONTEND_URL || "https://endocore-workspace.vercel.app",
+  "https://endocore-workspace.onrender.com",
   "http://localhost:5173",
   "http://localhost:3000"
 ];
