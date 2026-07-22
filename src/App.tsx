@@ -1157,7 +1157,11 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || "Login failed");
 
       localStorage.setItem("token", data.token);
+      if (data.user) {
+        setUser(data.user);
+      }
       setToken(data.token);
+      fetchProfile();
       triggerToast("Logged in successfully! Welcome to EndoCore.");
     } catch (err: any) {
       setAuthError(err.message);
@@ -1180,7 +1184,11 @@ export default function App() {
       if (!res.ok) throw new Error(data.error || "Registration failed");
 
       localStorage.setItem("token", data.token);
+      if (data.user) {
+        setUser(data.user);
+      }
       setToken(data.token);
+      fetchProfile();
       triggerToast("Account created successfully!");
     } catch (err: any) {
       setAuthError(err.message);
