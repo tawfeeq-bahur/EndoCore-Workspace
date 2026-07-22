@@ -2303,20 +2303,29 @@ export default function App() {
 
   const platformMode = usePlatformMode();
 
-  // Mobile layout branch check
+  // Mobile layout branch check – use the inline mobile view connected to real app state
   if (platformMode === "mobile-companion" || platformMode === "responsive-web") {
-    return (
-      <MobileCompanionShell
-        userName={user?.name || "Tawfeeq Bahur"}
-        userEmail={user?.email || "tawfeeq@example.com"}
-        avatarUrl={user?.avatarUrl}
-        workstationName={user?.deviceConnected || "WS-WORKSTATION-11"}
-        isConnected={electronTracking}
-        onSignOut={handleLogout}
-        themeMode={themeMode}
-        onToggleTheme={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
-      />
-    );
+    // Show loading splash while profile data is being fetched
+    if (!user) {
+      return (
+        <div className={`min-h-screen flex items-center justify-center transition-colors duration-350 ease-out font-sans ${bgMain}`}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center space-y-6"
+          >
+            <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
+            <div className="flex items-center space-x-2">
+              <span className="h-2 w-2 rounded-full bg-[#D4AF37] animate-ping"></span>
+              <span className="text-[10px] font-mono uppercase tracking-widest text-stone-500">
+                Loading workspace…
+              </span>
+            </div>
+          </motion.div>
+        </div>
+      );
+    }
+    return renderMobileView();
   }
   // --- END OF MOBILE COMPANION VIEW ---
 
