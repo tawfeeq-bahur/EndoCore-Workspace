@@ -824,20 +824,20 @@ app.post(["/api/connections/wave", "/api/connections/:connectionId/wave"], authe
       return res.status(403).json({ error: "Cannot send wave to this user" });
     }
 
-    // 3. Spam Protection & 5-minute Cooldown Check (Redis Key: wave:cooldown:{senderId}:{targetUserId})
+    // 3. Spam Protection & Testing Cooldown Check (10 seconds for testing)
     const cooldownKey = `wave:cooldown:${senderId}:${targetUserId}`;
     const ttl = await redis.ttl(cooldownKey);
     if (ttl > 0) {
       const cooldownEndsAt = new Date(Date.now() + ttl * 1000).toISOString();
       return res.status(429).json({
-        error: `Wave cooldown active. Please wait ${Math.ceil(ttl / 60)} minutes before waving again.`,
+        error: `Wave cooldown active. Please wait ${ttl}s before waving again.`,
         cooldownSecondsRemaining: ttl,
         cooldownEndsAt
       });
     }
 
-    // Set 5-minute cooldown (300 seconds)
-    await redis.set(cooldownKey, "active", "EX", 300);
+    // Set 10-second testing cooldown
+    await redis.set(cooldownKey, "active", "EX", 10);
 
     // 4. Database Persistence (Save Notification Record for Offline Delivery)
     const notification = await prisma.notification.create({
@@ -869,12 +869,12 @@ app.post(["/api/connections/wave", "/api/connections/:connectionId/wave"], authe
     io.to(`user:${targetUserId}`).emit("connection:wave", payload);
     io.to(`user:${targetUserId}`).emit("peer-nudge", { senderId: sender.id, senderName: sender.name });
 
-    const cooldownEndsAt = new Date(Date.now() + 300 * 1000).toISOString();
+    const cooldownEndsAt = new Date(Date.now() + 10 * 1000).toISOString();
     res.json({
       success: true,
       message: `Wave sent to ${targetUser.name}`,
       notificationId: notification.id,
-      cooldownSeconds: 300,
+      cooldownSeconds: 10,
       cooldownEndsAt
     });
   } catch (error: any) {
