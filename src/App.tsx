@@ -316,13 +316,30 @@ export default function App() {
         osc.stop(audioCtx.currentTime + 0.3);
       } catch (e) {}
 
-      // Dispatch native OS Desktop Notification if permitted
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification(`👋 ${data.senderName} waved at you`, {
-          body: "They're checking in and cheering on your focus.",
-        });
-      } else if ("Notification" in window && Notification.permission !== "denied") {
-        Notification.requestPermission();
+      // Dispatch native OS Desktop Notification (via Electron Agent or Web Notification API)
+      const notifTitle = `👋 ${data.senderName} waved at you`;
+      const notifBody = "They're checking in and cheering on your focus.";
+
+      const desktopBridge = (window as any).endocoreDesktop || (window as any).electronAPI;
+      if (desktopBridge?.showNotification) {
+        // Trigger Electron native Windows/Mac OS system toast (displays over ALL running apps)
+        desktopBridge.showNotification({ title: notifTitle, body: notifBody, senderId: data.senderId });
+      } else if ("Notification" in window) {
+        const fireWebNotif = () => {
+          const notif = new Notification(notifTitle, { body: notifBody, icon: "/favicon.ico" });
+          notif.onclick = () => {
+            window.focus();
+            setActiveTab("connections");
+          };
+        };
+
+        if (Notification.permission === "granted") {
+          fireWebNotif();
+        } else if (Notification.permission !== "denied") {
+          Notification.requestPermission().then(permission => {
+            if (permission === "granted") fireWebNotif();
+          });
+        }
       }
 
       triggerToast(`👋 ${data.senderName} waved at you!`);
@@ -395,16 +412,32 @@ export default function App() {
     };
   }, [token]);
 
+  // Request OS Native Notification permissions on startup
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, []);
+
   // Sync token and start tracking with Electron desktop agent if available
   useEffect(() => {
     const electronAPI = (window as any).electronAPI;
-    if (!electronAPI) return;
+    const desktopBridge = (window as any).endocoreDesktop;
 
-    if (token && user?.email) {
-      electronAPI.saveConfig({ token, email: user.email });
-      electronAPI.startTracking();
-    } else {
-      electronAPI.stopTracking();
+    if (electronAPI) {
+      if (token && user?.email) {
+        electronAPI.saveConfig({ token, email: user.email });
+        electronAPI.startTracking();
+      } else {
+        electronAPI.stopTracking();
+      }
+    }
+
+    if (desktopBridge?.onNavigateToConnection) {
+      const cleanup = desktopBridge.onNavigateToConnection(() => {
+        setActiveTab("connections");
+      });
+      return () => cleanup?.();
     }
   }, [token, user?.email]);
 

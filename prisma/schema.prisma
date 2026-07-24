@@ -72,6 +72,9 @@ model User {
   // Focus challenges
   challengesCreated          FocusChallenge[] @relation("ChallengeCreator")
   challengesInvited          FocusChallenge[] @relation("ChallengeInvited")
+
+  // Devices
+  devices                    UserDevice[]
 }
 
 model Group {
@@ -278,6 +281,32 @@ model Notification {
   createdAt   DateTime         @default(now())
 
   @@index([recipientId, readAt, createdAt])
+}
+
+enum DevicePlatform {
+  ANDROID
+  IOS
+  WEB
+  WINDOWS
+  MACOS
+  LINUX
+}
+
+model UserDevice {
+  id          String         @id @default(uuid())
+  userId      String
+  platform    DevicePlatform @default(WINDOWS)
+  pushToken   String         @unique
+  deviceName  String?
+  enabled     Boolean        @default(true)
+  lastSeenAt  DateTime       @default(now())
+  revokedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
 }
 
 // -------------------------------------------------------------

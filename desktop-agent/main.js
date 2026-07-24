@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, Notification } = require('electron');
 const path = require('path');
 const activeWin = require('active-win');
 const axios = require('axios');
@@ -153,12 +153,72 @@ ipcMain.on('start-tracking', (event) => {
   event.reply('tracking-state', { isTracking });
 });
 
+app.setName("EndoCore");
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.endocore.app");
+}
+
 ipcMain.on('stop-tracking', (event) => {
   if (!isTracking) return;
   isTracking = false;
   clearInterval(trackerInterval);
   console.log('Stopped tracking active window.');
   event.reply('tracking-state', { isTracking });
+});
+
+ipcMain.handle('notification:show', (_event, payload) => {
+  if (!Notification.isSupported()) {
+    return { success: false, reason: 'Notifications not supported' };
+  }
+
+  try {
+    const notification = new Notification({
+      title: payload.title || '👋 EndoCore Wave',
+      body: payload.body || "They're checking in and cheering on your focus.",
+      silent: false,
+      icon: path.join(__dirname, 'icon.png')
+    });
+
+    notification.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+        if (payload.senderId) {
+          mainWindow.webContents.send('navigate-to-connection', { senderId: payload.senderId });
+        }
+      }
+    });
+
+    notification.show();
+    console.log(`[Native OS Notification Fired] ${payload.title}`);
+    return { success: true };
+  } catch (e) {
+    console.error('Error showing native Electron notification:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.on('show-notification', (event, data) => {
+  try {
+    const notification = new Notification({
+      title: data.title || '👋 EndoCore Wave',
+      body: data.body || "They're checking in and cheering on your focus.",
+      silent: false,
+      icon: path.join(__dirname, 'icon.png')
+    });
+    notification.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+    notification.show();
+    console.log(`[Native OS Notification Fired] ${data.title}`);
+  } catch (e) {
+    console.error('Error showing native Electron notification:', e);
+  }
 });
 
 app.on('ready', () => {
@@ -172,6 +232,6 @@ app.on('ready', () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
-    // Keep agent running in tray even when window is closed
+    // Keep agent running in system tray
   }
 });
