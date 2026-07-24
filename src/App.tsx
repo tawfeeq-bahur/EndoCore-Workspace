@@ -90,8 +90,13 @@ export default function App() {
   const [pomodoroSessionCount, setPomodoroSessionCount] = useState<number>(0);
   const [distractionsManualCount, setDistractionsManualCount] = useState<number>(0);
 
-  // Theme support
-  const [themeMode, setThemeMode] = useState<"dark" | "light">("dark");
+  // Device-local theme support (decoupled from global DB so Mobile & Desktop themes don't overwrite each other)
+  const [themeMode, setThemeMode] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("endocore_theme") as "dark" | "light") || "dark";
+    }
+    return "dark";
+  });
 
   // Server-state synchronize mirrors
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -462,15 +467,12 @@ export default function App() {
         const data = await res.json();
         if (data && !data.error) {
           setUser(data);
-          setStatusInput(data.customStatus || "");
-          setProfileNameInput(data.name || "");
-          setProfileAvatarInput(data.avatarUrl || "");
-          setProfileDeviceInput(data.deviceConnected || "");
-          setUsernameInput(data.username || "");
-          setHeadlineInput(data.headline || "");
-          if (data.theme === "light") {
-            setThemeMode("light");
-          }
+          if (!statusInput) setStatusInput(data.customStatus || "");
+          if (!profileNameInput) setProfileNameInput(data.name || "");
+          if (!profileAvatarInput) setProfileAvatarInput(data.avatarUrl || "");
+          if (!profileDeviceInput) setProfileDeviceInput(data.deviceConnected || "");
+          if (!usernameInput) setUsernameInput(data.username || "");
+          if (!headlineInput) setHeadlineInput(data.headline || "");
           return;
         }
       }
@@ -1293,8 +1295,8 @@ export default function App() {
 
   const handleManualThemeChange = (newTheme: "dark" | "light") => {
     setThemeMode(newTheme);
-    submitProfileSettings({ theme: newTheme });
-    triggerToast(`Switched interface language: ${newTheme === "light" ? "Luxury Amber Chalk" : "Pure Slate Obsidian"}`);
+    localStorage.setItem("endocore_theme", newTheme);
+    triggerToast(`Switched interface theme: ${newTheme === "light" ? "Luxury Amber Light" : "Pure Slate Obsidian"}`);
   };
 
   // Dynamic status-colored indicator dots for editorial aesthetics
