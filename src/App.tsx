@@ -55,6 +55,7 @@ import { MobileCompanionShell } from "./mobile/MobileCompanionShell";
 import { usePlatformMode } from "./mobile/hooks/usePlatformMode";
 
 export default function App() {
+  const platformMode = usePlatformMode();
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [mobileTab, setMobileTab] = useState<"control" | "room" | "me">("control");
 
@@ -2303,8 +2304,6 @@ export default function App() {
       </div>
     );
   };
-
-  const platformMode = usePlatformMode();
 
   // Mobile layout branch check – use the inline mobile view connected to real app state
   if (platformMode === "mobile-companion" || platformMode === "responsive-web") {
