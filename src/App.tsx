@@ -438,11 +438,11 @@ export default function App() {
         setToken(null);
         localStorage.removeItem("token");
       }
-    } catch (e) {
+    } catch (e: any) {
+      // apiFetch already handles 401/403 by calling handleLogout().
+      // Only log the error here — don't blindly clear the token on
+      // transient network errors, as that would kick the user out.
       console.error("API Fetch Error (Profile):", e);
-      // On network error or session expiration, fallback to login
-      setToken(null);
-      localStorage.removeItem("token");
     }
   };
 
@@ -1165,7 +1165,10 @@ export default function App() {
         setUser(data.user);
       }
       setToken(data.token);
-      fetchProfile();
+      // Note: Do NOT call fetchProfile() here — the useEffect([token]) bootstrap
+      // will fire when the token state updates and call all fetch functions.
+      // Calling it here causes a race condition: token state is still null,
+      // so the request has no auth header, gets 401, and immediately logs out.
       triggerToast("Logged in successfully! Welcome to EndoCore.");
     } catch (err: any) {
       setAuthError(err.message);
@@ -1192,7 +1195,7 @@ export default function App() {
         setUser(data.user);
       }
       setToken(data.token);
-      fetchProfile();
+      // Note: Do NOT call fetchProfile() here — same race condition as handleLogin.
       triggerToast("Account created successfully!");
     } catch (err: any) {
       setAuthError(err.message);
