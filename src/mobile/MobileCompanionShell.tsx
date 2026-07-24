@@ -7,27 +7,50 @@ import { MobileRoomsScreen } from "./screens/MobileRoomsScreen";
 import { MobileConnectionsScreen } from "./screens/MobileConnectionsScreen";
 import { MobileAlertsScreen } from "./screens/MobileAlertsScreen";
 import { MobileProfileScreen } from "./screens/MobileProfileScreen";
+import { UserProfile, Activity as UserActivity, Friend, Group, AnalyticsData } from "../types";
 
-interface MobileCompanionShellProps {
-  userName?: string;
-  userEmail?: string;
-  avatarUrl?: string;
-  workstationName?: string;
-  isConnected?: boolean;
-  onSignOut?: () => void;
-  themeMode?: "dark" | "light";
-  onToggleTheme?: () => void;
+export interface MobileCompanionShellProps {
+  user: UserProfile | null;
+  myActivity: UserActivity | null;
+  friends: Friend[];
+  groups: Group[];
+  analytics: AnalyticsData | null;
+  aiInsights: string | null;
+  connectionsData: {
+    friends: any[];
+    incoming: any[];
+    outgoing: any[];
+  };
+  themeMode: "dark" | "light";
+  electronTracking?: boolean;
+  onToggleTheme: (theme: "dark" | "light") => void;
+  onSignOut: () => void;
+  onUpdateActivity: (app?: string, project?: string, togglePause?: boolean) => void;
+  onSubmitSettings: (updates: Partial<UserProfile>) => void;
+  onTriggerNudge: (friendName: string, id: string) => void;
+  nudgedFriendIds: Record<string, boolean>;
+  onEnterRoom?: (roomName: string) => void;
+  onRespondConnectionRequest?: (requestId: string, action: "accept" | "decline") => void;
 }
 
 export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
-  userName = "Tawfeeq Bahur",
-  userEmail = "tawfeeq@example.com",
-  avatarUrl,
-  workstationName = "WS-WORKSTATION-11",
-  isConnected = true,
-  onSignOut,
+  user,
+  myActivity,
+  friends,
+  groups,
+  analytics,
+  aiInsights,
+  connectionsData,
   themeMode = "dark",
+  electronTracking = false,
   onToggleTheme,
+  onSignOut,
+  onUpdateActivity,
+  onSubmitSettings,
+  onTriggerNudge,
+  nudgedFriendIds,
+  onEnterRoom,
+  onRespondConnectionRequest,
 }) => {
   const {
     activeTab,
@@ -40,53 +63,94 @@ export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
     setAlertsFilter,
   } = useMobileNavigation();
 
+  const userName = user?.name || "Developer";
+  const userEmail = user?.email || "user@endocore.dev";
+  const avatarUrl = user?.avatarUrl;
+  const workstationName = user?.deviceConnected || "WS-WORKSTATION-11";
+  const isConnected = true;
+
+  // Unread alerts counter (incoming requests + nudges)
+  const unreadAlertsCount = (connectionsData?.incoming?.length || 0) + (aiInsights ? 1 : 0);
+
   return (
-    <div className="min-h-screen bg-[#09090B] text-white flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Fixed Header */}
+    <div className={`min-h-screen ${themeMode === "dark" ? "bg-[#09090B] text-white" : "bg-[#FBFBFA] text-[#1C1C1F]"} flex flex-col font-sans selection:bg-indigo-500 selection:text-white transition-colors duration-300 pb-16`}>
+      {/* Fixed Mobile Header */}
       <MobileHeader
         userInitials={userName ? userName.split(" ").map(n => n[0]).join("") : "TB"}
         avatarUrl={avatarUrl}
         workstationName={workstationName}
         isConnected={isConnected}
-        unreadAlertsCount={3}
+        unreadAlertsCount={unreadAlertsCount}
         activeTab={activeTab}
         onTabSelect={setActiveTab}
         themeMode={themeMode}
-        onToggleTheme={onToggleTheme}
+        onToggleTheme={() => onToggleTheme(themeMode === "dark" ? "light" : "dark")}
       />
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto">
-        {activeTab === "home" && <MobileHomeScreen />}
+        {activeTab === "home" && (
+          <MobileHomeScreen
+            user={user}
+            myActivity={myActivity}
+            analytics={analytics}
+            aiInsights={aiInsights}
+            groups={groups}
+            themeMode={themeMode}
+            onUpdateActivity={onUpdateActivity}
+            onEnterRoom={onEnterRoom}
+          />
+        )}
         {activeTab === "rooms" && (
-          <MobileRoomsScreen subTab={roomsSubTab} onSelectSubTab={setRoomsSubTab} />
+          <MobileRoomsScreen
+            subTab={roomsSubTab}
+            onSelectSubTab={setRoomsSubTab}
+            groups={groups}
+            user={user}
+            friends={friends}
+            aiInsights={aiInsights}
+            onTriggerNudge={onTriggerNudge}
+            nudgedFriendIds={nudgedFriendIds}
+            onEnterRoom={onEnterRoom}
+          />
         )}
         {activeTab === "connect" && (
           <MobileConnectionsScreen
             subTab={connectionsSubTab}
             onSelectSubTab={setConnectionsSubTab}
+            connectionsData={connectionsData}
+            friends={friends}
+            onTriggerNudge={onTriggerNudge}
+            nudgedFriendIds={nudgedFriendIds}
+            onRespondConnectionRequest={onRespondConnectionRequest}
           />
         )}
         {activeTab === "alerts" && (
           <MobileAlertsScreen
             activeFilter={alertsFilter}
             onSelectFilter={setAlertsFilter}
+            connectionsData={connectionsData}
+            aiInsights={aiInsights}
+            onRespondConnectionRequest={onRespondConnectionRequest}
           />
         )}
         {activeTab === "profile" && (
           <MobileProfileScreen
-            userName={userName}
-            userEmail={userEmail}
+            user={user}
+            themeMode={themeMode}
+            electronTracking={electronTracking}
             onSignOut={onSignOut}
+            onSubmitSettings={onSubmitSettings}
+            onToggleTheme={onToggleTheme}
           />
         )}
       </main>
 
-      {/* Fixed Bottom Navigation */}
+      {/* Fixed Bottom Navigation Bar */}
       <MobileBottomNavigation
         activeTab={activeTab}
         onSelectTab={setActiveTab}
-        unreadAlertsCount={3}
+        unreadAlertsCount={unreadAlertsCount}
       />
     </div>
   );

@@ -1,111 +1,81 @@
 import React, { useState } from "react";
+import { UserProfile } from "../../types";
 
 interface MobileProfileScreenProps {
-  userName?: string;
-  userEmail?: string;
+  user: UserProfile | null;
+  themeMode?: "dark" | "light";
+  electronTracking?: boolean;
   onSignOut?: () => void;
+  onSubmitSettings?: (updates: Partial<UserProfile>) => void;
+  onToggleTheme?: (theme: "dark" | "light") => void;
 }
 
 export const MobileProfileScreen: React.FC<MobileProfileScreenProps> = ({
-  userName = "Tawfeeq Bahur",
-  userEmail = "tawfeeq@example.com",
+  user,
+  themeMode = "dark",
+  electronTracking = false,
   onSignOut,
+  onSubmitSettings,
+  onToggleTheme,
 }) => {
-  const [anonymizeTitles, setAnonymizeTitles] = useState(true);
-  const [hideUrls, setHideUrls] = useState(true);
-  const [scheduledOnly, setScheduledOnly] = useState(true);
+  const [statusInput, setStatusInput] = useState(user?.customStatus || "");
+  const userName = user?.name || "Tawfeeq Bahur";
+  const userEmail = user?.email || "user@endocore.dev";
+  const userRole = (user as any)?.role || "Software Developer";
+
+  const isDark = themeMode === "dark";
 
   return (
     <div className="p-4 space-y-4 pb-20 text-white font-sans">
-      <h1 className="text-xl font-bold font-serif italic text-white">Profile</h1>
+      <h1 className="text-xl font-bold font-serif italic text-white">Profile & Workstation</h1>
 
-      {/* User Card */}
+      {/* User Identity Card */}
       <div className="bg-[#121216] border border-[#1E1E26] rounded-2xl p-5 flex items-center space-x-4">
-        <div className="h-14 w-14 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-mono text-lg font-bold text-white shadow-md border border-indigo-400/30 shrink-0">
-          TB
-        </div>
-        <div className="min-w-0">
+        <img
+          src={user?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+          alt={userName}
+          className="h-14 w-14 rounded-full object-cover border-2 border-indigo-500/50 shadow-md shrink-0"
+        />
+        <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold text-white truncate">{userName}</h2>
-          <span className="text-xs text-stone-400 font-mono block">Lead Software Developer</span>
+          <span className="text-xs text-stone-400 font-mono block">{userRole}</span>
           <span className="text-[10px] text-stone-500 font-mono block truncate">{userEmail}</span>
         </div>
       </div>
 
-      {/* Connected Workstation */}
+      {/* Connected Workstation Status Card */}
       <div className="bg-[#121216] border border-[#1E1E26] rounded-2xl p-4 space-y-3">
         <span className="text-[10px] font-mono text-stone-400 uppercase tracking-widest block">
           Connected Workstation
         </span>
         <div className="flex items-center justify-between text-xs font-mono">
           <div>
-            <span className="font-semibold text-stone-200 block">WS-WORKSTATION-11</span>
-            <span className="text-[10px] text-emerald-400">Windows 11 • Connected</span>
-          </div>
-          <div className="flex space-x-2">
-            <button className="px-2.5 py-1 rounded-lg bg-[#1A1A22] border border-[#2A2A36] text-stone-300 text-[10px]">
-              Rename
-            </button>
-            <button className="px-2.5 py-1 rounded-lg bg-red-950/30 border border-red-900/40 text-red-400 text-[10px]">
-              Disconnect
-            </button>
+            <span className="font-semibold text-stone-200 block">{user?.deviceConnected || "WS-WORKSTATION-11"}</span>
+            <span className={`text-[10px] ${electronTracking ? "text-emerald-400 font-semibold" : "text-stone-400"}`}>
+              {electronTracking ? "Electron Desktop Agent Active ✓" : "Synced to EndoCore Cloud ✓"}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Privacy Controls */}
+      {/* Custom Status Message Form */}
       <div className="bg-[#121216] border border-[#1E1E26] rounded-2xl p-4 space-y-3">
         <span className="text-[10px] font-mono text-stone-400 uppercase tracking-widest block border-b border-[#1E1E2A] pb-2">
-          Privacy Controls
+          Custom Status Message
         </span>
-
-        {/* Anonymize Titles */}
-        <div className="flex items-center justify-between py-1">
-          <span className="text-xs text-stone-300">Anonymize window titles</span>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={statusInput}
+            onChange={(e) => setStatusInput(e.target.value)}
+            placeholder="Set status..."
+            className="flex-1 bg-[#181820] border border-[#2A2A36] rounded-xl px-3 py-2 text-xs font-mono text-stone-200"
+          />
           <button
-            onClick={() => setAnonymizeTitles(!anonymizeTitles)}
-            className={`w-11 h-6 rounded-full p-1 transition-colors ${
-              anonymizeTitles ? "bg-emerald-500" : "bg-[#2A2A36]"
-            }`}
+            onClick={() => onSubmitSettings?.({ customStatus: statusInput })}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono rounded-xl font-semibold cursor-pointer"
           >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                anonymizeTitles ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Hide URLs */}
-        <div className="flex items-center justify-between py-1">
-          <span className="text-xs text-stone-300">Hide website URLs</span>
-          <button
-            onClick={() => setHideUrls(!hideUrls)}
-            className={`w-11 h-6 rounded-full p-1 transition-colors ${
-              hideUrls ? "bg-emerald-500" : "bg-[#2A2A36]"
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                hideUrls ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </button>
-        </div>
-
-        {/* Scheduled Only */}
-        <div className="flex items-center justify-between py-1">
-          <span className="text-xs text-stone-300">Track only during scheduled hours</span>
-          <button
-            onClick={() => setScheduledOnly(!scheduledOnly)}
-            className={`w-11 h-6 rounded-full p-1 transition-colors ${
-              scheduledOnly ? "bg-emerald-500" : "bg-[#2A2A36]"
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                scheduledOnly ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
+            Save
           </button>
         </div>
       </div>
@@ -113,32 +83,40 @@ export const MobileProfileScreen: React.FC<MobileProfileScreenProps> = ({
       {/* Focus Preferences */}
       <div className="bg-[#121216] border border-[#1E1E26] rounded-2xl p-4 space-y-3 text-xs font-mono">
         <span className="text-[10px] text-stone-400 uppercase tracking-widest block border-b border-[#1E1E2A] pb-2">
-          Focus Preferences
+          Focus Parameters
         </span>
-        <div className="flex justify-between py-1 text-stone-300">
-          <span>Daily focus goal</span>
-          <span className="text-white font-semibold">6 hours</span>
+        <div className="flex justify-between items-center py-1 text-stone-300">
+          <span>Daily focus target</span>
+          <select
+            value={user?.productivityGoal || 6}
+            onChange={(e) => onSubmitSettings?.({ productivityGoal: parseInt(e.target.value) })}
+            className="bg-[#181820] border border-[#2A2A36] rounded-lg px-2.5 py-1 text-xs text-indigo-400 font-bold cursor-pointer"
+          >
+            <option value="4">4 hours</option>
+            <option value="6">6 hours</option>
+            <option value="8">8 hours</option>
+            <option value="10">10 hours</option>
+          </select>
         </div>
-        <div className="flex justify-between py-1 text-stone-300">
-          <span>Focus reminder</span>
-          <span className="text-white font-semibold">Every 60 min</span>
-        </div>
-        <div className="flex justify-between py-1 text-stone-300">
-          <span>Quiet hours</span>
-          <span className="text-white font-semibold">10:00 PM - 6:00 AM</span>
+
+        <div className="flex justify-between items-center py-1 text-stone-300">
+          <span>Interface theme</span>
+          <button
+            onClick={() => onToggleTheme?.(isDark ? "light" : "dark")}
+            className="px-3 py-1 rounded-lg bg-[#181820] border border-[#2A2A36] text-stone-200 font-mono text-xs cursor-pointer"
+          >
+            {isDark ? "🌙 Dark Obsidian" : "☀️ Amber Light"}
+          </button>
         </div>
       </div>
 
-      {/* Account Actions */}
-      <div className="pt-2 space-y-2">
-        <button className="w-full py-3 bg-[#141418] border border-[#22222A] hover:bg-[#1A1A22] text-stone-300 text-xs font-mono rounded-xl text-center">
-          Export my data
-        </button>
+      {/* Account Sign Out Action */}
+      <div className="pt-2">
         <button
           onClick={onSignOut}
-          className="w-full py-3 bg-red-950/20 border border-red-900/30 text-red-400 text-xs font-mono rounded-xl text-center hover:bg-red-950/40"
+          className="w-full py-3.5 bg-red-950/20 border border-red-900/30 text-red-400 text-xs font-mono uppercase font-bold tracking-wider rounded-xl text-center hover:bg-red-950/40 cursor-pointer transition-all"
         >
-          Sign out of EndoCore
+          Sign Out of Workstation
         </button>
       </div>
     </div>

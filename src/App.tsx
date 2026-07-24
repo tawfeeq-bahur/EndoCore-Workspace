@@ -2330,7 +2330,27 @@ export default function App() {
         </div>
       );
     }
-    return renderMobileView();
+    return (
+      <MobileCompanionShell
+        user={user}
+        myActivity={myActivity}
+        friends={friends}
+        groups={groups}
+        analytics={analytics}
+        aiInsights={aiInsights}
+        connectionsData={connectionsData}
+        themeMode={themeMode}
+        electronTracking={electronTracking}
+        onToggleTheme={handleManualThemeChange}
+        onSignOut={handleLogout}
+        onUpdateActivity={updateMyActiveTracker}
+        onSubmitSettings={submitProfileSettings}
+        onTriggerNudge={triggerPeerNudge}
+        nudgedFriendIds={nudgedFriendIds}
+        onEnterRoom={enterRoomChannel}
+        onRespondConnectionRequest={respondConnectionRequest}
+      />
+    );
   }
   // --- END OF MOBILE COMPANION VIEW ---
 
