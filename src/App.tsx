@@ -127,6 +127,8 @@ export default function App() {
 
   // Nudge reaction status Map
   const [nudgedFriendIds, setNudgedFriendIds] = useState<Record<string, boolean>>({});
+  const [waveAlert, setWaveAlert] = useState<{ senderName: string; timestamp: string } | null>(null);
+  const [recentWaves, setRecentWaves] = useState<Array<{ id: string; senderId: string; senderName: string; timestamp: string }>>([]);
 
   // Connections and focus challenges states
   const [connectionsData, setConnectionsData] = useState<{
@@ -284,8 +286,46 @@ export default function App() {
       fetchConnections();
     });
 
-    socket.on("peer-nudge", (data: { senderId: string; senderName: string }) => {
-      triggerToast(`🕊️ ${data.senderName} waved at you!`);
+    const handleWaveNotification = (data: { senderId: string; senderName: string }) => {
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setWaveAlert({ senderName: data.senderName, timestamp: timeStr });
+      setRecentWaves(prev => [{ id: Date.now().toString(), senderId: data.senderId, senderName: data.senderName, timestamp: timeStr }, ...prev.slice(0, 9)]);
+
+      setTimeout(() => {
+        setWaveAlert(null);
+      }, 7000);
+
+      // Play soft web audio chime tone for instant auditory feedback
+      try {
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      } catch (e) {}
+
+      // Dispatch native OS Desktop Notification if permitted
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification(`👋 ${data.senderName} waved at you`, {
+          body: "They're checking in and cheering on your focus.",
+        });
+      } else if ("Notification" in window && Notification.permission !== "denied") {
+        Notification.requestPermission();
+      }
+
+      triggerToast(`👋 ${data.senderName} waved at you!`);
+    };
+
+    socket.on("peer-nudge", handleWaveNotification);
+    socket.on("connection:wave", (data: any) => {
+      handleWaveNotification({ senderId: data.senderId || data.sender?.id, senderName: data.senderName || data.sender?.name || "A co-worker" });
     });
 
     socket.on("room-chat-message", (data: ChatMessage) => {
@@ -1216,18 +1256,39 @@ export default function App() {
     triggerToast("Logged out successfully");
   }
 
-  // Send interactive co-working nudge
-  const triggerPeerNudge = (friendName: string, id: string) => {
+  // Send interactive co-working wave signal with REST API persistence & Socket fallback
+  const triggerPeerNudge = async (friendName: string, id: string) => {
     setNudgedFriendIds(prev => ({ ...prev, [id]: true }));
-    triggerToast(`Sent continuous work support signal to ${friendName} 🕊️`);
 
-    if (socketRef.current) {
-      socketRef.current.emit("send-nudge", { targetUserId: id });
+    try {
+      const res = await apiFetch("/api/connections/wave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: id })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (res.status === 429) {
+          triggerToast(`⏳ Wave cooldown active for ${friendName}`);
+          return;
+        }
+        throw new Error(data.error || "Failed to send wave");
+      }
+
+      triggerToast(`✓ Wave sent to ${friendName} 🕊️`);
+    } catch (err: any) {
+      console.error("Wave API error, falling back to socket:", err);
+      if (socketRef.current) {
+        socketRef.current.emit("send-nudge", { targetUserId: id });
+      }
+      triggerToast(`✓ Wave sent to ${friendName} 🕊️`);
     }
 
+    // Keep "Waved!" button state feedback
     setTimeout(() => {
       setNudgedFriendIds(prev => ({ ...prev, [id]: false }));
-    }, 3000);
+    }, 10000);
   };
 
   const handleManualThemeChange = (newTheme: "dark" | "light") => {
@@ -2349,6 +2410,7 @@ export default function App() {
         nudgedFriendIds={nudgedFriendIds}
         onEnterRoom={enterRoomChannel}
         onRespondConnectionRequest={respondConnectionRequest}
+        recentWaves={recentWaves}
       />
     );
   }
@@ -2391,6 +2453,69 @@ export default function App() {
           >
             <span className="h-2 w-2 rounded-full bg-stone-500 animate-ping"></span>
             <span>{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🕊️ PEER WAVE BOTTOM-RIGHT FLOATING NOTIFICATION CARD */}
+      <AnimatePresence>
+        {waveAlert && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85, y: 40 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.85, y: 20 }}
+            className={`fixed bottom-8 right-8 z-50 max-w-sm w-full p-5 rounded-2xl shadow-2xl border flex items-start space-x-4 backdrop-blur-xl ${
+              themeMode === "dark"
+                ? "bg-[#121215]/95 border-[#D4AF37]/50 text-white shadow-black/80"
+                : "bg-white/95 border-[#D4AF37]/60 text-stone-900 shadow-stone-400/50"
+            }`}
+          >
+            <div className="h-10 w-10 rounded-full bg-[#D4AF37]/20 border border-[#D4AF37]/40 flex items-center justify-center text-xl shrink-0 animate-bounce">
+              👋
+            </div>
+            <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold font-serif italic text-[#D4AF37]">
+                  👋 Workstation Check-In
+                </h4>
+                <span className="text-[9px] font-mono opacity-50">{waveAlert.timestamp}</span>
+              </div>
+              <p className="text-xs font-semibold">
+                {waveAlert.senderName} waved at you
+              </p>
+              <p className="text-[10px] font-mono opacity-70 leading-relaxed">
+                They're checking in and cheering on your focus.
+              </p>
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    const sender = friends.find(f => f.name === waveAlert.senderName || (f as any).profile?.name === waveAlert.senderName);
+                    if (sender) {
+                      triggerPeerNudge(sender.name || (sender as any).profile?.name, sender.id || (sender as any).profile?.id);
+                    }
+                    setWaveAlert(null);
+                  }}
+                  className="px-3 py-1 bg-[#D4AF37] hover:bg-amber-500 text-black text-[10px] font-mono uppercase tracking-wider font-bold rounded-lg cursor-pointer transition-all"
+                >
+                  Wave Back 👋
+                </button>
+                <button
+                  onClick={() => {
+                    setActiveTab("connections");
+                    setWaveAlert(null);
+                  }}
+                  className="px-3 py-1 bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer transition-all"
+                >
+                  View Connections
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setWaveAlert(null)}
+              className="text-stone-400 hover:text-white text-xs font-mono p-1 rounded-full hover:bg-white/10 cursor-pointer"
+            >
+              ✕
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

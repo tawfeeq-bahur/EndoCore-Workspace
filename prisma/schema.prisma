@@ -257,6 +257,29 @@ model GroupInvitation {
   @@unique([groupId, inviteeId])
 }
 
+enum NotificationType {
+  CONNECTION_WAVE
+  CONNECTION_REQUEST
+  ROOM_INVITATION
+  FOCUS_CHALLENGE
+  AI_NUDGE
+  SYSTEM
+}
+
+model Notification {
+  id          String           @id @default(uuid())
+  recipientId String
+  senderId    String?
+  type        NotificationType
+  title       String
+  body        String
+  metadata    Json?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([recipientId, readAt, createdAt])
+}
+
 // -------------------------------------------------------------
 // EndoCore Room System 2.0 Enums & Models
 // -------------------------------------------------------------

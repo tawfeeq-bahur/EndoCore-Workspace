@@ -31,6 +31,7 @@ export interface MobileCompanionShellProps {
   nudgedFriendIds: Record<string, boolean>;
   onEnterRoom?: (roomName: string) => void;
   onRespondConnectionRequest?: (requestId: string, action: "accept" | "decline") => void;
+  recentWaves?: Array<{ id: string; senderId: string; senderName: string; timestamp: string }>;
 }
 
 export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
@@ -51,6 +52,7 @@ export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
   nudgedFriendIds,
   onEnterRoom,
   onRespondConnectionRequest,
+  recentWaves = [],
 }) => {
   const {
     activeTab,
@@ -132,6 +134,9 @@ export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
             connectionsData={connectionsData}
             aiInsights={aiInsights}
             onRespondConnectionRequest={onRespondConnectionRequest}
+            recentWaves={recentWaves}
+            onTriggerNudge={onTriggerNudge}
+            nudgedFriendIds={nudgedFriendIds}
           />
         )}
         {activeTab === "profile" && (

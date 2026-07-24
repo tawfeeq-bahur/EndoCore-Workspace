@@ -7,6 +7,9 @@ interface MobileAlertsScreenProps {
   connectionsData?: any;
   aiInsights?: string | null;
   onRespondConnectionRequest?: (requestId: string, action: "accept" | "decline") => void;
+  recentWaves?: Array<{ id: string; senderId: string; senderName: string; timestamp: string }>;
+  onTriggerNudge?: (friendName: string, id: string) => void;
+  nudgedFriendIds?: Record<string, boolean>;
 }
 
 export const MobileAlertsScreen: React.FC<MobileAlertsScreenProps> = ({
@@ -15,12 +18,16 @@ export const MobileAlertsScreen: React.FC<MobileAlertsScreenProps> = ({
   connectionsData,
   aiInsights,
   onRespondConnectionRequest,
+  recentWaves = [],
+  onTriggerNudge,
+  nudgedFriendIds = {},
 }) => {
   const incoming = connectionsData?.incoming || [];
+  const totalCount = incoming.length + (aiInsights ? 1 : 0) + recentWaves.length;
 
   const filters: { id: AlertsFilter; label: string; count?: number }[] = [
-    { id: "all", label: "All", count: incoming.length + (aiInsights ? 1 : 0) },
-    { id: "social", label: "Social", count: incoming.length },
+    { id: "all", label: "All", count: totalCount },
+    { id: "social", label: "Social", count: incoming.length + recentWaves.length },
     { id: "ai", label: "AI", count: aiInsights ? 1 : 0 },
     { id: "rooms", label: "Rooms", count: 0 },
   ];
@@ -30,7 +37,7 @@ export const MobileAlertsScreen: React.FC<MobileAlertsScreenProps> = ({
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold font-serif italic text-white">Alerts & Notifications</h1>
         <span className="text-xs font-mono text-indigo-400 font-semibold">
-          {incoming.length + (aiInsights ? 1 : 0)} New
+          {totalCount} New
         </span>
       </div>
 
@@ -58,6 +65,39 @@ export const MobileAlertsScreen: React.FC<MobileAlertsScreenProps> = ({
 
       {/* Notifications Feed */}
       <div className="space-y-3">
+        {/* Recent Peer Wave Alerts */}
+        {(activeFilter === "all" || activeFilter === "social") && recentWaves.map((wave) => (
+          <div
+            key={wave.id}
+            className="bg-[#121216] border border-[#D4AF37]/40 rounded-2xl p-4 space-y-2 relative"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-xs text-[#D4AF37] flex items-center gap-1.5 font-serif italic">
+                👋 Peer Wave Signal Received
+              </span>
+              <span className="text-[10px] font-mono text-stone-400">{wave.timestamp}</span>
+            </div>
+
+            <p className="text-xs text-stone-200 leading-relaxed font-sans">
+              <strong>{wave.senderName}</strong> waved at you! They are curious about your focus flow.
+            </p>
+
+            <div className="pt-1">
+              <button
+                onClick={() => onTriggerNudge?.(wave.senderName, wave.senderId)}
+                disabled={nudgedFriendIds[wave.senderId]}
+                className={`px-4 py-1.5 rounded-xl font-mono text-xs font-semibold cursor-pointer transition-all ${
+                  nudgedFriendIds[wave.senderId]
+                    ? "bg-stone-300 text-black font-bold"
+                    : "bg-indigo-600 hover:bg-indigo-500 text-white"
+                }`}
+              >
+                {nudgedFriendIds[wave.senderId] ? "Waved Back!" : "Wave Back 👋"}
+              </button>
+            </div>
+          </div>
+        ))}
+
         {/* Incoming Friend Requests */}
         {(activeFilter === "all" || activeFilter === "social") && incoming.map((req: any) => (
           <div
@@ -105,7 +145,7 @@ export const MobileAlertsScreen: React.FC<MobileAlertsScreenProps> = ({
           </div>
         )}
 
-        {incoming.length === 0 && !aiInsights && (
+        {incoming.length === 0 && !aiInsights && recentWaves.length === 0 && (
           <div className="bg-[#121216] border border-[#1E1E26] rounded-2xl p-8 text-center text-stone-400 font-mono text-xs">
             No active alerts at the moment.
           </div>

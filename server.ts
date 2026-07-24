@@ -784,6 +784,132 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+// -------------------------------------------------------------
+// EndoCore Peer Wave Signal & Notifications API
+// -------------------------------------------------------------
+
+// Persistent Wave Signal Endpoint with 5-minute Cooldown & Spam Protection
+app.post(["/api/connections/wave", "/api/connections/:connectionId/wave"], authenticateToken, async (req: any, res) => {
+  try {
+    const senderId = req.user.id;
+    const targetUserId = req.body.targetUserId || req.params.connectionId || req.body.connectionId;
+
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Target user ID is required" });
+    }
+
+    if (senderId === targetUserId) {
+      return res.status(400).json({ error: "You cannot wave at yourself" });
+    }
+
+    // 1. Verify Sender and Receiver Existence
+    const sender = await prisma.user.findUnique({ where: { id: senderId } });
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+
+    if (!sender || !targetUser) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // 2. Check User Block Status
+    const isBlocked = await prisma.userBlock.findFirst({
+      where: {
+        OR: [
+          { blockerId: senderId, blockedId: targetUserId },
+          { blockerId: targetUserId, blockedId: senderId }
+        ]
+      }
+    });
+
+    if (isBlocked) {
+      return res.status(403).json({ error: "Cannot send wave to this user" });
+    }
+
+    // 3. Spam Protection & 5-minute Cooldown Check (Redis Key: wave:cooldown:{senderId}:{targetUserId})
+    const cooldownKey = `wave:cooldown:${senderId}:${targetUserId}`;
+    const ttl = await redis.ttl(cooldownKey);
+    if (ttl > 0) {
+      const cooldownEndsAt = new Date(Date.now() + ttl * 1000).toISOString();
+      return res.status(429).json({
+        error: `Wave cooldown active. Please wait ${Math.ceil(ttl / 60)} minutes before waving again.`,
+        cooldownSecondsRemaining: ttl,
+        cooldownEndsAt
+      });
+    }
+
+    // Set 5-minute cooldown (300 seconds)
+    await redis.set(cooldownKey, "active", "EX", 300);
+
+    // 4. Database Persistence (Save Notification Record for Offline Delivery)
+    const notification = await prisma.notification.create({
+      data: {
+        recipientId: targetUserId,
+        senderId: senderId,
+        type: "CONNECTION_WAVE",
+        title: `👋 ${sender.name} waved at you`,
+        body: "They're checking in and cheering on your focus.",
+        metadata: {
+          senderId: sender.id,
+          senderName: sender.name,
+          senderAvatarUrl: sender.avatarUrl
+        }
+      }
+    });
+
+    // 5. Socket.io Realtime Delivery to all Active Receiver Devices (`user:${targetUserId}`)
+    const payload = {
+      notificationId: notification.id,
+      senderId: sender.id,
+      senderName: sender.name,
+      senderAvatarUrl: sender.avatarUrl,
+      title: notification.title,
+      body: notification.body,
+      createdAt: notification.createdAt.toISOString()
+    };
+
+    io.to(`user:${targetUserId}`).emit("connection:wave", payload);
+    io.to(`user:${targetUserId}`).emit("peer-nudge", { senderId: sender.id, senderName: sender.name });
+
+    const cooldownEndsAt = new Date(Date.now() + 300 * 1000).toISOString();
+    res.json({
+      success: true,
+      message: `Wave sent to ${targetUser.name}`,
+      notificationId: notification.id,
+      cooldownSeconds: 300,
+      cooldownEndsAt
+    });
+  } catch (error: any) {
+    console.error("Error sending wave:", error);
+    res.status(500).json({ error: error.message || "Failed to send wave" });
+  }
+});
+
+// Notifications List Endpoint
+app.get("/api/notifications", authenticateToken, async (req: any, res) => {
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: { recipientId: req.user.id },
+      orderBy: { createdAt: "desc" },
+      take: 30
+    });
+    res.json({ success: true, notifications });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Mark Notifications as Read Endpoint
+app.post("/api/notifications/mark-read", authenticateToken, async (req: any, res) => {
+  try {
+    await prisma.notification.updateMany({
+      where: { recipientId: req.user.id, readAt: null },
+      data: { readAt: new Date() }
+    });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Health & Services Diagnostics Endpoint
 app.get("/api/health", async (req, res) => {
   try {
