@@ -9,3 +9,12 @@ coverage/
 
 /src/generated/prisma
 assets/vedio recordings/
+
+.idea/
+.gradle/
+android/.gradle/
+android/.idea/
+android/local.properties
+mobile/.expo/
+dev.db
+dev.db-journal

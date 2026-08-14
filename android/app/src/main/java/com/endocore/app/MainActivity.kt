@@ -1,6 +1,10 @@
 package com.endocore.app
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.net.http.SslError
 import android.os.Bundle
+import android.webkit.SslErrorHandler
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -8,27 +12,34 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.platform.LocalContext
-import android.content.Context
-import android.graphics.Bitmap
-import android.net.http.SslError
-import android.webkit.SslErrorHandler
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -43,6 +54,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+// ── Ultra-Premium Designer Palette ──
+val BgDark = Color(0xFF030305)
+val BgGradientBottom = Color(0xFF101015)
+// Glassmorphism surface
+val GlassSurface = Color(0xFFFFFFFF).copy(alpha = 0.03f)
+val GlassBorder = Color(0xFFFFFFFF).copy(alpha = 0.1f)
+
+// Dynamic multi-stop gradients
+val NeonPurple = Color(0xFF8B5CF6)
+val NeonPink = Color(0xFFD946EF)
+val NeonGold = Color(0xFFF59E0B)
+
+val TextPrimary = Color(0xFFFFFFFF)
+val TextSecondary = Color(0xFFA1A1AA)
+
 @Composable
 fun EndoCoreApp() {
     val context = LocalContext.current
@@ -50,14 +76,12 @@ fun EndoCoreApp() {
 
     val cloudUrl = "https://endocore-workspace.onrender.com?platform=mobile"
 
-    // Connection mode: "local" (default for emulator) or "cloud"
     var connectionMode by remember {
-        mutableStateOf(sharedPref.getString("connection_mode", "local") ?: "local")
+        mutableStateOf(sharedPref.getString("connection_mode", "cloud") ?: "cloud")
     }
-    var localIp by remember { mutableStateOf(sharedPref.getString("ip_address", "10.0.2.2") ?: "10.0.2.2") }
-    var localPort by remember { mutableStateOf(sharedPref.getString("port", "5173") ?: "5173") }
+    var localIp by remember { mutableStateOf(sharedPref.getString("ip_address", "") ?: "") }
+    var localPort by remember { mutableStateOf(sharedPref.getString("port", "3000") ?: "3000") }
 
-    // UI states
     var showSettings by remember { mutableStateOf(false) }
     var hasError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
@@ -66,20 +90,51 @@ fun EndoCoreApp() {
     var isLoading by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Determine target URL based on connection mode
     val targetUrl = if (connectionMode == "local" && localIp.trim().isNotEmpty()) {
         "http://${localIp.trim()}:${localPort.trim()}?platform=mobile"
     } else {
         cloudUrl
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        if (showSettings) {
+    // ── Infinite Animations for Glow & Mesh Gradient ──
+    val infiniteTransition = rememberInfiniteTransition()
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    val bgOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(15000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+
+    val DynamicMeshGradient = Brush.linearGradient(
+        colors = listOf(NeonPurple.copy(alpha=glowAlpha), BgDark, NeonPink.copy(alpha=glowAlpha*0.5f), BgGradientBottom),
+        start = Offset(bgOffset, 0f),
+        end = Offset(0f, bgOffset)
+    )
+    
+    val DynamicButtonGradient = Brush.horizontalGradient(
+        colors = listOf(NeonPurple, NeonPink, NeonGold)
+    )
+
+    Box(modifier = Modifier.fillMaxSize().background(DynamicMeshGradient)) {
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = fadeIn(tween(600)) + slideInVertically(initialOffsetY = { 80 }, animationSpec = tween(600, easing = EaseOutQuart)),
+            exit = fadeOut(tween(400)) + slideOutVertically(targetOffsetY = { 80 }, animationSpec = tween(400))
+        ) {
             // ── Settings / Connection Configuration Screen ──
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF0F0F11))
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
@@ -87,150 +142,131 @@ fun EndoCoreApp() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1E1E24), shape = RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0xFF2E2E38), shape = RoundedCornerShape(16.dp))
-                        .padding(24.dp),
+                        .shadow(32.dp, RoundedCornerShape(32.dp), spotColor = NeonPurple.copy(alpha=0.5f))
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(GlassSurface)
+                        .border(1.dp, GlassBorder, RoundedCornerShape(32.dp))
+                        .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
-                    Text(
-                        text = "🕊️ EndoCore",
-                        color = Color.White,
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center
-                    )
+                    // Title Typography
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "EndoCore",
+                            color = TextPrimary,
+                            fontSize = 36.sp,
+                            fontFamily = FontFamily.SansSerif,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center,
+                            letterSpacing = (-1.5).sp
+                        )
+                        Text(
+                            text = "WORKSPACE CONNECTION",
+                            color = NeonPink,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 3.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
 
-                    Text(
-                        text = "CONNECTION SETTINGS",
-                        color = Color(0xFFD4AF37),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.5.sp,
-                        textAlign = TextAlign.Center
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .background(Color(0xFF2E2E38))
+                            .background(Brush.horizontalGradient(listOf(Color.Transparent, GlassBorder, Color.Transparent)))
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
 
-                    // ── Cloud Connection (Default) ──
+                    // ── Cloud Connection Button with Micro-Animation ──
+                    val cloudInteraction = remember { MutableInteractionSource() }
+                    val isCloudPressed by cloudInteraction.collectIsPressedAsState()
+                    val cloudScale by animateFloatAsState(if (isCloudPressed) 0.95f else 1f)
+
                     Button(
                         onClick = {
                             connectionMode = "cloud"
-                            sharedPref.edit()
-                                .putString("connection_mode", "cloud")
-                                .apply()
+                            sharedPref.edit().putString("connection_mode", "cloud").apply()
                             showSettings = false
                             hasError = false
                             isPageLoading = true
-                            // Force WebView to reload with cloud URL
                             webViewRef?.loadUrl(cloudUrl)
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (connectionMode == "cloud") Color(0xFFD4AF37) else Color(0xFF2E2E38),
-                            contentColor = if (connectionMode == "cloud") Color(0xFF0F0F11) else Color.White
-                        ),
+                        interactionSource = cloudInteraction,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(8.dp)
+                            .height(56.dp)
+                            .scale(cloudScale)
+                            .clip(RoundedCornerShape(16.dp)),
+                        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp)
                     ) {
-                        Text(
-                            "☁️  Use Cloud Server (Default)",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(if (connectionMode == "cloud") DynamicButtonGradient else Brush.horizontalGradient(listOf(GlassBorder, GlassBorder))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "☁️  Connect to Cloud",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
                     }
 
                     Text(
-                        text = "Connects to endocore-workspace.onrender.com\nNo setup required. Works on any network.",
-                        color = Color(0xFF666666),
-                        fontSize = 10.sp,
+                        text = "Recommended. Works on any network instantly.",
+                        color = TextSecondary,
+                        fontSize = 13.sp,
                         textAlign = TextAlign.Center,
-                        lineHeight = 14.sp
+                        fontWeight = FontWeight.Medium
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(1.dp)
-                            .background(Color(0xFF2E2E38))
+                            .background(Brush.horizontalGradient(listOf(Color.Transparent, GlassBorder, Color.Transparent)))
                     )
 
                     Text(
-                        text = "OR CONNECT TO LOCAL DEV SERVER",
-                        color = Color(0xFFA0A0B0),
+                        text = "LOCAL DEV SERVER",
+                        color = TextSecondary.copy(alpha = 0.6f),
                         fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 2.sp
                     )
 
-                    // IP Address input
-                    Column(
+                    // Glassmorphic Input
+                    OutlinedTextField(
+                        value = localIp,
+                        onValueChange = { localIp = it },
+                        placeholder = { Text("192.168.1.x", color = TextSecondary.copy(alpha=0.4f)) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            focusedBorderColor = NeonPink,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = Color(0xFF000000).copy(alpha=0.4f),
+                            unfocusedContainerColor = Color(0xFF000000).copy(alpha=0.2f),
+                            cursorColor = NeonPink
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "PC LOCAL IP ADDRESS",
-                            color = Color(0xFFA0A0B0),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        OutlinedTextField(
-                            value = localIp,
-                            onValueChange = { localIp = it },
-                            placeholder = { Text("e.g. 192.168.1.15", color = Color(0xFF666666)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedBorderColor = Color(0xFFD4AF37),
-                                unfocusedBorderColor = Color(0xFF2E2E38),
-                                focusedContainerColor = Color(0xFF0F0F11),
-                                unfocusedContainerColor = Color(0xFF0F0F11)
-                            ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                        label = { Text("Local IP Address", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium) }
+                    )
 
-                    // Port Input
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "EXPRESS SERVER PORT",
-                            color = Color(0xFFA0A0B0),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        OutlinedTextField(
-                            value = localPort,
-                            onValueChange = { localPort = it },
-                            placeholder = { Text("3000", color = Color(0xFF666666)) },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = Color.White,
-                                unfocusedTextColor = Color.White,
-                                focusedBorderColor = Color(0xFFD4AF37),
-                                unfocusedBorderColor = Color(0xFF2E2E38),
-                                focusedContainerColor = Color(0xFF0F0F11),
-                                unfocusedContainerColor = Color(0xFF0F0F11)
-                            ),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                    // ── Local Connect Button with Micro-Animation ──
+                    val localInteraction = remember { MutableInteractionSource() }
+                    val isLocalPressed by localInteraction.collectIsPressedAsState()
+                    val localScale by animateFloatAsState(if (isLocalPressed) 0.95f else 1f)
 
-                    // Connect to local server button
                     Button(
                         onClick = {
                             if (localIp.trim().isEmpty()) {
@@ -246,7 +282,7 @@ fun EndoCoreApp() {
 
                             isLoading = true
                             coroutineScope.launch {
-                                delay(500)
+                                delay(600)
                                 isLoading = false
                                 showSettings = false
                                 hasError = false
@@ -255,41 +291,39 @@ fun EndoCoreApp() {
                                 webViewRef?.loadUrl(localUrl)
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF2E2E38),
-                            contentColor = Color.White
-                        ),
+                        interactionSource = localInteraction,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(8.dp),
+                            .height(56.dp)
+                            .scale(localScale)
+                            .clip(RoundedCornerShape(16.dp)),
                         enabled = !isLoading
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                color = Color(0xFFD4AF37),
-                                modifier = Modifier.size(24.dp)
-                            )
-                        } else {
-                            Text("🖥️  Connect to Local PC", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(if (connectionMode == "local") DynamicButtonGradient else Brush.horizontalGradient(listOf(Color(0xFF1E1E24), Color(0xFF1E1E24))))
+                                .border(1.dp, GlassBorder, RoundedCornerShape(16.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(color = TextPrimary, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                            } else {
+                                Text("🖥️  Local Sync", color = TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, letterSpacing = 0.5.sp)
+                            }
                         }
                     }
-
-                    Text(
-                        text = "Ensure your PC and phone are on the same Wi-Fi network and the Express server is running.",
-                        color = Color(0xFF666666),
-                        fontSize = 11.sp,
-                        textAlign = TextAlign.Center,
-                        lineHeight = 16.sp
-                    )
                 }
             }
-        } else if (hasError) {
-            // ── Error / Offline Recovery Screen ──
+        }
+        
+        if (hasError && !showSettings) {
+            // ── Error Screen ──
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color(0xFF0F0F11))
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
@@ -297,37 +331,28 @@ fun EndoCoreApp() {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF1E1E24), shape = RoundedCornerShape(16.dp))
-                        .border(1.dp, Color(0xFF2E2E38), shape = RoundedCornerShape(16.dp))
-                        .padding(24.dp),
+                        .shadow(24.dp, RoundedCornerShape(32.dp), spotColor = Color.Red.copy(alpha=0.5f))
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(GlassSurface)
+                        .border(1.dp, GlassBorder, RoundedCornerShape(32.dp))
+                        .padding(32.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    Text(text = "🕊️ EndoCore Offline", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "Connection Lost", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
                     Text(
-                        text = "UNABLE TO REACH CLOUD SERVICE",
-                        color = Color(0xFFD4AF37),
+                        text = "UNABLE TO REACH WORKSPACE",
+                        color = Color(0xFFEF4444),
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.2.sp
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
                     )
                     Text(
-                        text = if (errorMessage.isNotEmpty()) errorMessage else "EndoCore is temporarily offline or waking up. Your workstation data is safe.",
-                        color = Color(0xFFA0A0B0),
-                        fontSize = 12.sp,
+                        text = if (errorMessage.isNotEmpty()) errorMessage else "Please verify your network connection or server status.",
+                        color = TextSecondary,
+                        fontSize = 14.sp,
                         textAlign = TextAlign.Center
                     )
-
-                    // Render free tier cold start hint
-                    if (connectionMode == "cloud") {
-                        Text(
-                            text = "💡 Render free tier servers sleep after 15 min of inactivity. First load may take 30-60 seconds while the server wakes up.",
-                            color = Color(0xFF888888),
-                            fontSize = 10.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 14.sp
-                        )
-                    }
 
                     Button(
                         onClick = {
@@ -335,20 +360,23 @@ fun EndoCoreApp() {
                             isPageLoading = true
                             webViewRef?.loadUrl(targetUrl)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD4AF37), contentColor = Color(0xFF0F0F11)),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp),
-                        shape = RoundedCornerShape(8.dp)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        modifier = Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(16.dp))
                     ) {
-                        Text("Retry Connection", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Box(
+                            modifier = Modifier.fillMaxSize().background(DynamicButtonGradient),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Retry Connection", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
                     TextButton(onClick = { showSettings = true }) {
-                        Text("⚙️ Connection Settings", color = Color(0xFFA0A0B0), fontSize = 11.sp)
+                        Text("⚙️ Configure Settings", color = TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
-        } else {
+        } else if (!showSettings && !hasError) {
             // ── Main WebView ──
             Box(modifier = Modifier.fillMaxSize()) {
                 AndroidView(
@@ -360,9 +388,7 @@ fun EndoCoreApp() {
                             settings.useWideViewPort = true
                             settings.loadWithOverviewMode = true
                             settings.cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
-                            // Allow mixed content (needed for loading HTTP resources from HTTPS pages)
                             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                            // Set a proper user agent to avoid any blocking
                             settings.userAgentString = settings.userAgentString + " EndoCoreApp/1.0"
 
                             webViewClient = object : WebViewClient() {
@@ -376,11 +402,7 @@ fun EndoCoreApp() {
                                     isPageLoading = false
                                 }
 
-                                override fun onReceivedError(
-                                    view: WebView?,
-                                    request: WebResourceRequest?,
-                                    error: WebResourceError?
-                                ) {
+                                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
                                     super.onReceivedError(view, request, error)
                                     if (request?.isForMainFrame == true) {
                                         hasError = true
@@ -388,17 +410,8 @@ fun EndoCoreApp() {
                                     }
                                 }
 
-                                override fun onReceivedSslError(
-                                    view: WebView?,
-                                    handler: SslErrorHandler?,
-                                    error: SslError?
-                                ) {
-                                    // For local dev server with self-signed certs, proceed
-                                    if (connectionMode == "local") {
-                                        handler?.proceed()
-                                    } else {
-                                        super.onReceivedSslError(view, handler, error)
-                                    }
+                                override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                                    if (connectionMode == "local") handler?.proceed() else super.onReceivedSslError(view, handler, error)
                                 }
                             }
                             loadUrl(targetUrl)
@@ -407,62 +420,45 @@ fun EndoCoreApp() {
                     modifier = Modifier.fillMaxSize()
                 )
 
-                // Loading overlay while WebView page is loading
-                if (isPageLoading) {
+                // Glass Loading Overlay
+                AnimatedVisibility(
+                    visible = isPageLoading,
+                    enter = fadeIn(tween(400)),
+                    exit = fadeOut(tween(600))
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color(0xFF0F0F11)),
+                            .background(Color(0xFF000000).copy(alpha=0.7f)),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = "🕊️ EndoCore",
-                            color = Color.White,
-                            fontSize = 28.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "LOADING MOBILE WORKSPACE",
-                            color = Color(0xFFD4AF37),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.5.sp
-                        )
-                        Spacer(modifier = Modifier.height(24.dp))
-                        CircularProgressIndicator(
-                            color = Color(0xFFD4AF37),
-                            modifier = Modifier.size(32.dp),
-                            strokeWidth = 2.dp
-                        )
+                        Text("EndoCore", color = TextPrimary, fontSize = 36.sp, fontWeight = FontWeight.Black, letterSpacing = (-1).sp)
                         Spacer(modifier = Modifier.height(16.dp))
-                        if (connectionMode == "cloud") {
-                            Text(
-                                text = "Server may take a moment to wake up...",
-                                color = Color(0xFF666666),
-                                fontSize = 10.sp
-                            )
-                        }
+                        Text("ESTABLISHING SECURE LINK", color = NeonPink, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp)
+                        Spacer(modifier = Modifier.height(40.dp))
+                        CircularProgressIndicator(color = NeonPurple, modifier = Modifier.size(48.dp), strokeWidth = 4.dp)
                     }
                 }
 
-                // Floating Settings Button (always visible when WebView is loaded)
+                // Floating Settings Button (Glassmorphic)
                 if (!isPageLoading) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(24.dp),
+                        modifier = Modifier.fillMaxSize().padding(24.dp),
                         contentAlignment = Alignment.BottomEnd
                     ) {
                         FloatingActionButton(
                             onClick = { showSettings = true },
-                            containerColor = Color(0xFF1E1E24),
-                            contentColor = Color(0xFFD4AF37),
-                            modifier = Modifier.size(48.dp),
-                            shape = RoundedCornerShape(24.dp)
+                            containerColor = GlassSurface,
+                            contentColor = TextPrimary,
+                            modifier = Modifier
+                                .size(64.dp)
+                                .shadow(16.dp, CircleShape, spotColor = NeonPurple)
+                                .border(1.dp, GlassBorder, CircleShape),
+                            shape = CircleShape,
+                            elevation = FloatingActionButtonDefaults.elevation(0.dp)
                         ) {
-                            Text("⚙️", fontSize = 18.sp)
+                            Text("⚙️", fontSize = 24.sp)
                         }
                     }
                 }
