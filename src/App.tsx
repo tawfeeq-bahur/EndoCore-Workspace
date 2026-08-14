@@ -895,15 +895,15 @@ export default function App() {
   const renderTimelineItemText = (item: { text: string; app?: string; project?: string; type: string }) => {
     if (item.type === "app_focus" && item.app) {
       return (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
-          <span>Started focus in</span>
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-blue-550/10 text-blue-400 border border-blue-500/20 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-[#09090b]">
+          <span className="text-[#3f3f46]">Started focus in</span>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-xs">
             {item.app}
           </span>
           {item.project && (
             <>
-              <span>on</span>
-              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-emerald-550/10 text-emerald-450 border border-emerald-500/20 shadow-sm max-w-[200px] truncate" title={item.project}>
+              <span className="text-[#3f3f46]">on</span>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-xs max-w-[200px] truncate" title={item.project}>
                 {item.project}
               </span>
             </>
@@ -914,9 +914,9 @@ export default function App() {
 
     if (item.type === "room_entry" && item.project) {
       return (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
-          <span>Entered workspace room</span>
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-purple-550/10 text-purple-400 border border-purple-500/20 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-[#09090b]">
+          <span className="text-[#3f3f46]">Entered workspace room</span>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200 shadow-xs">
             #{item.project}
           </span>
         </div>
@@ -925,16 +925,16 @@ export default function App() {
 
     if (item.type === "pomodoro") {
       return (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs text-stone-300">
-          <span>Completed focus sprint</span>
-          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-medium bg-amber-550/10 text-amber-400 border border-amber-500/20 shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-[#09090b]">
+          <span className="text-[#3f3f46]">Completed focus sprint</span>
+          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200 shadow-xs">
             Pomodoro block
           </span>
         </div>
       );
     }
 
-    return <span className="text-stone-300">{item.text}</span>;
+    return <span className="text-[#09090b] font-medium">{item.text}</span>;
   };
 
   const getGroupedEvents = () => {
@@ -3528,7 +3528,7 @@ export default function App() {
                                               <div className="flex flex-col space-y-0.5">
                                                 <div className="flex items-start justify-between">
                                                   {renderTimelineItemText(item)}
-                                                  <span className="font-mono text-[9px] text-[#71717a] shrink-0 ml-2 mt-0.5">{item.time}</span>
+                                                  <span className="font-mono text-[10px] font-semibold text-[#52525b] shrink-0 ml-2 mt-0.5">{item.time}</span>
                                                 </div>
                                               </div>
                                             </div>
