@@ -134,6 +134,12 @@ export default function App() {
   const [nudgedFriendIds, setNudgedFriendIds] = useState<Record<string, boolean>>({});
   const [waveAlert, setWaveAlert] = useState<{ senderName: string; timestamp: string } | null>(null);
   const [recentWaves, setRecentWaves] = useState<Array<{ id: string; senderId: string; senderName: string; timestamp: string }>>([]);
+  const [notifPermission, setNotifPermission] = useState<string>(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      return Notification.permission;
+    }
+    return "granted";
+  });
 
   // Connections and focus challenges states
   const [connectionsData, setConnectionsData] = useState<{
@@ -1326,6 +1332,26 @@ export default function App() {
     }, 10000);
   };
 
+  const enableDesktopNotifications = async () => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      try {
+        const permission = await Notification.requestPermission();
+        setNotifPermission(permission);
+        if (permission === "granted") {
+          triggerToast("✓ Windows OS System Notifications Enabled!");
+          new Notification("👋 EndoCore System Notifications Active", {
+            body: "Wave alerts will now pop up over YouTube, IDEs & all open apps on your PC!",
+            icon: "/favicon.ico"
+          });
+        } else {
+          triggerToast("⚠️ Notification permission was not granted.");
+        }
+      } catch (e) {
+        console.error("Error requesting notification permission:", e);
+      }
+    }
+  };
+
   const handleManualThemeChange = (newTheme: "dark" | "light") => {
     setThemeMode(newTheme);
     localStorage.setItem("endocore_theme", newTheme);
@@ -2474,7 +2500,24 @@ export default function App() {
 
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row transition-colors duration-350 ease-out font-sans ${bgMain}`}>
+    <div className={`min-h-screen flex flex-col transition-colors duration-350 ease-out font-sans ${bgMain}`}>
+      {/* 🔔 OS SYSTEM NOTIFICATION PERMISSION BANNER */}
+      {notifPermission !== "granted" && !((window as any).electronAPI || (window as any).endocoreDesktop) && (
+        <div className="bg-gradient-to-r from-amber-950/80 via-[#18150D] to-amber-950/80 border-b border-amber-500/40 px-6 py-2.5 flex items-center justify-between text-xs font-mono z-50">
+          <span className="text-amber-200 flex items-center gap-2">
+            <span>🔔</span>
+            <span>Enable Windows OS System Notifications to receive Wave alerts over YouTube, IDEs & all apps!</span>
+          </span>
+          <button
+            onClick={enableDesktopNotifications}
+            className="px-3.5 py-1.5 bg-[#D4AF37] hover:bg-amber-500 text-black font-bold rounded-lg text-[10px] uppercase tracking-wider cursor-pointer shadow-md transition-all"
+          >
+            Enable OS Notifications
+          </button>
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row flex-1">
 
       {/* ⚡ PREMIUM MINIMAL TOAST ALERT */}
       <AnimatePresence>
@@ -5544,6 +5587,7 @@ export default function App() {
           triggerToast(`🚀 Room ${newRoom.name} created successfully!`);
         }}
       />
+      </div>
     </div>
   );
 }
