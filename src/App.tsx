@@ -85,6 +85,8 @@ export default function App() {
   // Pomodoro timer states
   const [pomodoroMinutesLeft, setPomodoroMinutesLeft] = useState<number>(25);
   const [pomodoroSecondsLeft, setPomodoroSecondsLeft] = useState<number>(0);
+  const [customFocusMinutes, setCustomFocusMinutes] = useState<number>(25);
+  const [customBreakMinutes, setCustomBreakMinutes] = useState<number>(5);
   const [pomodoroActive, setPomodoroActive] = useState<boolean>(false);
   const [pomodoroMode, setPomodoroMode] = useState<"focus" | "break">("focus");
   const [pomodoroSessionCount, setPomodoroSessionCount] = useState<number>(0);
@@ -1032,13 +1034,13 @@ export default function App() {
             setPomodoroSessionCount(prev => prev + 1);
             triggerToast("🎉 Pomodoro Focus Session Complete! Time for a short break.");
             setPomodoroMode("break");
-            setPomodoroMinutesLeft(5);
+            setPomodoroMinutesLeft(customBreakMinutes);
             setPomodoroSecondsLeft(0);
             completePomodoroSession();
           } else {
             triggerToast("🔋 Break session completed! Ready to focus?");
             setPomodoroMode("focus");
-            setPomodoroMinutesLeft(25);
+            setPomodoroMinutesLeft(customFocusMinutes);
             setPomodoroSecondsLeft(0);
           }
         }
@@ -3859,7 +3861,7 @@ export default function App() {
                             stroke={pomodoroMode === "focus" ? "#10b981" : "#2563eb"}
                             strokeWidth="8"
                             strokeDasharray="565.48"
-                            strokeDashoffset={(1 - ((pomodoroMinutesLeft * 60 + pomodoroSecondsLeft) / (pomodoroMode === "focus" ? 1500 : 300))) * 565.48}
+                            strokeDashoffset={(1 - ((pomodoroMinutesLeft * 60 + pomodoroSecondsLeft) / Math.max(1, ((pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes) * 60)))) * 565.48}
                             strokeLinecap="round"
                             className="transition-all duration-1000 ease-linear"
                           />
@@ -3870,16 +3872,30 @@ export default function App() {
                             {String(pomodoroMinutesLeft).padStart(2, '0')}:{String(pomodoroSecondsLeft).padStart(2, '0')}
                           </div>
                           <span className={pomodoroMode === "focus" ? "badge badge-emerald" : "badge badge-indigo"}>
-                            {pomodoroMode === "focus" ? "Focusing" : "Resting"}
+                            {pomodoroMode === "focus" ? `Focusing (${customFocusMinutes}m)` : `Resting (${customBreakMinutes}m)`}
                           </span>
                         </div>
                       </div>
 
-                      {/* Controls Button Group */}
-                      <div className="flex items-center space-x-3">
+                      {/* Controls Button Group & Quick Time Adjusters */}
+                      <div className="flex flex-wrap items-center justify-center gap-2">
+                        <button
+                          onClick={() => {
+                            const newMins = Math.max(1, pomodoroMinutesLeft - 5);
+                            setPomodoroMinutesLeft(newMins);
+                            if (pomodoroMode === "focus") setCustomFocusMinutes(newMins);
+                            else setCustomBreakMinutes(newMins);
+                            triggerToast(`Timer adjusted to ${newMins}m`);
+                          }}
+                          className="btn-secondary px-3 py-2 text-xs font-mono font-bold shadow-xs cursor-pointer"
+                          title="Reduce 5 Minutes"
+                        >
+                          -5m
+                        </button>
+
                         <button
                           onClick={() => setPomodoroActive(!pomodoroActive)}
-                          className={pomodoroActive ? "btn-secondary px-6 py-2.5" : "btn-primary px-8 py-2.5"}
+                          className={pomodoroActive ? "btn-secondary px-6 py-2.5 font-bold cursor-pointer" : "btn-primary px-8 py-2.5 font-bold cursor-pointer"}
                         >
                           {pomodoroActive ? "Pause Session" : "Start Focus"}
                         </button>
@@ -3887,11 +3903,11 @@ export default function App() {
                         <button
                           onClick={() => {
                             setPomodoroActive(false);
-                            setPomodoroMinutesLeft(pomodoroMode === "focus" ? 25 : 5);
+                            setPomodoroMinutesLeft(pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes);
                             setPomodoroSecondsLeft(0);
                             triggerToast("Pomodoro timer reset successfully");
                           }}
-                          className="btn-secondary p-2.5"
+                          className="btn-secondary p-2.5 cursor-pointer"
                           title="Reset Timer"
                         >
                           <RefreshCw className="h-4 w-4" />
@@ -3903,50 +3919,123 @@ export default function App() {
                             setPomodoroSecondsLeft(0);
                             if (pomodoroMode === "focus") {
                               setPomodoroMode("break");
-                              setPomodoroMinutesLeft(5);
+                              setPomodoroMinutesLeft(customBreakMinutes);
                               triggerToast("Skipped focus. Time for a short break.");
                             } else {
                               setPomodoroMode("focus");
-                              setPomodoroMinutesLeft(25);
+                              setPomodoroMinutesLeft(customFocusMinutes);
                               triggerToast("Skipped break. Ready to focus?");
                             }
                           }}
-                          className="btn-secondary px-4 py-2.5 text-xs"
+                          className="btn-secondary px-4 py-2.5 text-xs font-semibold cursor-pointer"
                         >
                           Skip
                         </button>
+
+                        <button
+                          onClick={() => {
+                            const newMins = pomodoroMinutesLeft + 5;
+                            setPomodoroMinutesLeft(newMins);
+                            if (pomodoroMode === "focus") setCustomFocusMinutes(newMins);
+                            else setCustomBreakMinutes(newMins);
+                            triggerToast(`Timer adjusted to ${newMins}m`);
+                          }}
+                          className="btn-secondary px-3 py-2 text-xs font-mono font-bold shadow-xs cursor-pointer"
+                          title="Add 5 Minutes"
+                        >
+                          +5m
+                        </button>
                       </div>
 
-                      {/* Mode Quick Toggle */}
-                      <div className="flex items-center bg-[#f4f4f5] p-1.5 rounded-lg border border-[#e4e4e7]">
-                        <button
-                          onClick={() => {
-                            setPomodoroActive(false);
-                            setPomodoroMode("focus");
-                            setPomodoroMinutesLeft(25);
-                            setPomodoroSecondsLeft(0);
-                          }}
-                          className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${pomodoroMode === "focus"
-                              ? "bg-white text-[#09090b] shadow-sm border border-[#e4e4e7]"
-                              : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          Focus Mode (25m)
-                        </button>
-                        <button
-                          onClick={() => {
-                            setPomodoroActive(false);
-                            setPomodoroMode("break");
-                            setPomodoroMinutesLeft(5);
-                            setPomodoroSecondsLeft(0);
-                          }}
-                          className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${pomodoroMode === "break"
-                              ? "bg-white text-[#09090b] shadow-sm border border-[#e4e4e7]"
-                              : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          Break Mode (5m)
-                        </button>
+                      {/* Session Mode Selector & Duration Presets */}
+                      <div className="w-full max-w-md bg-[#fafafa] p-4 rounded-2xl border border-[#e4e4e7] space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#09090b] uppercase tracking-wider">Session Mode</span>
+                          <div className="flex items-center bg-[#f4f4f5] p-1 rounded-lg border border-[#e4e4e7]">
+                            <button
+                              onClick={() => {
+                                setPomodoroActive(false);
+                                setPomodoroMode("focus");
+                                setPomodoroMinutesLeft(customFocusMinutes);
+                                setPomodoroSecondsLeft(0);
+                              }}
+                              className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${pomodoroMode === "focus"
+                                  ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
+                                  : "text-[#71717a] hover:text-[#09090b]"
+                                }`}
+                            >
+                              Focus ({customFocusMinutes}m)
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPomodoroActive(false);
+                                setPomodoroMode("break");
+                                setPomodoroMinutesLeft(customBreakMinutes);
+                                setPomodoroSecondsLeft(0);
+                              }}
+                              className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${pomodoroMode === "break"
+                                  ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
+                                  : "text-[#71717a] hover:text-[#09090b]"
+                                }`}
+                            >
+                              Break ({customBreakMinutes}m)
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Preset Duration Chips */}
+                        <div className="space-y-1.5 pt-1">
+                          <label className="text-[11px] font-semibold text-[#71717a] block">
+                            Quick Duration Presets ({pomodoroMode === "focus" ? "Focus" : "Break"}):
+                          </label>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {(pomodoroMode === "focus" ? [15, 25, 35, 45, 60, 90] : [5, 10, 15, 20]).map((mins) => {
+                              const isCurrent = (pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes) === mins;
+                              return (
+                                <button
+                                  key={mins}
+                                  onClick={() => {
+                                    setPomodoroActive(false);
+                                    if (pomodoroMode === "focus") setCustomFocusMinutes(mins);
+                                    else setCustomBreakMinutes(mins);
+                                    setPomodoroMinutesLeft(mins);
+                                    setPomodoroSecondsLeft(0);
+                                    triggerToast(`Duration set to ${mins} minutes`);
+                                  }}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition cursor-pointer border ${isCurrent
+                                      ? "bg-[#09090b] text-white border-[#09090b] shadow-xs"
+                                      : "bg-white text-[#09090b] border-[#e4e4e7] hover:bg-zinc-100"
+                                    }`}
+                                >
+                                  {mins}m
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Custom Duration Input */}
+                        <div className="pt-2 border-t border-[#e4e4e7] flex items-center justify-between gap-2">
+                          <label className="text-[11px] font-semibold text-[#71717a] shrink-0">Custom Minutes:</label>
+                          <div className="flex items-center gap-1.5 w-full max-w-[200px]">
+                            <input
+                              type="number"
+                              min={1}
+                              max={240}
+                              value={pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes}
+                              onChange={(e) => {
+                                const val = Math.max(1, Math.min(240, Number(e.target.value) || 1));
+                                setPomodoroActive(false);
+                                if (pomodoroMode === "focus") setCustomFocusMinutes(val);
+                                else setCustomBreakMinutes(val);
+                                setPomodoroMinutesLeft(val);
+                                setPomodoroSecondsLeft(0);
+                              }}
+                              className="w-full px-3 py-1 bg-white border border-[#e4e4e7] rounded-lg text-xs font-mono text-[#09090b] font-bold shadow-xs focus:outline-none focus:border-[#09090b]"
+                            />
+                            <span className="text-xs font-mono text-[#71717a] shrink-0">mins</span>
+                          </div>
+                        </div>
                       </div>
 
                       {/* Task config sync inside cockpit */}
