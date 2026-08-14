@@ -4042,79 +4042,81 @@ export default function App() {
 
               {/* 3️⃣ ROOMS TAB VIEWPORT */}
               {activeTab === "groups" && (
-                <div className="space-y-8">
+                <div className="space-y-6">
                   {selectedRoomName === null ? (
                     <>
                       {/* Directory View */}
-                      <div className="space-y-2">
-                        <h2 className="text-4xl font-serif italic tracking-tight font-medium">Rooms Directory</h2>
-                        <p className={`text-xs ${textSub}`}>
+                      <div className="space-y-1">
+                        <h2 className="text-2xl font-bold text-[#09090b] tracking-tight">Rooms Directory</h2>
+                        <p className="text-xs text-[#71717a]">
                           Select a room workspace to collaborate, monitor active telemetry, or commission a new channel.
                         </p>
                       </div>
 
                       {/* 5-Step Room Creation Wizard Launch Card */}
-                      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border border-cyan-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-xl relative overflow-hidden">
+                      <div className="p-6 sm:p-8 rounded-2xl bg-[#09090b] text-white border border-[#27272a] flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-md relative overflow-hidden">
                         <div className="space-y-2 z-10">
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-semibold">
-                            <Sparkles className="w-3.5 h-3.5" />
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-mono font-semibold">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                             5-STEP ROOM INTELLIGENCE WIZARD
                           </div>
-                          <h3 className="text-xl sm:text-2xl font-serif italic font-bold text-white">
+                          <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
                             Commission a New Intelligence Room
                           </h3>
-                          <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+                          <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
                             Configure room basics, access permissions, roles, individual & team work expectations, and versioned AI privacy policies in a guided 5-step setup experience.
                           </p>
                         </div>
 
                         <button
                           onClick={() => setIsRoomWizardOpen(true)}
-                          className="px-6 py-3.5 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold text-xs rounded-2xl shadow-lg shadow-cyan-500/25 font-mono uppercase tracking-wider transition-all transform hover:scale-105 cursor-pointer shrink-0 flex items-center justify-center gap-2 z-10"
+                          className="px-6 py-3 bg-white hover:bg-zinc-100 text-[#09090b] font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all transform hover:scale-102 cursor-pointer shrink-0 flex items-center justify-center gap-2 z-10"
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-4 h-4 text-[#09090b]" />
                           Launch 5-Step Wizard
                         </button>
                       </div>
 
                       {/* Classroom Portal Card Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                         {groups.map(group => {
                           const groupOnlineCount = user?.activeGroup === group.name
                             ? (friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0))
                             : Math.max(1, Math.round(group.members.length * 0.6));
 
+                          const isConnected = user?.activeGroup === group.name;
+
                           return (
                             <div
                               key={group.id}
-                              className={`p-6 rounded-3xl border ${bgCard} ${borderRule} flex flex-col justify-between space-y-6`}
+                              className="studio-card p-6 flex flex-col justify-between space-y-6"
                             >
                               <div className="space-y-3">
                                 <div className="flex items-start justify-between">
-                                  <h4 className="font-serif italic text-lg font-bold text-stone-300 dark:text-white">
+                                  <h4 className="text-lg font-bold text-[#09090b] tracking-tight">
                                     {group.name}
                                   </h4>
-                                  <span className={`text-[9px] font-mono tracking-widest uppercase px-2.5 py-0.5 rounded border ${user?.activeGroup === group.name
-                                      ? "bg-stone-300 text-black border-stone-400"
-                                      : "text-stone-500 dark:border-neutral-800 border-stone-250"
+                                  <span className={`text-[10px] font-mono font-semibold tracking-wider uppercase px-3 py-1 rounded-full border ${isConnected
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                      : "bg-zinc-100 text-zinc-600 border-zinc-200"
                                     }`}>
-                                    {user?.activeGroup === group.name ? "Connected" : "Inactive"}
+                                    {isConnected ? "Connected" : "Inactive"}
                                   </span>
                                 </div>
-                                <p className={`text-xs leading-relaxed ${textSub}`}>{group.description}</p>
+                                <p className="text-xs text-[#71717a] font-mono leading-relaxed">{group.description}</p>
                               </div>
 
-                              <div className="space-y-4 pt-3 border-t dark:border-neutral-850/60 border-stone-200/50">
-                                <div className="flex justify-between items-center text-[10px] font-mono text-stone-500">
-                                  <span>Occupants: {group.members.length} peers</span>
-                                  <span className="flex items-center">
+                              <div className="space-y-4 pt-3 border-t border-[#e4e4e7]">
+                                <div className="flex justify-between items-center text-xs font-mono">
+                                  <span className="text-[#71717a] font-semibold">Occupants: <strong className="text-[#09090b]">{group.members.length} peers</strong></span>
+                                  <span className="flex items-center text-emerald-700 font-semibold">
                                     <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
                                     {groupOnlineCount} Live Online
                                   </span>
                                 </div>
                                 <button
                                   onClick={() => enterRoomChannel(group.name)}
-                                  className="btn-primary w-full justify-center"
+                                  className="w-full py-2.5 rounded-lg bg-[#09090b] text-white text-xs font-semibold hover:bg-[#27272a] transition-all shadow-xs cursor-pointer"
                                 >
                                   Enter Room Workspace
                                 </button>
