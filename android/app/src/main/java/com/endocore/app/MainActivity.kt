@@ -50,12 +50,12 @@ fun EndoCoreApp() {
 
     val cloudUrl = "https://endocore-workspace.onrender.com?platform=mobile"
 
-    // Connection mode: "cloud" (default) or "local"
+    // Connection mode: "local" (default for emulator) or "cloud"
     var connectionMode by remember {
-        mutableStateOf(sharedPref.getString("connection_mode", "cloud") ?: "cloud")
+        mutableStateOf(sharedPref.getString("connection_mode", "local") ?: "local")
     }
-    var localIp by remember { mutableStateOf(sharedPref.getString("ip_address", "") ?: "") }
-    var localPort by remember { mutableStateOf(sharedPref.getString("port", "3000") ?: "3000") }
+    var localIp by remember { mutableStateOf(sharedPref.getString("ip_address", "10.0.2.2") ?: "10.0.2.2") }
+    var localPort by remember { mutableStateOf(sharedPref.getString("port", "5173") ?: "5173") }
 
     // UI states
     var showSettings by remember { mutableStateOf(false) }

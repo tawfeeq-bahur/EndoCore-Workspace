@@ -3047,7 +3047,7 @@ async function startServer() {
   }
 
   server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 EndoCore Workspace express server running at http://0.0.0.0:${PORT}`);
+    console.log(`🚀 EndoCore Workspace express server running at http://localhost:${PORT}`);
   });
 }
 

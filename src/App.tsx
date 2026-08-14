@@ -51,7 +51,7 @@ import {
 } from "./types";
 import { RoomCreationWizard } from "./components/RoomCreationWizard";
 import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
-import { MobileCompanionShell } from "./mobile/MobileCompanionShell";
+import { EndoCoreShell } from "./mobile/EndoCoreShell";
 import { usePlatformMode } from "./mobile/hooks/usePlatformMode";
 
 export default function App() {
@@ -2453,7 +2453,7 @@ export default function App() {
       );
     }
     return (
-      <MobileCompanionShell
+      <EndoCoreShell
         user={user}
         myActivity={myActivity}
         friends={friends}
