@@ -13,6 +13,7 @@ import { seedDatabase } from "./seed";
 import Redis from "ioredis";
 import { createRoomTransactional, recordTrackingConsent } from "./src/services/roomService";
 import { requireRoomRole, requireRoomPermission } from "./src/middleware/roomAuth";
+import { generateMultiAgentBriefing } from "./src/ai/multiAgentEngine";
 
 dotenv.config();
 
@@ -930,6 +931,52 @@ app.get("/api/health", async (req, res) => {
       database: "error",
       error: error.message
     });
+  }
+});
+
+// Multi-Agent GenAI Scrum & Welfare Briefing Endpoint
+app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const activeRoomName = user.activeGroup || "Engineering Team";
+
+    // Fetch members in user's active workspace room
+    const groupMembers = await prisma.user.findMany({
+      where: { activeGroup: activeRoomName },
+      select: { id: true, name: true, privacyMode: true }
+    });
+
+    // Gather current activity state of all room occupants
+    const memberActivities = await Promise.all(
+      groupMembers.map(async (m) => {
+        const act = await getUserActiveActivity(m.id);
+        return {
+          id: m.id,
+          name: m.name,
+          app: act.app || "Offline",
+          project: act.project || "Workspace Activity",
+          durationSeconds: act.durationSeconds || 0,
+          privacyMode: m.privacyMode || "Public"
+        };
+      })
+    );
+
+    // Execute Multi-Agent Swarm Pipeline
+    const briefing = await generateMultiAgentBriefing(memberActivities);
+
+    // Broadcast real-time briefing to active room via WebSockets
+    io.to(activeRoomName).emit("ai:briefing_updated", briefing);
+
+    res.json(briefing);
+  } catch (error: any) {
+    console.error("Error executing Multi-Agent insights:", error);
+    res.status(500).json({ error: error.message || "Failed to generate multi-agent briefing" });
   }
 });
 

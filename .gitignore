@@ -9,3 +9,5 @@ coverage/
 
 /src/generated/prisma
 assets/vedio recordings/
+
+.playwright-mcp/

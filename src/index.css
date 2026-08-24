@@ -292,3 +292,38 @@ body {
   50%       { opacity: 0.8; transform: scale(0.995); }
 }
 .soft-pulse { animation: soft-pulse 4s cubic-bezier(0.4,0,0.6,1) infinite; }
+
+/* TRACKER-APP UI utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tracker-category-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.tracker-category-card:hover {
+  transform: translateY(-4px) scale(1.02);
+}
+.tracker-category-card:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.tracker-doctor-tile {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.tracker-doctor-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.tracker-doctor-tile:active {
+  transform: translateY(0);
+}
+
