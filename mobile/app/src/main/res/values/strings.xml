@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">EndoCore Mobile</string>
+    <string name="title_home">Home</string>
+    <string name="title_rooms">Rooms</string>
+    <string name="title_insights">Insights</string>
+    <string name="title_profile">Profile</string>
+    <string name="now_focusing">Now Focusing</string>
+    <string name="widget_name">Daily Focus Goal Bento</string>
+    <string name="widget_description">Glanceable daily focus goal progress and 1-tap Pomodoro sprint launcher</string>
+    <string name="notification_channel_name">EndoCore Focus Session</string>
+    <string name="notification_channel_desc">Shows ongoing focus session time, active tasks, and pause/resume actions</string>
+</resources>

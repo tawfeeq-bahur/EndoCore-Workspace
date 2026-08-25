@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "EndoCore Workspace",
+    "slug": "endocore-workspace",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.endocore.workspace"
+    },
+    "android": {
+      "package": "com.endocore.workspace"
+    }
+  }
+}
