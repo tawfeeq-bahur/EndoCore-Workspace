@@ -119,7 +119,7 @@ export default function App() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<any | null>(null);
   const [roomsOccupants, setRoomsOccupants] = useState<Record<string, Friend[]>>({});
   const [roomsLastMessage, setRoomsLastMessage] = useState<Record<string, ChatMessage | null>>({});
   const [hubTab, setHubTab] = useState<"timeline" | "rooms">("timeline");
@@ -1105,12 +1105,14 @@ export default function App() {
     try {
       const res = await apiFetch(`/api/ai-insights${force ? "?force=true" : ""}`);
       const data = await res.json();
-      setAiInsights(data.text);
       if (data.error) {
         setInsightsError(true);
+        setAiInsights(data);
+      } else {
+        setAiInsights(data);
       }
       if (force) {
-        triggerToast("Compiled a fresh co-working briefing with Gemini AI");
+        triggerToast(data.isFallback ? "Generated briefing via heuristic engine" : "Compiled a fresh co-working briefing with Gemini AI");
       }
     } catch (e) {
       console.error("API Fetch Error (AI Insights):", e);
@@ -2897,245 +2899,293 @@ export default function App() {
                                     <div className="h-2 bg-zinc-200 rounded w-full animate-pulse"></div>
                                     <div className="h-2 bg-zinc-200 rounded w-5/6 animate-pulse"></div>
                                   </div>
-                                ) : aiInsights ? (() => {
-                                  let parsedBrief: any = null;
-                                  try {
-                                    parsedBrief = JSON.parse(aiInsights);
-                                  } catch (e) {
-                                    // Fallback if not JSON
-                                  }
+                                ) : aiInsights && aiInsights.success ? (() => {
+                                  const roomSummary = aiInsights.roomSummary || { status: "Active Room", productivityPercentage: 50, description: "Compiling room data...", activeCount: 0, totalCount: 1 };
+                                  const topPerformer = aiInsights.topPerformer || { name: "None", focusTime: "0m", apps: [], score: 0, reason: "" };
+                                  const needsAttention = aiInsights.needsAttention || { name: "None", idleTime: "0m", reason: "" };
+                                  const scrum = aiInsights.agents?.scrumCoordinator || { status: "Optimal Alignment", recommendation: "", pairSuggestions: [] };
+                                  const welfare = aiInsights.agents?.welfareCoach || { burnoutRiskIndex: 0, ergonomicNudge: "" };
+                                  const recommendations = Array.isArray(aiInsights.recommendations) ? aiInsights.recommendations : [];
+                                  const prediction = aiInsights.prediction || { completionPercentage: 50, description: "" };
+                                  const memberInsights = Array.isArray(aiInsights.memberInsights) ? aiInsights.memberInsights : [];
+                                  const focusPatterns = aiInsights.focusPatterns || { deepWorkStreak: 0, contextSwitchCount: 0, peakProductivityWindow: "--", averageSessionLength: "0m", flowStateDetected: false };
+                                  const collaborationScore = aiInsights.collaborationScore ?? 50;
+                                  const summary = aiInsights.summary || "";
 
-                                  if (parsedBrief && parsedBrief.roomSummary) {
-                                    const summaryObj = parsedBrief.roomSummary;
-                                    const roomSummary = {
-                                      status: typeof summaryObj.status === "string" ? summaryObj.status : "Active Room",
-                                      productivityPercentage: typeof summaryObj.productivityPercentage === "number" ? summaryObj.productivityPercentage : 50,
-                                      description: typeof summaryObj.description === "string" ? summaryObj.description : "No description available.",
-                                      activeCount: typeof summaryObj.activeCount === "number" ? summaryObj.activeCount : 0,
-                                      totalCount: typeof summaryObj.totalCount === "number" ? summaryObj.totalCount : 1
-                                    };
+                                  const moodColors: Record<string, string> = {
+                                    "deep_work": "bg-emerald-100 text-emerald-700 border-emerald-200",
+                                    "focused": "bg-blue-100 text-blue-700 border-blue-200",
+                                    "idle": "bg-amber-100 text-amber-700 border-amber-200",
+                                    "distracted": "bg-red-100 text-red-700 border-red-200",
+                                    "offline": "bg-zinc-100 text-zinc-500 border-zinc-200"
+                                  };
+                                  const moodLabels: Record<string, string> = {
+                                    "deep_work": "🧠 Deep Work",
+                                    "focused": "🎯 Focused",
+                                    "idle": "💤 Idle",
+                                    "distracted": "⚡ Distracted",
+                                    "offline": "⭘ Offline"
+                                  };
 
-                                    const performerObj = parsedBrief.topPerformer || {};
-                                    const topPerformer = {
-                                      name: typeof performerObj.name === "string" ? performerObj.name : "None",
-                                      focusTime: typeof performerObj.focusTime === "string" ? performerObj.focusTime : "0h",
-                                      apps: Array.isArray(performerObj.apps) ? performerObj.apps : ["VS Code"],
-                                      score: typeof performerObj.score === "number" ? performerObj.score : 0,
-                                      reason: typeof performerObj.reason === "string" ? performerObj.reason : ""
-                                    };
+                                  return (
+                                    <div className="space-y-3">
+                                      {/* Mini Cards Grid */}
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{roomSummary.productivityPercentage}%</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${roomSummary.productivityPercentage >= 60 ? "text-emerald-600" : roomSummary.productivityPercentage >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
+                                            {roomSummary.productivityPercentage >= 60 ? "Strong" : roomSummary.productivityPercentage >= 30 ? "Moderate" : "Low Activity"}
+                                          </span>
+                                        </div>
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{focusPatterns.deepWorkStreak}m</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${focusPatterns.flowStateDetected ? "text-emerald-600" : "text-zinc-400"}`}>
+                                            {focusPatterns.flowStateDetected ? "Flow Detected ✦" : "No Flow State"}
+                                          </span>
+                                        </div>
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Burnout Risk</span>
+                                          <span className={`text-xs font-bold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>{welfare.burnoutRiskIndex}/100</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-500" : welfare.burnoutRiskIndex > 30 ? "text-amber-500" : "text-emerald-500"}`}>
+                                            {welfare.burnoutRiskIndex > 60 ? "High Risk ⚠" : welfare.burnoutRiskIndex > 30 ? "Moderate" : "Healthy"}
+                                          </span>
+                                        </div>
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Collaboration</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{collaborationScore}/100</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${collaborationScore >= 60 ? "text-emerald-600" : "text-zinc-400"}`}>
+                                            {collaborationScore >= 70 ? "High Synergy" : collaborationScore >= 40 ? "Moderate" : "Independent"}
+                                          </span>
+                                        </div>
+                                      </div>
 
-                                    const attentionObj = parsedBrief.needsAttention || {};
-                                    const needsAttention = {
-                                      name: typeof attentionObj.name === "string" ? attentionObj.name : "None",
-                                      idleTime: typeof attentionObj.idleTime === "string" ? attentionObj.idleTime : "0m",
-                                      reason: typeof attentionObj.reason === "string" ? attentionObj.reason : ""
-                                    };
-
-                                    const recommendations = Array.isArray(parsedBrief.recommendations) ? parsedBrief.recommendations : [];
-                                    
-                                    const predictionObj = parsedBrief.prediction || {};
-                                    const prediction = {
-                                      completionPercentage: typeof predictionObj.completionPercentage === "number" ? predictionObj.completionPercentage : 50,
-                                      description: typeof predictionObj.description === "string" ? predictionObj.description : ""
-                                    };
-
-                                    const summary = typeof parsedBrief.summary === "string" ? parsedBrief.summary : "";
-
-                                    const telemetryRoomName = selectedRoomName || user?.activeGroup || (groups.length > 0 ? groups[0].name : null) || "";
-                                    const cycledOccupants = (telemetryRoomName === user?.activeGroup && friends && friends.length > 0
-                                      ? friends
-                                      : (Array.isArray(roomsOccupants[telemetryRoomName]) ? roomsOccupants[telemetryRoomName] : [])).filter(o => o && o.id);
-
-                                    const myHours = myActivity ? (myActivity.durationSeconds / 3600) : 0;
-                                    const myScore = Math.min(100, Math.round((myHours / (user?.productivityGoal || 6)) * 100)) || 0;
-                                    
-                                    const safeFloat = (val: any) => {
-                                      const parsed = parseFloat(val);
-                                      return isNaN(parsed) ? 0 : parsed;
-                                    };
-
-                                    const friendsScores = (cycledOccupants || []).map(o => {
-                                      const hours = safeFloat(o.todayFocusTime);
-                                      return Math.min(100, Math.round((hours / 6) * 100));
-                                    });
-                                    const avgProductivity = Math.round((myScore + friendsScores.reduce((a,b)=>a+b, 0)) / (friendsScores.length + 1)) || 0;
-
-                                    const maxHoursVal = Math.max(
-                                      myHours,
-                                      ...(cycledOccupants || []).map(o => safeFloat(o.todayFocusTime))
-                                    );
-                                    const maxHoursStr = isNaN(maxHoursVal) 
-                                      ? "0h 0m" 
-                                      : `${Math.floor(maxHoursVal)}h ${Math.round((maxHoursVal % 1) * 60)}m`;
-
-                                    const switchesCount = user?.timeline ? user.timeline.filter(t => t.app !== "Offline").length : 12;
-
-                                    const totalMembers = cycledOccupants.length + 1;
-                                    const onlineMembers = cycledOccupants.filter(o => o.status !== "offline").length + (myActivity && myActivity.app !== "Offline" ? 1 : 0);
-                                    const teamEnergyPct = Math.round((onlineMembers / totalMembers) * 100) || 50;
-
-                                    return (
-                                      <div className="space-y-3">
-                                        {/* Mini Cards Grid */}
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{avgProductivity}%</span>
-                                            <span className="text-[8px] font-semibold text-emerald-600 block mt-0.5">{avgProductivity >= 75 ? "Above Avg" : "On Track"}</span>
+                                      {/* Scrum Coordinator Panel */}
+                                      <div className="text-xs leading-relaxed font-sans max-h-[520px] overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3.5 border border-[#e4e4e7] space-y-3">
+                                        
+                                        {/* Room Status */}
+                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                          <div className="flex justify-between items-center text-xs">
+                                            <span className="text-[#09090b] font-semibold flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+                                              <span className={roomSummary.activeCount > 0 ? "text-emerald-500" : "text-zinc-400"}>
+                                                {roomSummary.activeCount > 0 ? "🟢" : "🔴"}
+                                              </span> Room Summary — {roomSummary.status}
+                                            </span>
+                                            <span className="text-[#09090b] font-bold">{roomSummary.productivityPercentage}%</span>
                                           </div>
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{maxHoursStr}</span>
-                                            <span className="text-[8px] font-semibold text-emerald-600 block mt-0.5">Highest today</span>
+                                          <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
+                                            <div 
+                                              className={`h-full rounded-full transition-all duration-700 ${roomSummary.productivityPercentage >= 60 ? "bg-emerald-500" : roomSummary.productivityPercentage >= 30 ? "bg-amber-500" : "bg-zinc-300"}`}
+                                              style={{ width: `${roomSummary.productivityPercentage}%` }}
+                                            />
                                           </div>
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Switches</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{switchesCount}</span>
-                                            <span className="text-[8px] font-semibold text-amber-600 block mt-0.5">{switchesCount > 15 ? "High switching" : "Low switching"}</span>
-                                          </div>
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Team Energy</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{teamEnergyPct}%</span>
-                                            <span className="text-[8px] font-semibold text-emerald-600 block mt-0.5">{teamEnergyPct >= 70 ? "Excellent" : "Quiet"}</span>
+                                          <p className="text-xs text-[#52525b] mt-1 leading-normal">
+                                            {roomSummary.description}
+                                          </p>
+                                          <div className="flex gap-3 text-[10px] font-mono text-[#71717a] pt-1">
+                                            <span>• {roomSummary.activeCount} / {roomSummary.totalCount} developers active</span>
+                                            <span>• {aiInsights.isFallback ? "Heuristic Engine" : "Gemini AI"}</span>
                                           </div>
                                         </div>
 
-                                        {/* Scrum Coordinator Panel */}
-                                        <div className="text-xs leading-relaxed font-sans max-h-[380px] overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3.5 border border-[#e4e4e7] space-y-3">
-                                          
-                                          {/* Room Status */}
+                                        {/* Scrum Coordinator Status */}
+                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#09090b]">🕵️ Scrum Coordinator</span>
+                                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${scrum.status === "Optimal Alignment" ? "bg-emerald-100 text-emerald-700" : scrum.status === "Critical Blockage" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                                              {scrum.status}
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-[#52525b] leading-normal">
+                                            {scrum.recommendation}
+                                          </p>
+                                          {scrum.pairSuggestions && scrum.pairSuggestions.length > 0 && (
+                                            <div className="space-y-1 mt-1">
+                                              <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-600">Pair Suggestions:</span>
+                                              {scrum.pairSuggestions.map((p: any, idx: number) => (
+                                                <div key={idx} className="text-[10px] bg-indigo-50 rounded p-1.5 border border-indigo-100">
+                                                  <span className="font-semibold">{p.stuckUser}</span> ↔ <span className="font-semibold">{p.suggestedPeer}</span>
+                                                  <span className="text-indigo-600 block mt-0.5">{p.reason}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Member Insights Grid */}
+                                        {memberInsights.length > 0 && (
                                           <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
-                                            <div className="flex justify-between items-center text-xs">
-                                              <span className="text-[#09090b] font-semibold flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
-                                                <span className="text-emerald-500">🟢</span> Room Summary
-                                              </span>
-                                              <span className="text-[#09090b] font-bold">{roomSummary.productivityPercentage}%</span>
-                                            </div>
-                                            <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
-                                              <div 
-                                                className="bg-emerald-500 h-full rounded-full transition-all duration-700" 
-                                                style={{ width: `${roomSummary.productivityPercentage}%` }}
-                                              />
-                                            </div>
-                                            <p className="text-xs text-[#52525b] mt-1 leading-normal">
-                                              {roomSummary.description}
-                                            </p>
-                                            <div className="flex gap-3 text-[10px] font-mono text-[#71717a] pt-1">
-                                              <span>• {roomSummary.activeCount} / {roomSummary.totalCount} developers active</span>
-                                              <span>• State synced</span>
+                                            <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
+                                              👥 Individual Member Analysis
+                                            </span>
+                                            <div className="space-y-1.5">
+                                              {memberInsights.map((mi: any, idx: number) => (
+                                                <div key={idx} className="flex items-center justify-between gap-2 p-2 bg-[#fafafa] rounded border border-[#e4e4e7]">
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-[11px] font-semibold text-[#09090b] truncate">{mi.name}</span>
+                                                      <span className={`text-[8px] px-1 py-0.5 rounded border font-semibold ${moodColors[mi.moodIndicator] || moodColors["offline"]}`}>
+                                                        {moodLabels[mi.moodIndicator] || "⭘ Offline"}
+                                                      </span>
+                                                    </div>
+                                                    <span className="text-[10px] text-[#71717a] block truncate">{mi.currentFocus}</span>
+                                                    <span className="text-[9px] text-[#a1a1aa] italic block mt-0.5">{mi.suggestion}</span>
+                                                  </div>
+                                                  <div className="text-right shrink-0">
+                                                    {mi.productivityScore >= 0 && (
+                                                      <>
+                                                        <span className={`text-xs font-bold block ${mi.productivityScore >= 60 ? "text-emerald-600" : mi.productivityScore >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
+                                                          {mi.productivityScore}%
+                                                        </span>
+                                                        <span className="text-[9px] text-[#a1a1aa] block">{mi.focusDuration}</span>
+                                                      </>
+                                                    )}
+                                                    {mi.productivityScore < 0 && (
+                                                      <span className="text-[9px] text-[#a1a1aa] italic">Private</span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
                                             </div>
                                           </div>
+                                        )}
 
-                                          {/* Top Performer */}
-                                          {topPerformer && topPerformer.name !== "None" && (
-                                            <div className="p-3 bg-amber-50/80 rounded-md border border-amber-200 space-y-1.5">
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
-                                                  🏆 Top Performer
-                                                </span>
-                                                <span className="text-[9px] bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
-                                                  Score: {topPerformer.score}%
-                                                </span>
-                                              </div>
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="font-semibold text-[#09090b]">{topPerformer.name}</span>
-                                                <span className="text-[#71717a] font-mono text-[10px]">Focus: {topPerformer.focusTime}</span>
-                                              </div>
+                                        {/* Top Performer */}
+                                        {topPerformer && topPerformer.name !== "None" && (
+                                          <div className="p-3 bg-amber-50/80 rounded-md border border-amber-200 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                                                🏆 Top Performer
+                                              </span>
+                                              <span className="text-[9px] bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
+                                                Score: {topPerformer.score}%
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="font-semibold text-[#09090b]">{topPerformer.name}</span>
+                                              <span className="text-[#71717a] font-mono text-[10px]">Focus: {topPerformer.focusTime}</span>
+                                            </div>
+                                            {topPerformer.apps && topPerformer.apps.length > 0 && (
                                               <div className="text-[10px] text-[#52525b]">
                                                 <span className="font-semibold text-[#09090b]">Apps: </span>
                                                 {topPerformer.apps.join(" • ")}
                                               </div>
-                                              <p className="text-[10px] italic text-amber-900 border-t border-amber-200/60 pt-1">
-                                                {topPerformer.reason}
-                                              </p>
+                                            )}
+                                            <p className="text-[10px] italic text-amber-900 border-t border-amber-200/60 pt-1">
+                                              {topPerformer.reason}
+                                            </p>
+                                          </div>
+                                        )}
+
+                                        {/* Needs Attention */}
+                                        {needsAttention && needsAttention.name !== "None" && (
+                                          <div className="p-3 bg-rose-50/80 rounded-md border border-rose-200 space-y-1">
+                                            <span className="text-[10px] font-semibold text-rose-800 uppercase tracking-wider block">
+                                              ⚠️ Needs Attention
+                                            </span>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="font-semibold text-[#09090b]">{needsAttention.name}</span>
+                                              <span className="text-rose-700 font-mono text-[10px]">{needsAttention.idleTime}</span>
+                                            </div>
+                                            <p className="text-[10px] text-rose-900 leading-normal">
+                                              {needsAttention.reason}
+                                            </p>
+                                          </div>
+                                        )}
+
+                                        {/* Welfare Coach */}
+                                        <div className="p-2.5 bg-sky-50/60 rounded-md border border-sky-200 space-y-1">
+                                          <span className="text-[10px] font-semibold text-sky-800 uppercase tracking-wider block">
+                                            🩺 Welfare & Productivity Coach
+                                          </span>
+                                          <p className="text-[10px] text-sky-900 leading-normal">
+                                            {welfare.ergonomicNudge}
+                                          </p>
+                                          {welfare.targetUsers && welfare.targetUsers.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                              {welfare.targetUsers.map((u: string, i: number) => (
+                                                <span key={i} className="text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded font-medium">{u}</span>
+                                              ))}
                                             </div>
                                           )}
+                                        </div>
 
-                                          {/* Needs Attention */}
-                                          {needsAttention && needsAttention.name !== "None" && (
-                                            <div className="p-3 bg-rose-50/80 rounded-md border border-rose-200 space-y-1">
-                                              <span className="text-[10px] font-semibold text-rose-800 uppercase tracking-wider block">
-                                                ⚠️ Needs Attention
+                                        {/* Focus Patterns */}
+                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                          <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
+                                            📊 Focus Patterns
+                                          </span>
+                                          <div className="grid grid-cols-2 gap-1.5">
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Deep Work Streak</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.deepWorkStreak}m</span>
+                                            </div>
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Context Switches</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.contextSwitchCount}</span>
+                                            </div>
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Peak Window</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.peakProductivityWindow}</span>
+                                            </div>
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Avg Session</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.averageSessionLength}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Recommendations */}
+                                        {recommendations && recommendations.length > 0 && (
+                                          <div className="space-y-1">
+                                            <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
+                                              🤖 AI Recommendations
+                                            </span>
+                                            <ul className="space-y-1 pl-1">
+                                              {recommendations.map((rec: string, idx: number) => (
+                                                <li key={idx} className="flex items-start text-[11px] text-[#09090b]">
+                                                  <span className="text-blue-600 mr-1.5">•</span>
+                                                  <span>{rec}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+
+                                        {/* Prediction */}
+                                        {prediction && (
+                                          <div className="space-y-1 pt-2 border-t border-[#e4e4e7]">
+                                            <div className="flex justify-between items-center text-xs">
+                                              <span className="text-[#09090b] font-semibold uppercase tracking-wider text-[10px]">
+                                                🔮 Daily Goal Prediction
                                               </span>
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="font-semibold text-[#09090b]">{needsAttention.name}</span>
-                                                <span className="text-rose-700 font-mono text-[10px]">Idle: {needsAttention.idleTime}</span>
-                                              </div>
-                                              <p className="text-[10px] text-rose-900 leading-normal">
-                                                {needsAttention.reason}
-                                              </p>
+                                              <span className="text-[#09090b] font-bold">{prediction.completionPercentage}%</span>
                                             </div>
-                                          )}
-
-                                          {/* Recommendations */}
-                                          {recommendations && recommendations.length > 0 && (
-                                            <div className="space-y-1">
-                                              <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
-                                                🤖 AI Recommendations
-                                              </span>
-                                              <ul className="space-y-1 pl-1">
-                                                {recommendations.map((rec: string, idx: number) => (
-                                                  <li key={idx} className="flex items-start text-[11px] text-[#09090b]">
-                                                    <span className="text-blue-600 mr-1.5">•</span>
-                                                    <span>{rec}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
+                                            <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
+                                              <div 
+                                                className="bg-indigo-600 h-full rounded-full transition-all duration-700" 
+                                                style={{ width: `${prediction.completionPercentage}%` }}
+                                              />
                                             </div>
-                                          )}
+                                            <p className="text-[10px] text-[#71717a] italic">
+                                              {prediction.description}
+                                            </p>
+                                          </div>
+                                        )}
 
-                                          {/* Prediction */}
-                                          {prediction && (
-                                            <div className="space-y-1 pt-2 border-t border-[#e4e4e7]">
-                                              <div className="flex justify-between items-center text-xs">
-                                                <span className="text-[#09090b] font-semibold uppercase tracking-wider text-[10px]">
-                                                  🔮 Estimated Room Completion
-                                                </span>
-                                                <span className="text-[#09090b] font-bold">{prediction.completionPercentage}%</span>
-                                              </div>
-                                              <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
-                                                <div 
-                                                  className="bg-indigo-600 h-full rounded-full transition-all duration-700" 
-                                                  style={{ width: `${prediction.completionPercentage}%` }}
-                                                />
-                                              </div>
-                                              <p className="text-[10px] text-[#71717a] italic">
-                                                {prediction.description}
-                                              </p>
-                                            </div>
-                                          )}
-
-                                          {/* Summary */}
-                                          <div className="pt-2 border-t border-[#e4e4e7] text-[11px] text-[#52525b] italic font-sans leading-normal">
+                                        {/* Summary Footer */}
+                                        <div className="pt-2 border-t border-[#e4e4e7]">
+                                          <p className="text-[11px] text-[#52525b] italic font-sans leading-normal">
                                             {summary}
+                                          </p>
+                                          <div className="flex items-center gap-2 mt-1.5">
+                                            <span className="text-[8px] font-mono text-[#a1a1aa]">
+                                              {aiInsights.isFallback ? "⚙ Heuristic Engine" : "✦ Gemini AI"} • {new Date(aiInsights.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
                                           </div>
                                         </div>
                                       </div>
-                                    );
-                                  }
-
-                                  // Fallback to original text rendering if JSON parse failed
-                                  return (
-                                    <div className="text-xs leading-relaxed font-sans max-h-36 overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3 border border-[#e4e4e7]">
-                                      {aiInsights.split("\n").slice(0, 8).map((line, idx) => {
-                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
-                                          return (
-                                            <h5 key={idx} className="text-[#09090b] font-bold text-xs mt-2 mb-1">
-                                              {line.replace(/[\*#]/g, "").trim()}
-                                            </h5>
-                                          );
-                                        }
-                                        return (
-                                          <p key={idx} className="mb-1 text-[#52525b]">
-                                            {line.startsWith("-") || line.startsWith("*") ? (
-                                              <span className="flex items-start">
-                                                <span className="text-amber-600 mr-1.5">•</span>
-                                                <span>{line.substring(2).trim()}</span>
-                                              </span>
-                                            ) : line}
-                                          </p>
-                                        );
-                                      })}
                                     </div>
                                   );
                                 })() : (
@@ -4077,8 +4127,8 @@ export default function App() {
                                   </div>
                                 ) : (
                                   <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
-                                    {aiInsights ? (
-                                      aiInsights.split("\n").map((line, idx) => {
+                                    {aiInsights && aiInsights.text ? (
+                                      aiInsights.text.split("\n").map((line: string, idx: number) => {
                                         if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
                                           return (
                                             <h4 key={idx} className="text-zinc-800 dark:text-[#c4b69d] font-serif italic text-sm font-bold mt-4 mb-2">
@@ -4086,12 +4136,13 @@ export default function App() {
                                             </h4>
                                           );
                                         }
+                                        if (!line.trim()) return null;
                                         return (
                                           <p key={idx} className={`pl-1 leading-relaxed ${textSub}`}>
-                                            {line.startsWith("-") || line.startsWith("*") ? (
+                                            {line.startsWith("-") || line.startsWith("*") || line.startsWith("•") ? (
                                               <span className="flex items-start">
                                                 <span className="text-neutral-400 dark:text-[#a5957b] mr-2">•</span>
-                                                <span>{line.substring(2).trim()}</span>
+                                                <span>{line.replace(/^[-*•]\s*/, "").trim()}</span>
                                               </span>
                                             ) : line}
                                           </p>
@@ -4374,32 +4425,150 @@ export default function App() {
                                     <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-5/6 animate-pulse"></div>
                                     <span className="text-[10px] font-mono text-stone-500">Retrieving intelligence briefs...</span>
                                   </div>
-                                ) : (
-                                  <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
-                                    {aiInsights ? (
-                                      aiInsights.split("\n").map((line, idx) => {
-                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
-                                          return (
-                                            <h4 key={idx} className="text-zinc-800 dark:text-[#c4b69d] font-serif italic text-sm font-bold mt-4 mb-2">
-                                              {line.replace(/[\*#]/g, "").trim()}
-                                            </h4>
-                                          );
-                                        }
-                                        return (
-                                          <p key={idx} className={`pl-1 leading-relaxed ${textSub}`}>
-                                            {line.startsWith("-") || line.startsWith("*") ? (
-                                              <span className="flex items-start">
-                                                <span className="text-neutral-400 dark:text-[#a5957b] mr-2">•</span>
-                                                <span>{line.substring(2).trim()}</span>
-                                              </span>
-                                            ) : line}
-                                          </p>
-                                        );
-                                      })
-                                    ) : (
-                                      <p className="text-stone-500 text-xs italic">No co-working briefing stored. Click reload icon above to fetch.</p>
+                                ) : aiInsights && aiInsights.success ? (
+                                  <div className="text-xs space-y-5 leading-relaxed font-sans mt-2">
+                                    {/* Summary */}
+                                    <div className="space-y-2">
+                                      <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Executive Summary</h4>
+                                      <p className={`leading-relaxed ${textSub}`}>{aiInsights.summary}</p>
+                                    </div>
+
+                                    {/* Room Status */}
+                                    {aiInsights.roomSummary && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Room Analysis — {aiInsights.roomSummary.status}</h4>
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex-1">
+                                            <div className={`w-full rounded-full h-2 overflow-hidden ${themeMode === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                              <div className={`h-full rounded-full transition-all duration-700 ${aiInsights.roomSummary.productivityPercentage >= 60 ? 'bg-emerald-500' : aiInsights.roomSummary.productivityPercentage >= 30 ? 'bg-amber-500' : 'bg-zinc-400'}`} style={{ width: `${aiInsights.roomSummary.productivityPercentage}%` }} />
+                                            </div>
+                                          </div>
+                                          <span className="text-sm font-bold">{aiInsights.roomSummary.productivityPercentage}%</span>
+                                        </div>
+                                        <p className={textSub}>{aiInsights.roomSummary.description}</p>
+                                        <span className={`text-[10px] font-mono ${textSub}`}>{aiInsights.roomSummary.activeCount} / {aiInsights.roomSummary.totalCount} developers active</span>
+                                      </div>
                                     )}
+
+                                    {/* Member Insights */}
+                                    {aiInsights.memberInsights && aiInsights.memberInsights.length > 0 && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Individual Member Analysis</h4>
+                                        <div className="space-y-2">
+                                          {aiInsights.memberInsights.map((mi: any, idx: number) => (
+                                            <div key={idx} className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${themeMode === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="font-semibold truncate">{mi.name}</span>
+                                                  <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${
+                                                    mi.moodIndicator === 'deep_work' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                                    mi.moodIndicator === 'focused' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                    mi.moodIndicator === 'idle' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                                                    'bg-zinc-100 text-zinc-500 border-zinc-200'
+                                                  }`}>
+                                                    {mi.moodIndicator === 'deep_work' ? '🧠 Deep Work' : mi.moodIndicator === 'focused' ? '🎯 Focused' : mi.moodIndicator === 'idle' ? '💤 Idle' : '⭘ Offline'}
+                                                  </span>
+                                                </div>
+                                                <span className={`text-[10px] block mt-0.5 ${textSub}`}>{mi.currentFocus}</span>
+                                                <span className={`text-[10px] italic block mt-0.5 ${textSub}`}>{mi.suggestion}</span>
+                                              </div>
+                                              <div className="text-right shrink-0">
+                                                <span className={`text-sm font-bold ${mi.productivityScore >= 60 ? 'text-emerald-500' : mi.productivityScore >= 30 ? 'text-amber-500' : 'text-zinc-400'}`}>{mi.productivityScore >= 0 ? `${mi.productivityScore}%` : 'Private'}</span>
+                                                <span className={`text-[9px] block ${textSub}`}>{mi.focusDuration}</span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Scrum Coordinator */}
+                                    {aiInsights.agents?.scrumCoordinator && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Scrum Coordinator Agent</h4>
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${aiInsights.agents.scrumCoordinator.status === 'Optimal Alignment' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{aiInsights.agents.scrumCoordinator.status}</span>
+                                        </div>
+                                        <p className={textSub}>{aiInsights.agents.scrumCoordinator.recommendation}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Welfare Coach */}
+                                    {aiInsights.agents?.welfareCoach && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Welfare & Productivity Coach</h4>
+                                        <div className="flex items-center gap-3">
+                                          <span className={textSub}>Burnout Risk:</span>
+                                          <span className={`font-bold ${aiInsights.agents.welfareCoach.burnoutRiskIndex > 60 ? 'text-red-500' : aiInsights.agents.welfareCoach.burnoutRiskIndex > 30 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiInsights.agents.welfareCoach.burnoutRiskIndex}/100</span>
+                                        </div>
+                                        <p className={textSub}>{aiInsights.agents.welfareCoach.ergonomicNudge}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Recommendations */}
+                                    {aiInsights.recommendations && aiInsights.recommendations.length > 0 && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>AI Recommendations</h4>
+                                        <ul className="space-y-1.5">
+                                          {aiInsights.recommendations.map((rec: string, idx: number) => (
+                                            <li key={idx} className={`flex items-start ${textSub}`}>
+                                              <span className="text-blue-500 mr-2">•</span>
+                                              <span>{rec}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                    {/* Focus Patterns */}
+                                    {aiInsights.focusPatterns && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Focus Pattern Analysis</h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                          {[
+                                            { label: 'Deep Work Streak', value: `${aiInsights.focusPatterns.deepWorkStreak}m` },
+                                            { label: 'Context Switches', value: aiInsights.focusPatterns.contextSwitchCount },
+                                            { label: 'Peak Window', value: aiInsights.focusPatterns.peakProductivityWindow },
+                                            { label: 'Avg Session', value: aiInsights.focusPatterns.averageSessionLength },
+                                          ].map((item, idx) => (
+                                            <div key={idx} className={`p-2.5 rounded-lg border ${themeMode === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                                              <span className={`text-[9px] uppercase tracking-wider block ${textSub}`}>{item.label}</span>
+                                              <span className="text-sm font-semibold block mt-0.5">{item.value}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <p className={textSub}>Flow State: {aiInsights.focusPatterns.flowStateDetected ? '✅ Detected in current session' : '❌ Not detected yet'}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Prediction */}
+                                    {aiInsights.prediction && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Daily Completion Prediction</h4>
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex-1">
+                                            <div className={`w-full rounded-full h-2 overflow-hidden ${themeMode === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                              <div className="bg-indigo-500 h-full rounded-full transition-all duration-700" style={{ width: `${aiInsights.prediction.completionPercentage}%` }} />
+                                            </div>
+                                          </div>
+                                          <span className="text-sm font-bold">{aiInsights.prediction.completionPercentage}%</span>
+                                        </div>
+                                        <p className={`italic ${textSub}`}>{aiInsights.prediction.description}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Footer */}
+                                    <div className={`pt-3 border-t ${themeMode === 'dark' ? 'border-zinc-800' : 'border-zinc-200'} flex items-center justify-between`}>
+                                      <span className={`text-[9px] font-mono ${textSub}`}>
+                                        {aiInsights.isFallback ? '⚙ Heuristic Engine' : '✦ Gemini AI'} • Collaboration: {aiInsights.collaborationScore}/100
+                                      </span>
+                                      <span className={`text-[9px] font-mono ${textSub}`}>
+                                        {new Date(aiInsights.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
                                   </div>
+                                ) : (
+                                  <p className="text-stone-500 text-xs italic">No co-working briefing stored. Click reload icon above to fetch.</p>
                                 )}
                               </div>
                             </div>

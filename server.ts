@@ -3098,7 +3098,7 @@ function getRoomFallbackInsights(activeGroup: string, currentUser: any, members:
   return JSON.stringify(payload);
 }
 
-// 6. smart AI briefing with Gemini 3.5 Flash!
+// 6. Smart Multi-Agent AI Briefing with Google Gemini 3.6 Flash!
 let lastAiInsightsPersonal: string = "";
 let lastAiTimestampPersonal: number = 0;
 let lastAiInsightsRoom: string = "";
@@ -3108,7 +3108,7 @@ app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
   const forceRefresh = req.query.force === "true";
   const type = req.query.type || "room"; // 'personal' or 'room'
 
-  // Serve cache if fresh
+  // Serve cache if fresh (within 2 minutes)
   if (type === "personal" && lastAiInsightsPersonal && (Date.now() - lastAiTimestampPersonal < 120_000) && !forceRefresh) {
     return res.json({ text: lastAiInsightsPersonal, cached: true });
   }
@@ -3116,144 +3116,111 @@ app.get("/api/ai-insights", authenticateToken, async (req: any, res) => {
     return res.json({ text: lastAiInsightsRoom, cached: true });
   }
 
-  let user: any = null;
-  let activeGroup = "Engineering Team";
-  let friendsList: any[] = [];
-  let myHours = 0;
-  let myActivity: any = null;
-
   try {
-    user = await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      include: {
-        activityLogs: true
-      }
+      include: { activityLogs: true }
     });
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    activeGroup = user.activeGroup;
-    const group = activeGroup ? await prisma.group.findUnique({
-      where: { name: activeGroup }
-    }) : null;
-
-    if (group) {
-      const members = await prisma.groupMember.findMany({
-        where: { groupId: group.id },
-        include: {
-          user: true
-        }
-      });
-      const friendPromises = members
-        .filter(m => m.userId !== req.user.id)
-        .map(async m => {
-          const u = m.user as any;
-          const currentAct = await getUserActiveActivity(u.id);
-          u.activities = [currentAct]; // Mock for compatibility
-          return u;
-        });
-      friendsList = await Promise.all(friendPromises);
-    }
-
-    myActivity = await getUserActiveActivity(req.user.id);
-    const myActiveSeconds = (myActivity.app !== "Offline" && !myActivity.isPaused) ? myActivity.durationSeconds : 0;
-    myHours = parseFloat((myActiveSeconds / 3600).toFixed(1));
-
+    const activeGroup = user.activeGroup || "Engineering Team";
     const key = process.env.GEMINI_API_KEY;
     if (!key || key.includes("your-gemini-api-key") || key === "MY_GEMINI_API_KEY") {
-      throw new Error("Missing valid GEMINI_API_KEY environment variable. Defaulting to high-quality fallback.");
+      throw new Error("Missing valid GEMINI_API_KEY environment variable.");
     }
 
-    const ai = new GoogleGenAI({
-      apiKey: key,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
+    const ai = new GoogleGenAI({ apiKey: key });
+
+    // Fetch live room members activity
+    const groupMembers = await prisma.user.findMany({
+      where: { activeGroup },
+      select: { id: true, name: true, role: true, privacyMode: true }
     });
+
+    const memberActivities = await Promise.all(
+      groupMembers.map(async (m) => {
+        const act = await getUserActiveActivity(m.id);
+        return {
+          id: m.id,
+          name: m.name,
+          role: m.role || "Developer",
+          app: act.app || "Offline",
+          project: act.project || "Workspace Activity",
+          durationSeconds: act.durationSeconds || 0,
+          isPaused: act.isPaused || false,
+          privacyMode: m.privacyMode || "Public"
+        };
+      })
+    );
 
     let prompt = "";
     if (type === "personal") {
-      prompt = `You are a helpful, extremely clever, and witty developer co-working assistant companion.
-Here is the user's (${user.name}) productivity stats today:
-Focus Time: ${myHours} hours (Goal: ${user.productivityGoal} hours)
-Distraction Flags: ${user.distractionsCount}
-Focus Streak: ${user.focusStreak} days
-Current status: "${user.status}"
-Active Activity: tracking ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}).
+      const myAct = memberActivities.find(m => m.id === user.id) || { app: "Offline", project: "None", durationSeconds: 0 };
+      const hours = (myAct.durationSeconds / 3600).toFixed(1);
 
-Please generate a premium, tailored Personal Productivity Coaching Briefing.
-Format your output in clean, eye-catching Markdown with the following structured sections:
-1.  **⚡ PERSONAL PULSE SUMMARY**: A wittily formulated summary of the user's performance today compared to yesterday.
-2.  **🎮 FOCUS WINDOW DETAILS**: A peak productivity hour recommendation (e.g. "Best focus window: 9 AM - 11 AM").
-3.  **💪 ACTIONABLE RECOMMENDATION**: A tailored suggestion on what the user should do next to maintain focus.
+      prompt = `You are the EndoCore AI Personal Developer Coach.
+User Profile:
+- Name: ${user.name} (${user.role})
+- Today Focus: ${hours} hours (Goal: ${user.productivityGoal} hours)
+- Active App: ${myAct.app}
+- Active Project: ${myAct.project}
+- Focus Streak: ${user.focusStreak} days
 
-Keep it extremely concise, engaging, and professional but full of developer humor! Limit the entire response to exactly 100-130 words. Do not praise yourself or write self-referential introductory statements. Start directly with the pulse.`;
+Generate a 100% LLM AI Personal Development Briefing.
+Format your output in clean Markdown with:
+1. ⚡ **PERSONAL PULSE**: Tailored analysis of performance today.
+2. 🎮 **BEST FOCUS WINDOW**: Recommended deep work hours.
+3. 💪 **ACTIONABLE NEXT STEP**: Specific task advice.`;
     } else {
-      const myStateStr = `User name: ${user.name}, active tracking: ${myActivity.app} on project "${myActivity.project}" (duration: ${Math.floor(myActivity.durationSeconds / 60)} minutes, paused: ${myActivity.isPaused}). Focus goal is ${user.productivityGoal} hours.`;
-      
-      const friendsStateStr = friendsList.map(u => {
-        const currentAct = u.activities[0] || { app: "Offline", project: "None", durationSeconds: 0 };
-        const uActiveSeconds = u.activities.reduce((acc: number, act: any) => acc + act.durationSeconds, 0);
-        const uHours = (uActiveSeconds / 3600).toFixed(1);
-        const todayFocusTime = `${uHours}h`;
-        const focusScore = Math.min(100, Math.round((parseFloat(uHours) / (u.productivityGoal || 6)) * 100)) || 0;
+      prompt = `You are the EndoCore AI Multi-Agent Scrum Master & Team Architect for channel "${activeGroup}".
+Live Team Telemetry:
+${JSON.stringify(memberActivities, null, 2)}
 
-        return `Friend "${u.name}" (${u.role}) is status: "${u.status}" using "${currentAct.app}" for project "${currentAct.project}". Today total focus time: ${todayFocusTime}, focus score: ${focusScore}%.`;
-      }).join("\n");
-
-      prompt = `You are the EndoCore AI Scrum Coordinator.
-You receive live telemetry from every user in the current room:
-- My state: ${myStateStr}
-- Colleagues:
-${friendsStateStr}
-
-Provide a concise, data-driven daily focus and scrum coordination briefing for the channel "${activeGroup}".
-You must output a single, flat JSON object.
-Return exactly the following JSON structure (do not wrap in markdown tags, return only raw JSON):
+Analyze team alignment, active window titles, debugging blockages, and burnout risks.
+Output ONLY a single, valid raw JSON object matching this exact schema:
 {
   "roomSummary": {
-    "status": "A short focused status indicator (e.g. Focused Development Session, Average Productivity, High Multitasking Vibe)",
-    "productivityPercentage": number (calculate average focus percentage of the room members based on goals achieved),
-    "description": "A short summary paragraph of the overall room activity level, mentioning active vs idle users.",
-    "activeCount": number (number of active online developers in the room),
-    "totalCount": number (total number of members in the room)
+    "status": "Short status indicator (e.g. High Focus Velocity, Extended Debugging, Optimal Sprint Alignment)",
+    "productivityPercentage": number (0-100 average goal progress of active members),
+    "description": "Comprehensive 2-sentence summary of team focus levels, active projects, and active vs idle counts.",
+    "activeCount": number,
+    "totalCount": number
   },
   "topPerformer": {
-    "name": "Name of the user with the most focus hours or best deep work streak today",
-    "focusTime": "Formated focus duration (e.g. 5h 48m)",
-    "apps": ["List of top 2-3 active tools used by this top performer, e.g. VS Code, Chrome"],
-    "score": number (focus score out of 100),
-    "reason": "Detailed metric-driven reason why they are the top performer (e.g. Low switching, completed 27 events)"
+    "name": "Developer with highest focus duration or best deep work streak today",
+    "focusTime": "Formatted focus time e.g. 5h 40m",
+    "apps": ["VS Code", "Terminal"],
+    "score": number (0-100),
+    "reason": "Detailed metric-driven reason why they are top performer"
   },
   "needsAttention": {
-    "name": "Name of user with long idle times, offline status, or high app switching. If none, write 'None'",
-    "idleTime": "Formatted idle duration, e.g. 48 mins or '0 mins'",
-    "reason": "Reason why they need attention, or 'No issues detected' if none"
+    "name": "Developer who is idle, offline, or stuck on debugging errors",
+    "idleTime": "Formatted idle duration e.g. 45m",
+    "reason": "Clear explanation of blockage or context switching risk"
   },
   "recommendations": [
-    "List of 2 specific actionable recommendations for the team or individuals (e.g. suggest a break, pairing, review task allocation)"
+    "Actionable Scrum pairing advice 1",
+    "Ergonomic micro-break or sprint pacing advice 2"
   ],
   "prediction": {
-    "completionPercentage": number (estimated sprint completion or room daily goal completion percentage),
-    "description": "Scrum master estimation on whether team tasks will finish on time based on current focus levels."
+    "completionPercentage": number (0-100 estimated sprint task completion),
+    "description": "AI estimate on whether team tasks will finish on schedule"
   },
-  "summary": "A professional Scrum-style closing paragraph summarizing today's overall team status, workspace mood, and momentum."
+  "summary": "Full AI synthesized Scrum master closing statement summarizing workspace momentum and recommended team pairings."
 }`;
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
-        temperature: 0.85,
         responseMimeType: type === "room" ? "application/json" : undefined
       }
     });
 
-    const outputText = response.text || "No insights could be parsed.";
-    
+    const outputText = response.text || "{}";
+
     if (type === "personal") {
       lastAiInsightsPersonal = outputText;
       lastAiTimestampPersonal = Date.now();
@@ -3261,25 +3228,11 @@ Return exactly the following JSON structure (do not wrap in markdown tags, retur
       lastAiInsightsRoom = outputText;
       lastAiTimestampRoom = Date.now();
     }
-    
-    res.json({ text: outputText, cached: false });
 
+    res.json({ text: outputText, cached: false });
   } catch (error: any) {
-    console.error("Gemini API Error:", error.message || error);
-    
-    const fallbackUser = user || { name: "Developer", productivityGoal: 6, distractionsCount: 0, focusStreak: 0, status: "Offline", activityLogs: [] };
-    if (type === "personal") {
-      const fallback = getPersonalFallbackInsights(fallbackUser, fallbackUser.activityLogs || [], myHours);
-      lastAiInsightsPersonal = fallback;
-      lastAiTimestampPersonal = Date.now();
-      res.json({ text: fallback, cached: true, error: true, details: error.message });
-    } else {
-      fallbackUser.activities = [myActivity || { app: "Offline", project: "None", durationSeconds: 0 }];
-      const fallback = getRoomFallbackInsights(activeGroup || "Engineering Team", fallbackUser, friendsList);
-      lastAiInsightsRoom = fallback;
-      lastAiTimestampRoom = Date.now();
-      res.json({ text: fallback, cached: true, error: true, details: error.message });
-    }
+    console.error("Gemini API Error in /api/ai-insights:", error.message || error);
+    res.status(500).json({ error: "Gemini AI execution failed: " + (error.message || "Unknown error") });
   }
 });
 
