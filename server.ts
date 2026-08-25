@@ -3076,7 +3076,7 @@ async function startServer() {
   const hasDist = fs.existsSync(path.join(distPath, "index.html"));
   const isDevMode = process.env.NODE_ENV === "development";
 
-  if (hasDist && !isDevMode) {
+  if (hasDist && process.env.NODE_ENV === "production") {
     // Production Mode: Serve static dist assets
     console.log("📦 Serving built static frontend from:", distPath);
     app.use(express.static(distPath));

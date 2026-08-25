@@ -2810,9 +2810,7 @@ export default function App() {
     );
   }
 
-  if (isMobile) {
-    return renderMobileView();
-  }
+  // Render the responsive Web Workstation Dashboard for all viewports (mobile browser & desktop)
 
 
   return (
@@ -2947,22 +2945,27 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative">
 
         {/* Elegant Top Header with Minimalist Meta Controls */}
-        <header className={`h-16 border-b shrink-0 px-6 md:px-8 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
+        <header className={`h-16 border-b shrink-0 px-3.5 sm:px-6 md:px-8 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
           }`}>
-          <div className="flex items-center space-x-3 flex-1">
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
             {/* Mobile Hamburger Menu Trigger */}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 text-stone-500 hover:text-stone-300 rounded-lg hover:bg-neutral-800/40 cursor-pointer"
+              className="md:hidden p-2 text-stone-400 hover:text-stone-200 rounded-xl hover:bg-neutral-800/40 cursor-pointer shrink-0"
               title="Open Navigation"
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            <h1 className="text-lg font-serif italic tracking-tight font-medium">Workspace Status</h1>
+            {/* Mobile Brand Tag & Page Title */}
+            <div className="flex items-center space-x-2 min-w-0">
+              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
+              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
+              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">Workspace Status</h1>
+            </div>
 
             {/* System Status Quick Indicator */}
-            <div className="flex items-center space-x-1.5 bg-[#f5f4ef]/40 dark:bg-stone-900/40 px-2.5 py-1 rounded-full border dark:border-neutral-850 border-stone-250/60 text-[9px] font-mono text-stone-400">
+            <div className="hidden xs:flex items-center space-x-1.5 bg-[#f5f4ef]/40 dark:bg-stone-900/40 px-2.5 py-1 rounded-full border dark:border-neutral-850 border-stone-250/60 text-[9px] font-mono text-stone-400 shrink-0">
               <span className={`h-1.5 w-1.5 rounded-full inline-block ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
                   ? "bg-emerald-500 animate-pulse"
                   : "bg-red-500 animate-ping"
