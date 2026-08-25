@@ -42,7 +42,12 @@ import {
   Calendar,
   Zap,
   Check,
-  Upload
+  Upload,
+  Smartphone,
+  Tablet,
+  Monitor,
+  Cpu,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -59,12 +64,7 @@ import {
 } from "./types";
 import { RoomCreationWizard } from "./components/RoomCreationWizard";
 import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
-<<<<<<< HEAD
-=======
-import { MobileCompanionShell } from "./mobile/MobileCompanionShell";
-import { usePlatformMode } from "./mobile/hooks/usePlatformMode";
 
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
 export default function App() {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [mobileTab, setMobileTab] = useState<"home" | "focus" | "routines" | "experts" | "profile" | "control" | "room" | "me">("home");
@@ -194,6 +194,23 @@ export default function App() {
   // Responsive layout state
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isRoomWizardOpen, setIsRoomWizardOpen] = useState<boolean>(false);
+
+  // Connected Devices Matrix State
+  const [showDevicesList, setShowDevicesList] = useState<boolean>(true);
+  const [connectedDevices, setConnectedDevices] = useState<Array<{
+    id: string;
+    name: string;
+    type: "desktop" | "laptop" | "mobile" | "tablet" | "monitor";
+    os: string;
+    status: "active" | "online" | "idle" | "display_active";
+    lastSync: string;
+  }>>([
+    { id: "dev-1", name: "WS-WORKSTATION-11 (Windows PC)", type: "desktop", os: "Windows 11 Pro", status: "active", lastSync: "Live (Current Machine)" },
+    { id: "dev-2", name: "Pixel 8 Pro (Mobile Browser)", type: "mobile", os: "Android 14", status: "online", lastSync: "Synced 15s ago" },
+    { id: "dev-3", name: "MacBook Pro 16\" (M3 Max)", type: "laptop", os: "macOS Sequoia", status: "idle", lastSync: "Synced 12m ago" },
+    { id: "dev-4", name: "Dell UltraSharp U2723QE (Dual Monitor)", type: "monitor", os: "3840x2160 @ 60Hz", status: "display_active", lastSync: "Monitor Active" },
+    { id: "dev-5", name: "iPad Pro 12.9\" (Tablet Companion)", type: "tablet", os: "iPadOS 17.5", status: "online", lastSync: "Synced 2m ago" },
+  ]);
 
   useEffect(() => {
     groupsRef.current = groups;
@@ -2027,930 +2044,6 @@ export default function App() {
     );
   }
 
-  // --- START OF MOBILE COMPANION VIEW ---
-  const renderMobileView = () => {
-    const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : "");
-    const occupants = roomsOccupants[activeGroupName] || [];
-    const todayFocusHours = myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0";
-    const productivityScore = myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0;
-    const greeting = getGreeting();
-    const firstName = user ? user.name.split(" ")[0] : "Tawfeeq";
-
-    // Standardized active tab selection (with fallbacks for legacy tab names)
-    const currentTab = mobileTab === "control" ? "home" : mobileTab === "room" ? "focus" : mobileTab === "me" ? "profile" : mobileTab;
-
-    const toggleRoutine = (id: string) => {
-      setMobileRoutines(prev => prev.map(item => item.id === id ? { ...item, done: !item.done } : item));
-      triggerToast("Routine status updated");
-    };
-
-    const doneRoutinesCount = mobileRoutines.filter(r => r.done).length;
-    const routinesPercentage = Math.round((doneRoutinesCount / mobileRoutines.length) * 100);
-
-    const expertsList = [
-      {
-        id: "exp1",
-        name: "EndoAI Focus Coach",
-        title: "Flow State & Performance Mentor",
-        specialty: "Deep Work & Context-Switch Optimization",
-        rating: "4.9",
-        exp: "AI Co-Pilot",
-        rate: "Free / Included",
-        avatarBg: "bg-blue-500",
-        verified: true,
-        category: "AI Co-Pilots"
-      },
-      {
-        id: "exp2",
-        name: "DevOps Sentinel AI",
-        title: "GitOps & CI/CD Diagnostic Daemon",
-        specialty: "Automated PR Reviews & Build Telemetry",
-        rating: "4.95",
-        exp: "24/7 Daemon",
-        rate: "Free / Included",
-        avatarBg: "bg-[#00d2a0]",
-        verified: true,
-        category: "AI Co-Pilots"
-      },
-      {
-        id: "exp3",
-        name: "Sarah Jenkins",
-        title: "Developer Burnout & Energy Coach",
-        specialty: "Mental Stamina & Posture Balance",
-        rating: "5.0",
-        exp: "10 yrs exp",
-        rate: "$95 / hour",
-        avatarBg: "bg-purple-500",
-        verified: true,
-        category: "Focus Coaches"
-      },
-      {
-        id: "exp4",
-        name: "Dr. Stefeni Albert",
-        title: "Performance & Ergonomics Specialist",
-        specialty: "Cognitive Load & Focus Protocols",
-        rating: "4.8",
-        exp: "8 yrs exp",
-        rate: "$80 / hour",
-        avatarBg: "bg-amber-500",
-        verified: true,
-        category: "Focus Coaches"
-      }
-    ];
-
-    const filteredExperts = expertsList.filter(exp => {
-      const matchesCategory = mobileExpertCategory === "All" || exp.category === mobileExpertCategory || (mobileExpertCategory === "Focus Coaches" && exp.title.includes("Coach"));
-      const matchesSearch = !mobileSearchQuery || exp.name.toLowerCase().includes(mobileSearchQuery.toLowerCase()) || exp.title.toLowerCase().includes(mobileSearchQuery.toLowerCase()) || exp.specialty.toLowerCase().includes(mobileSearchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-
-    return (
-      <div className={`min-h-screen flex flex-col transition-colors duration-350 ease-out font-sans ${bgMain} pb-20 select-none`}>
-
-        {/* ⚡ PREMIUM HIGH-CONTRAST TOAST ALERT (TOP-RIGHT CORNER NON-BLOCKING) */}
-        <AnimatePresence>
-          {toastMessage && (
-            <motion.div
-<<<<<<< HEAD
-              initial={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
-              animate={{ opacity: 1, scale: 1, y: 0, x: "-50%" }}
-              exit={{ opacity: 0, scale: 0.95, y: -20, x: "-50%" }}
-              className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full shadow-2xl flex items-center space-x-2.5 text-[11px] tracking-wide font-mono ${
-                themeMode === "dark" ? "bg-white text-black border border-neutral-100" : "bg-neutral-900 text-white border border-neutral-800"
-              }`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>{toastMessage}</span>
-=======
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="fixed top-16 right-6 z-[9999] max-w-sm px-4 py-3 rounded-xl bg-[#09090b] text-white border border-[#27272a] shadow-2xl flex items-center space-x-3 text-xs font-semibold select-none"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-              <span className="text-white font-medium text-xs flex-1">{toastMessage}</span>
-              <button
-                onClick={() => setToastMessage(null)}
-                className="text-zinc-400 hover:text-white text-xs p-1 rounded-md hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-<<<<<<< HEAD
-        {/* Shared EndoCore Mobile Header matching Screenshots */}
-        <header className={`h-16 border-b shrink-0 px-4 flex items-center justify-between sticky top-0 z-40 backdrop-blur-xl ${borderRule} ${
-          themeMode === "dark" ? "bg-[#09090b]/90" : "bg-[#fbfbfa]/90"
-        }`}>
-          <div className="flex flex-col">
-            <span className="font-sans font-bold text-lg tracking-tight text-white leading-tight">EndoCore</span>
-            <span className="font-mono text-[8px] uppercase tracking-[0.22em] text-stone-400 font-semibold leading-none mt-0.5">
-              FOCUS INTELLIGENCE
-            </span>
-          </div>
-
-          <div className="flex items-center space-x-3">
-            {/* Notification Bell Button */}
-            <button
-              onClick={() => triggerToast("🔔 No new notifications")}
-              className="relative p-2 rounded-full hover:bg-stone-800/40 text-stone-300 transition-colors cursor-pointer"
-            >
-              <Bell className="h-5 w-5" />
-              <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-            </button>
-
-            {/* User Profile Avatar Thumbnail */}
-            <button
-              onClick={() => setMobileTab("profile")}
-              className="relative rounded-full ring-2 ring-stone-700/50 overflow-hidden cursor-pointer"
-            >
-              <img
-                src={user?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                alt={user?.name || "Profile"}
-                className="h-8 w-8 object-cover rounded-full"
-              />
-            </button>
-          </div>
-        </header>
-
-        {/* Scrollable Viewport */}
-        <main className="flex-grow overflow-y-auto px-4 py-4 space-y-5">
-=======
-        {/* Studio Mobile Header */}
-        <header className="h-14 border-b border-[#e4e4e7] bg-white shrink-0 px-4 flex items-center justify-between sticky top-0 z-40 shadow-xs">
-          <div className="flex items-center space-x-2">
-            <span className="font-bold text-sm text-[#09090b] tracking-tight">EndoCore.</span>
-            <span className="font-mono text-[8px] uppercase tracking-widest px-2 py-0.5 border border-[#e4e4e7] bg-zinc-50 rounded-md text-[#71717a] font-semibold">mobile</span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* Quick status dot for PC tracking agent connection state */}
-            <div className="flex items-center space-x-1.5 bg-[#f4f4f5] border border-[#e4e4e7] px-2.5 py-1 rounded-full text-[10px] font-mono text-[#09090b]">
-              <span className={`h-2 w-2 rounded-full ${electronTracking ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`}></span>
-              <span className="font-semibold">{electronTracking ? "PC CONNECTED" : "PC IDLE"}</span>
-            </div>
-          </div>
-        </header>
-
-        {/* Main scrollable body viewport */}
-        <main className="flex-grow overflow-y-auto px-4 py-4 space-y-4 pb-28 bg-[#fafafa]">
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
-
-          {/* ════════════════════════════════════════════════════════════ */}
-          {/* TAB 1: HOME (Matching Screenshot 1)                         */}
-          {/* ════════════════════════════════════════════════════════════ */}
-          {currentTab === "home" && (
-            <div className="space-y-5">
-
-              {/* Machine Connection Badge */}
-              <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full border border-emerald-500/30 bg-[#121215] text-emerald-400 text-xs font-mono font-medium shadow-sm">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>{user?.deviceConnected ? `${user.deviceConnected} Connected` : "WS-WORKSTATION-11 Connected"}</span>
-              </div>
-
-              {/* Personal Greeting Title */}
-              <div className="space-y-1">
-                <h2 className="text-3xl font-sans font-bold text-white tracking-tight leading-tight">
-                  Good evening,
-                </h2>
-                <h2 className="text-3xl font-sans font-bold text-white tracking-tight leading-tight">
-                  {firstName}.
-                </h2>
-                <p className="text-xs text-stone-400 font-sans mt-1">
-                  {myActivity?.isPaused ? "Session paused — pick it up anytime." : "Session active — in deep focus flow."}
-                </p>
-              </div>
-
-              {/* Search Bar matching screenshot */}
-              <div className="relative flex items-center">
-                <input
-                  type="text"
-                  value={mobileSearchQuery}
-                  onChange={(e) => setMobileSearchQuery(e.target.value)}
-                  placeholder="Search workspace daemons, focus tools..."
-                  className={`w-full rounded-2xl pl-4 pr-12 py-3.5 text-xs text-stone-200 placeholder-stone-500 bg-[#121215] border ${borderRule} focus:outline-none focus:border-stone-500`}
-                />
-                <button
-                  onClick={() => triggerToast(`Search: "${mobileSearchQuery}"`)}
-                  className="absolute right-1.5 p-2.5 bg-[#25233b] hover:bg-[#322f4f] text-purple-300 rounded-xl transition-colors cursor-pointer"
-                >
-                  <Search className="h-4 w-4" />
-                </button>
-              </div>
-
-<<<<<<< HEAD
-              {/* Categories Section matching screenshot */}
-              <div className="space-y-3">
-=======
-              {/* Workstation Quick Switcher parameters */}
-              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-4`}>
-                <h4 className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block border-b border-zinc-850 pb-2">
-                  Update PC Tracking Details
-                </h4>
-
-                {/* Switch App Focus Dropdown */}
-                <div className="space-y-1.5">
-                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Select Active Application</label>
-                  <select
-                    value={myActivity.app}
-                    onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
-                    className={`w-full rounded-xl px-3 py-2 text-xs font-mono ${formInput} transition-all cursor-pointer`}
-                  >
-                    {myActivity.openApps && myActivity.openApps.length > 0 ? (
-                      <>
-                        <optgroup label="Open Apps on PC" className="text-[9px] font-mono text-zinc-550 bg-[#121215]">
-                          {!myActivity.openApps.includes(myActivity.app) && myActivity.app !== "Offline" && myActivity.app !== "Inactive" && (
-                            <option value={myActivity.app}>{myActivity.app}</option>
-                          )}
-                          {myActivity.openApps.map(app => (
-                            <option key={app} value={app}>{app}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Default Presets" className="text-[9px] font-mono text-zinc-550 bg-[#121215]">
-                          <option value="VS Code">VS Code</option>
-                          <option value="Chrome">Chrome Browser</option>
-                          <option value="Figma">Figma Design</option>
-                          <option value="Terminal">Terminal / Shell</option>
-                          <option value="Spotify">Spotify Music</option>
-                        </optgroup>
-                      </>
-                    ) : (
-                      <>
-                        <option value="VS Code">VS Code</option>
-                        <option value="Chrome">Chrome Browser</option>
-                        <option value="Figma">Figma Design</option>
-                        <option value="Terminal">Terminal / Shell</option>
-                        <option value="Spotify">Spotify Music</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* Edit Project Title Details */}
-                <div className="space-y-1.5">
-                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Active Project / Task Name</label>
-                  <div className="flex items-center space-x-1.5">
-                    <input
-                      type="text"
-                      value={projectInput}
-                      onChange={(e) => setProjectInput(e.target.value)}
-                      className={`w-full rounded-xl px-3 py-2 text-xs ${formInput} transition-all`}
-                      placeholder="e.g. EndoCore Workspace"
-                      onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
-                    />
-                    <button
-                      onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                      className="btn-primary shrink-0"
-                    >
-                      Sync
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB 2: ROOM STATUS BOARD & CHAT SCREEN */}
-          {mobileTab === "room" && (
-            <div className="space-y-4 pb-4">
-
-              {/* Guild Room selector parameters */}
-              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-2`}>
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base font-sans font-bold text-white">Categories</h3>
-                  <button
-<<<<<<< HEAD
-                    onClick={() => setMobileTab("experts")}
-                    className="text-xs font-sans text-cyan-400 font-semibold hover:underline cursor-pointer"
-=======
-                    onClick={sendRoomChatMessage}
-                    className="btn-primary shrink-0"
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
-                  >
-                    See All
-                  </button>
-                </div>
-
-                {/* Horizontal Scrolling Carousel Cards */}
-                <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-none">
-
-                  {/* Category Card 1 (Teal Gradient) */}
-                  <div
-                    onClick={() => setMobileTab("routines")}
-                    className="w-48 shrink-0 rounded-3xl p-5 bg-gradient-to-br from-[#00c9a7] to-[#1de9b6] text-white flex flex-col justify-between h-40 shadow-xl cursor-pointer hover:scale-[1.02] transition-transform"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
-                      <Terminal className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <h4 className="font-sans font-bold text-base leading-snug">Workspace & IDE Stats</h4>
-                      <p className="text-[11px] text-white/80 font-sans">12 Active Daemons</p>
-                    </div>
-                  </div>
-
-                  {/* Category Card 2 (Blue Gradient) */}
-                  <div
-                    onClick={() => setMobileTab("focus")}
-                    className="w-48 shrink-0 rounded-3xl p-5 bg-gradient-to-br from-[#4facfe] to-[#00f2fe] text-white flex flex-col justify-between h-40 shadow-xl cursor-pointer hover:scale-[1.02] transition-transform"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
-                      <ShieldCheck className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <h4 className="font-sans font-bold text-base leading-snug">Focus & Flow Guard</h4>
-                      <p className="text-[11px] text-white/80 font-sans">Zero Distractions</p>
-                    </div>
-                  </div>
-
-                  {/* Category Card 3 (Orange/Rose Gradient) */}
-                  <div
-                    onClick={() => setMobileTab("experts")}
-                    className="w-48 shrink-0 rounded-3xl p-5 bg-gradient-to-br from-[#ff758c] to-[#ff7eb3] text-white flex flex-col justify-between h-40 shadow-xl cursor-pointer hover:scale-[1.02] transition-transform"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
-                      <Zap className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <h4 className="font-sans font-bold text-base leading-snug">AI Dev Co-Pilots</h4>
-                      <p className="text-[11px] text-white/80 font-sans">5+ Mentors Ready</p>
-                    </div>
-                  </div>
-
-                  {/* Category Card 4 (Purple Gradient) */}
-                  <div
-                    onClick={() => setMobileTab("focus")}
-                    className="w-48 shrink-0 rounded-3xl p-5 bg-gradient-to-br from-[#a18cd1] to-[#fbc2eb] text-white flex flex-col justify-between h-40 shadow-xl cursor-pointer hover:scale-[1.02] transition-transform"
-                  >
-                    <div className="h-10 w-10 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
-                      <BarChart3 className="h-5 w-5" />
-                    </div>
-                    <div className="space-y-0.5">
-                      <h4 className="font-sans font-bold text-base leading-snug">Telemetry & Reports</h4>
-                      <p className="text-[11px] text-white/80 font-sans">Real-time Insights</p>
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* TODAY'S FOCUS Card matching screenshot 1 */}
-              <div className={`p-6 rounded-3xl border ${bgCard} ${borderRule} space-y-4 shadow-xl bg-[#121215]`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono tracking-[0.2em] text-stone-400 uppercase font-semibold">
-                    TODAY'S FOCUS
-                  </span>
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-sans font-semibold border ${
-                    myActivity?.isPaused ? "bg-amber-950/40 text-amber-400 border-amber-500/30" : "bg-emerald-950/40 text-emerald-400 border-emerald-500/30 animate-pulse"
-                  }`}>
-                    {myActivity?.isPaused ? "Paused" : "Active"}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  {/* Gauge display */}
-                  <div className="relative w-24 h-24 flex items-center justify-center">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle cx="48" cy="48" r="38" fill="none" stroke="#1f1f26" strokeWidth="6" />
-                      <circle
-                        cx="48"
-                        cy="48"
-                        r="38"
-                        fill="none"
-                        stroke="#00d2a0"
-                        strokeWidth="6"
-                        strokeDasharray="238.7"
-                        strokeDashoffset={238.7 - (productivityScore / 100) * 238.7}
-                        strokeLinecap="round"
-                        className="transition-all duration-700"
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-                      <span className="text-xl font-sans font-bold text-white">{productivityScore}%</span>
-                      <span className="text-[8px] text-stone-400 uppercase font-mono mt-1">of goal</span>
-                    </div>
-                  </div>
-
-                  {/* Goal stats */}
-                  <div className="space-y-1 text-right">
-                    <div className="text-3xl font-sans font-bold text-white tracking-tight">
-                      {todayFocusHours}h 00m
-                    </div>
-                    <div className="text-xs font-mono text-stone-400">
-                      / {user?.productivityGoal || 6}h 00m goal
-                    </div>
-                    <div className="text-[11px] font-sans text-stone-500 pt-1 font-medium">
-                      EndoCore Workspace
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════ */}
-          {/* TAB 2: FOCUS SESSION (Matching Screenshot 2)                 */}
-          {/* ════════════════════════════════════════════════════════════ */}
-          {currentTab === "focus" && (
-            <div className="space-y-5">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-sans font-bold text-white tracking-tight">Focus Session</h2>
-                <p className="text-xs text-stone-400 font-sans">
-                  {myActivity?.isPaused ? "Session paused" : "In deep focus flow"}
-                </p>
-              </div>
-
-              {/* Main Timer Display Card matching screenshot 2 */}
-              <div className={`p-7 rounded-3xl border ${bgCard} ${borderRule} space-y-6 flex flex-col items-center text-center shadow-2xl bg-[#121215]`}>
-
-                {/* Big Circular Clock Gauge */}
-                <div className="relative w-52 h-52 flex items-center justify-center my-2">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="104" cy="104" r="88" fill="none" stroke="#1c1c24" strokeWidth="8" />
-                    <circle
-                      cx="104"
-                      cy="104"
-                      r="88"
-                      fill="none"
-                      stroke="#00f2fe"
-                      strokeWidth="8"
-                      strokeDasharray="552.9"
-                      strokeDashoffset={myActivity?.isPaused ? 552.9 : 150}
-                      strokeLinecap="round"
-                      className="transition-all duration-700"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
-                    <span className="text-3xl font-mono font-bold text-white tracking-wider">
-                      {parsedDurationText(myActivity?.durationSeconds || 0)}
-                    </span>
-                    <span className="inline-flex items-center space-x-1.5 text-xs font-sans font-medium text-amber-400 bg-amber-950/40 px-2.5 py-0.5 rounded-full border border-amber-500/20">
-                      <span className={`h-1.5 w-1.5 rounded-full ${myActivity?.isPaused ? "bg-amber-400" : "bg-emerald-400 animate-ping"}`} />
-                      <span>{myActivity?.isPaused ? "Paused" : "Running"}</span>
-                    </span>
-                  </div>
-                </div>
-
-                {/* Workspace sub-labels */}
-                <div className="space-y-0.5">
-                  <h3 className="text-lg font-sans font-bold text-white">EndoCore Workspace</h3>
-                  <p className="text-xs font-mono text-stone-400">
-                    {electronTracking ? "PC Connected & Tracking" : "Offline"}
-                  </p>
-                </div>
-
-                {/* Action Buttons matching screenshot 2 */}
-                <div className="w-full flex items-center space-x-3 pt-1">
-                  <button
-                    onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity?.isPaused)}
-                    disabled={updatingActivity}
-                    className="flex-1 py-4 px-6 bg-[#00f2fe] hover:bg-[#00c9a7] text-black font-sans font-bold text-sm rounded-2xl flex items-center justify-center space-x-2 shadow-lg transition-all cursor-pointer"
-                  >
-                    {myActivity?.isPaused ? <Play className="h-4 w-4 fill-black" /> : <Pause className="h-4 w-4 fill-black" />}
-                    <span>{myActivity?.isPaused ? "Resume" : "Pause"}</span>
-                  </button>
-
-                  <button
-                    onClick={() => handleResetDistractions()}
-                    className="p-4 bg-[#1b1b22] hover:bg-[#252530] text-stone-300 rounded-2xl border border-stone-800 transition-colors cursor-pointer"
-                    title="Stop Session"
-                  >
-                    <div className="h-4 w-4 bg-stone-300 rounded-sm" />
-                  </button>
-                </div>
-
-                {/* 3 Metric Tiles at bottom of Focus Card */}
-                <div className="w-full grid grid-cols-3 gap-3 pt-3 border-t border-stone-800/60">
-                  <div className="bg-[#181820] p-3 rounded-2xl border border-stone-800/40 text-center">
-                    <div className="text-base font-sans font-bold text-white">{productivityScore}%</div>
-                    <div className="text-[10px] font-mono text-stone-400 mt-0.5">Progress</div>
-                  </div>
-
-                  <div className="bg-[#181820] p-3 rounded-2xl border border-stone-800/40 text-center">
-                    <div className="text-base font-sans font-bold text-white">{user?.productivityGoal || 6}h</div>
-                    <div className="text-[10px] font-mono text-stone-400 mt-0.5">Goal</div>
-                  </div>
-
-                  <div className="bg-[#181820] p-3 rounded-2xl border border-stone-800/40 text-center">
-                    <div className="text-base font-sans font-bold text-white">3d</div>
-                    <div className="text-[10px] font-mono text-stone-400 mt-0.5">Streak</div>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* ACTIVE APPS Section */}
-              <div className="space-y-3 pt-2">
-                <h3 className="text-xs font-mono tracking-[0.2em] text-stone-400 uppercase font-semibold">
-                  ACTIVE APPS
-                </h3>
-
-                <div className="space-y-2.5">
-                  {[
-                    { name: "VS Code", subtitle: "Code Editing & Review", time: "1h 45m", icon: Terminal, active: myActivity?.app === "VS Code" },
-                    { name: "Google Chrome", subtitle: "Docs & Research", time: "42m", icon: Globe, active: myActivity?.app === "Chrome" || myActivity?.app === "Google Chrome" },
-                    { name: "Terminal", subtitle: "Build Scripts & Deploy", time: "28m", icon: Terminal, active: myActivity?.app === "Terminal" },
-                    { name: "Figma", subtitle: "UI Design Specs", time: "15m", icon: Sparkles, active: myActivity?.app === "Figma" }
-                  ].map((appItem) => (
-                    <div
-                      key={appItem.name}
-                      onClick={() => updateMyActiveTracker(appItem.name, undefined, undefined)}
-                      className={`p-4 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between cursor-pointer hover:border-stone-600 transition-all ${
-                        appItem.active ? "bg-[#1c1c26] border-cyan-500/40 ring-1 ring-cyan-500/30" : "bg-[#121215]"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3">
-                        <div className="p-2.5 rounded-xl bg-stone-800/60 text-cyan-400">
-                          <appItem.icon className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-sans font-bold text-white">{appItem.name}</h4>
-                          <p className="text-xs text-stone-400 font-sans">{appItem.subtitle}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-mono text-stone-300 font-medium">{appItem.time}</span>
-                        {appItem.active && (
-                          <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════ */}
-          {/* TAB 3: ROUTINES & DEEP WORK (Matching Screenshot 3)          */}
-          {/* ════════════════════════════════════════════════════════════ */}
-          {currentTab === "routines" && (
-            <div className="space-y-5">
-
-              {/* Hero Banner Card matching screenshot 3 (Purple Gradient) */}
-              <div className="rounded-3xl p-6 bg-gradient-to-br from-[#764ba2] to-[#667eea] text-white space-y-4 shadow-2xl relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono tracking-[0.2em] uppercase font-bold text-white/90">
-                    DAILY ROUTINES & DEEP WORK
-                  </span>
-                  <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-xs font-sans font-semibold">
-                    {doneRoutinesCount}/{mobileRoutines.length} Done ({routinesPercentage}%)
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <h2 className="text-2xl font-sans font-bold leading-snug">Habits & Focus Protocols</h2>
-                  <p className="text-xs text-white/80 font-sans leading-relaxed">
-                    Track daily sprint blocks, standups, code reviews, and workstation routines.
-                  </p>
-                </div>
-
-                {/* Upload Focus Protocol / Plan Button */}
-                <button
-                  onClick={() => triggerToast("📄 Uploading plan document...")}
-                  className="w-full py-3.5 px-4 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-2xl font-sans text-xs font-bold flex items-center justify-between transition-all cursor-pointer"
-                >
-                  <div className="flex items-center space-x-2">
-                    <Upload className="h-4 w-4" />
-                    <span>Upload Focus Protocol / Plan</span>
-                  </div>
-                  <span className="px-2.5 py-0.5 bg-white text-purple-900 rounded-md text-[10px] font-mono font-bold">
-                    PDF / PNG
-                  </span>
-                </button>
-              </div>
-
-              {/* Search input */}
-              <div className="relative flex items-center">
-                <Search className="absolute left-4 h-4 w-4 text-stone-400" />
-                <input
-                  type="text"
-                  placeholder="Search focus routines or habits..."
-                  value={mobileSearchQuery}
-                  onChange={(e) => setMobileSearchQuery(e.target.value)}
-                  className={`w-full rounded-2xl pl-11 pr-4 py-3.5 text-xs text-stone-200 placeholder-stone-500 bg-[#121215] border ${borderRule} focus:outline-none focus:border-stone-500`}
-                />
-              </div>
-
-              {/* Interactive Checklist List */}
-              <div className="space-y-3">
-                {mobileRoutines
-                  .filter(r => !mobileSearchQuery || r.title.toLowerCase().includes(mobileSearchQuery.toLowerCase()))
-                  .map((item) => (
-                    <div
-                      key={item.id}
-                      onClick={() => toggleRoutine(item.id)}
-                      className={`p-4 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between cursor-pointer transition-all ${
-                        item.done ? "bg-[#14141a] opacity-80" : "bg-[#121215] hover:border-stone-600"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-3.5">
-                        <div className={`p-3 rounded-2xl ${item.done ? "bg-stone-800 text-stone-400" : "bg-[#25233b] text-purple-300"}`}>
-                          {item.icon === "code" ? <Terminal className="h-5 w-5" /> : item.icon === "water" ? <Clock className="h-5 w-5" /> : <Pill className="h-5 w-5" />}
-                        </div>
-
-                        <div className="space-y-0.5">
-                          <h4 className={`text-sm font-sans font-bold ${item.done ? "line-through text-stone-400" : "text-white"}`}>
-                            {item.title}
-                          </h4>
-                          <p className="text-xs font-sans text-stone-400">
-                            {item.detail}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="shrink-0">
-                        {item.done ? (
-                          <div className="h-7 w-7 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400">
-                            <Check className="h-4 w-4" />
-                          </div>
-                        ) : (
-                          <div className="h-7 w-7 rounded-full border-2 border-stone-600 hover:border-cyan-400 transition-colors" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════ */}
-          {/* TAB 4: EXPERTS & AI AGENTS (Matching Screenshot 4)           */}
-          {/* ════════════════════════════════════════════════════════════ */}
-          {currentTab === "experts" && (
-            <div className="space-y-5">
-              <div className="space-y-1">
-                <h2 className="text-2xl font-sans font-bold text-white tracking-tight">AI Dev Agents & Focus Coaches</h2>
-                <p className="text-xs text-stone-400 font-sans">
-                  Book 1-on-1 sessions or activate AI daemons & workstation performance specialists.
-                </p>
-              </div>
-
-              {/* Search Bar */}
-              <div className="relative flex items-center">
-                <Search className="absolute left-4 h-4 w-4 text-stone-400" />
-                <input
-                  type="text"
-                  placeholder="Search agent, focus coach, or specialty..."
-                  value={mobileSearchQuery}
-                  onChange={(e) => setMobileSearchQuery(e.target.value)}
-                  className={`w-full rounded-2xl pl-11 pr-4 py-3.5 text-xs text-stone-200 placeholder-stone-500 bg-[#121215] border ${borderRule} focus:outline-none focus:border-stone-500`}
-                />
-              </div>
-
-              {/* Category Filter Pills */}
-              <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-none">
-                {["All", "AI Co-Pilots", "Focus Coaches", "Dev Agents", "Workflow Bots"].map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setMobileExpertCategory(cat)}
-                    className={`px-4 py-2 rounded-full text-xs font-sans font-semibold shrink-0 cursor-pointer transition-all ${
-                      mobileExpertCategory === cat
-                        ? "bg-[#4facfe] text-black shadow-md"
-                        : "bg-[#181820] text-stone-300 border border-stone-800 hover:bg-[#20202a]"
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-
-              {/* Experts Card List matching screenshot 4 */}
-              <div className="space-y-4">
-                {filteredExperts.map((exp) => (
-                  <div key={exp.id} className={`p-5 rounded-3xl border ${bgCard} ${borderRule} space-y-4 shadow-xl bg-[#121215]`}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center space-x-3.5">
-                        <div className={`h-12 w-12 rounded-2xl ${exp.avatarBg} text-white flex items-center justify-center font-sans font-bold text-xl shadow-md`}>
-                          {exp.name.charAt(0)}
-                        </div>
-
-                        <div>
-                          <div className="flex items-center space-x-1.5">
-                            <h3 className="text-base font-sans font-bold text-white">{exp.name}</h3>
-                            {exp.verified && (
-                              <span className="text-emerald-400 text-xs" title="Verified Specialist">✓</span>
-                            )}
-                          </div>
-                          <p className="text-xs text-cyan-400 font-sans font-medium">{exp.title}</p>
-                          <div className="flex items-center space-x-2 text-[11px] text-stone-400 font-sans mt-0.5">
-                            <span className="text-amber-400 font-bold">★ {exp.rating}</span>
-                            <span>•</span>
-                            <span>{exp.exp}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2 border-t border-stone-800/60">
-                      <div className="text-xs font-sans font-bold text-emerald-400">
-                        {exp.rate}
-                      </div>
-
-                      <button
-                        onClick={() => triggerToast(`⚡ Agent session initiated with ${exp.name}`)}
-                        className="py-2.5 px-4 bg-[#764ba2] hover:bg-[#667eea] text-white font-sans text-xs font-bold rounded-xl flex items-center space-x-1.5 shadow-md cursor-pointer transition-all"
-                      >
-                        <Calendar className="h-3.5 w-3.5" />
-                        <span>Book Session</span>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-            </div>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════ */}
-          {/* TAB 5: PROFILE IDENTITY & SETTINGS                          */}
-          {/* ════════════════════════════════════════════════════════════ */}
-          {currentTab === "profile" && (
-            <div className="space-y-5">
-              <div className={`p-6 rounded-3xl border ${bgCard} ${borderRule} space-y-4 text-center flex flex-col items-center shadow-xl bg-[#121215]`}>
-                <img
-                  src={user?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                  alt={user?.name || "Profile"}
-                  className="h-20 w-20 rounded-full object-cover border-2 border-cyan-400 shadow-xl"
-                />
-
-                <div className="space-y-0.5">
-                  <h3 className="text-xl font-sans font-bold text-white">{user?.name}</h3>
-                  <p className="text-xs font-mono text-stone-400">{user?.email}</p>
-                </div>
-
-                <div className="inline-flex items-center space-x-2 px-3 py-1 bg-emerald-950/40 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-mono">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>{user?.deviceConnected || "WS-WORKSTATION-11 Connected"}</span>
-                </div>
-              </div>
-
-              {/* Settings Parameters */}
-              <div className={`p-5 rounded-3xl border ${bgCard} ${borderRule} space-y-4 bg-[#121215]`}>
-                <h4 className="text-xs font-mono tracking-widest text-stone-400 uppercase font-semibold">
-                  Personal Preferences
-                </h4>
-
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-mono uppercase text-stone-400 block">Custom Status</label>
-                    <input
-                      type="text"
-                      value={statusInput}
-                      onChange={(e) => setStatusInput(e.target.value)}
-                      onBlur={() => submitProfileSettings({ customStatus: statusInput })}
-                      className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-white bg-[#1a1a22] border ${borderRule}`}
-                      placeholder="What are you working on?"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-mono uppercase text-stone-400 block">Daily Focus Goal</label>
-                    <select
-                      value={user?.productivityGoal || 6}
-                      onChange={(e) => submitProfileSettings({ productivityGoal: parseInt(e.target.value) })}
-                      className={`w-full rounded-xl px-3.5 py-2.5 text-xs text-white bg-[#1a1a22] border ${borderRule}`}
-                    >
-                      <option value="4">4 hours target</option>
-                      <option value="6">6 hours target</option>
-                      <option value="8">8 hours target</option>
-                      <option value="10">10 hours target</option>
-                    </select>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleLogout}
-                  className="w-full py-3.5 rounded-2xl border border-red-900/50 bg-red-950/20 hover:bg-red-950/40 text-red-400 text-xs font-mono font-bold uppercase tracking-wider transition-all cursor-pointer mt-2"
-                >
-                  Sign Out Workspace
-                </button>
-              </div>
-
-            </div>
-          )}
-
-        </main>
-
-<<<<<<< HEAD
-        {/* Sticky Premium 5-Tab Glassmorphic Bottom Navigation Bar */}
-        <nav className={`fixed bottom-0 left-0 right-0 h-16 border-t backdrop-blur-xl flex items-center justify-around z-50 ${borderRule} ${
-          themeMode === "dark" ? "bg-[#09090b]/95" : "bg-[#fbfbfa]/95"
-        }`}>
-          {/* Tab 1: Home */}
-          <button
-            onClick={() => setMobileTab("home")}
-            className={`flex flex-col items-center justify-center space-y-1 py-1 cursor-pointer transition-colors relative ${
-              currentTab === "home" ? "text-cyan-400 font-bold" : "text-stone-500 hover:text-stone-300"
-            }`}
-          >
-            <Home className="h-5 w-5" />
-            <span className="text-[10px] font-sans">Home</span>
-            {currentTab === "home" && (
-              <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-cyan-400" />
-            )}
-=======
-        {/* Sticky Studio Bottom Navigation Bar */}
-        <nav className="fixed bottom-0 left-0 right-0 h-16 border-t border-[#e4e4e7] bg-white flex items-center justify-around z-50 px-2 shadow-lg">
-          {/* Tab Button: Control */}
-          <button
-            onClick={() => setMobileTab("control")}
-            className={`flex flex-col items-center justify-center space-y-1 px-4 py-1.5 rounded-xl cursor-pointer transition-all ${
-              mobileTab === "control"
-                ? "bg-[#09090b] text-white font-semibold shadow-xs"
-                : "text-[#71717a] hover:text-[#09090b]"
-            }`}
-          >
-            <Laptop className="h-4.5 w-4.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Control</span>
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
-          </button>
-
-          {/* Tab 2: Focus */}
-          <button
-<<<<<<< HEAD
-            onClick={() => setMobileTab("focus")}
-            className={`flex flex-col items-center justify-center space-y-1 py-1 cursor-pointer transition-colors relative ${
-              currentTab === "focus" ? "text-cyan-400 font-bold" : "text-stone-500 hover:text-stone-300"
-            }`}
-          >
-            <Target className="h-5 w-5" />
-            <span className="text-[10px] font-sans">Focus</span>
-            {currentTab === "focus" && (
-              <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-cyan-400" />
-            )}
-=======
-            onClick={() => setMobileTab("room")}
-            className={`flex flex-col items-center justify-center space-y-1 px-4 py-1.5 rounded-xl cursor-pointer transition-all ${
-              mobileTab === "room"
-                ? "bg-[#09090b] text-white font-semibold shadow-xs"
-                : "text-[#71717a] hover:text-[#09090b]"
-            }`}
-          >
-            <Users className="h-4.5 w-4.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Room</span>
->>>>>>> 7254497baa0dd8927affc0fb8f143aeb77950e43
-          </button>
-
-          {/* Tab 3: Routines */}
-          <button
-<<<<<<< HEAD
-            onClick={() => setMobileTab("routines")}
-            className={`flex flex-col items-center justify-center space-y-1 py-1 cursor-pointer transition-colors relative ${
-              currentTab === "routines" ? "text-cyan-400 font-bold" : "text-stone-500 hover:text-stone-300"
-            }`}
-          >
-            <Pill className="h-5 w-5" />
-            <span className="text-[10px] font-sans">Routines</span>
-            {currentTab === "routines" && (
-              <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-cyan-400" />
-            )}
-          </button>
-
-          {/* Tab 4: Experts */}
-          <button
-            onClick={() => setMobileTab("experts")}
-            className={`flex flex-col items-center justify-center space-y-1 py-1 cursor-pointer transition-colors relative ${
-              currentTab === "experts" ? "text-cyan-400 font-bold" : "text-stone-500 hover:text-stone-300"
-            }`}
-          >
-            <Stethoscope className="h-5 w-5" />
-            <span className="text-[10px] font-sans">Experts</span>
-            {currentTab === "experts" && (
-              <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-cyan-400" />
-            )}
-          </button>
-
-          {/* Tab 5: Profile */}
-          <button
-            onClick={() => setMobileTab("profile")}
-            className={`flex flex-col items-center justify-center space-y-1 py-1 cursor-pointer transition-colors relative ${
-              currentTab === "profile" ? "text-cyan-400 font-bold" : "text-stone-500 hover:text-stone-300"
-            }`}
-          >
-            <User className="h-5 w-5" />
-            <User className="h-5 w-5" />
-            <span className="text-[10px] font-sans">Profile</span>
-            {currentTab === "profile" && (
-              <span className="absolute bottom-0.5 h-1 w-1 rounded-full bg-cyan-400" />
-            )}
-          </button>
-        </nav>
-
-      </div>
-    );
-  };
-
-
-  // Loading splash – shown after login while profile data is being fetched
   if (!user) {
     return (
       <div className={`min-h-screen flex items-center justify-center transition-colors duration-350 ease-out font-sans ${bgMain}`}>
@@ -3138,10 +2231,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* Live Clock with UTC stamp */}
-            <div className="text-[11px] font-mono text-[#71717a] font-medium tracking-wide hidden md:inline-block">
-              {currentTimeText} UTC
-            </div>
           </div>
         </header>
 
@@ -3228,9 +2317,9 @@ export default function App() {
               {activeTab === "dashboard" && (
                 <>
                   {/* STUDIO HERO TITLE BLOCK */}
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 rounded-2xl border border-[#e4e4e7] shadow-xs">
                     <div className="space-y-1">
-                      <h2 className="text-3xl font-display font-bold text-[#09090b] tracking-tight">
+                      <h2 className="text-2xl sm:text-3xl font-display font-bold text-[#09090b] tracking-tight">
                         {getGreeting()}
                       </h2>
                       <p className="text-xs text-[#71717a]">
@@ -3238,60 +2327,133 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* Quick Segment Controls */}
-                    <div className="flex flex-wrap items-center gap-1.5 bg-[#f4f4f5] border border-[#e4e4e7] p-1 rounded-md w-fit">
-                      {/* Agent Active/Paused Toggle */}
+                    {/* Quick Segment Controls: Privacy Mode, Agent Monitor Status, & Connected Devices */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Agent Active/Paused Monitor Toggle */}
                       <button
                         onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity?.isPaused)}
                         disabled={updatingActivity}
-                        className={`px-3 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${myActivity?.isPaused
-                            ? "bg-rose-100 text-rose-700 border border-rose-200"
-                            : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          }`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                          myActivity?.isPaused
+                            ? "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                            : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                        }`}
+                        title="Click to toggle monitoring agent ON/OFF"
                       >
                         <span className={`status-dot ${myActivity?.isPaused ? "status-dot-rose" : "status-dot-emerald"}`} />
-                        <span>{myActivity?.isPaused ? "Agent Paused" : "Agent Active"}</span>
+                        <span>{myActivity?.isPaused ? "Agent Monitoring: PAUSED" : "Agent Monitoring: ACTIVE"}</span>
                       </button>
 
-                      <span className="h-4 w-px bg-[#e4e4e7] hidden sm:block"></span>
-
-                      {/* Private Status Toggle */}
-                      <button
-                        onClick={() => submitProfileSettings({ privacyMode: "Private" })}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${user?.privacyMode === "Private"
-                            ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                            : "text-[#71717a] hover:text-[#09090b]"
+                      {/* Privacy Toggle Pills */}
+                      <div className="flex items-center gap-1 bg-[#f4f4f5] border border-[#e4e4e7] p-1 rounded-xl">
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Private" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Private"
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
                           }`}
-                      >
-                        <Lock className="h-3 w-3" />
-                        <span>Private</span>
-                      </button>
+                          title="Private Mode: Activity hidden from co-workers"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Private</span>
+                        </button>
 
-                      {/* Team Status Toggle */}
-                      <button
-                        onClick={() => submitProfileSettings({ privacyMode: "Team" })}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${user?.privacyMode === "Team"
-                            ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                            : "text-[#71717a] hover:text-[#09090b]"
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Team" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Team"
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
                           }`}
-                      >
-                        <Users className="h-3 w-3" />
-                        <span>Team</span>
-                      </button>
+                          title="Team Mode: Activity visible to room members"
+                        >
+                          <Users className="h-3.5 w-3.5 text-blue-600" />
+                          <span>Team</span>
+                        </button>
 
-                      {/* Public Status Toggle */}
-                      <button
-                        onClick={() => submitProfileSettings({ privacyMode: "Public" })}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
-                            ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                            : "text-[#71717a] hover:text-[#09090b]"
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Public" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
                           }`}
+                          title="Public Mode: Live activity broadcasting ON"
+                        >
+                          <Globe className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Public</span>
+                        </button>
+                      </div>
+
+                      {/* Connected Devices Quick Hub Trigger */}
+                      <button
+                        onClick={() => setShowDevicesList(!showDevicesList)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-[#e4e4e7] text-[#09090b] hover:bg-[#f4f4f5] transition-all cursor-pointer flex items-center gap-2 shadow-xs"
                       >
-                        <Globe className="h-3 w-3" />
-                        <span>Public</span>
+                        <Laptop className="h-4 w-4 text-indigo-600" />
+                        <span>{connectedDevices.length} Connected Devices</span>
+                        <ChevronDown className={`h-3.5 w-3.5 text-[#71717a] transition-transform ${showDevicesList ? "rotate-180" : ""}`} />
                       </button>
                     </div>
                   </div>
+
+                  {/* CONNECTED DEVICES & DISPLAY MONITOR MATRIX */}
+                  <AnimatePresence>
+                    {showDevicesList && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="studio-card p-4 space-y-3 bg-gradient-to-r from-slate-50 via-white to-indigo-50/30 border border-[#e4e4e7] rounded-2xl"
+                      >
+                        <div className="flex items-center justify-between border-b border-[#e4e4e7] pb-2.5">
+                          <div className="flex items-center space-x-2">
+                            <Laptop className="h-4 w-4 text-indigo-600" />
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-[#09090b]">
+                              Connected Workstation Devices & Display Monitor Matrix
+                            </h3>
+                          </div>
+                          <span className="badge badge-emerald">
+                            <span className="status-dot status-dot-emerald"></span>
+                            <span>{connectedDevices.filter(d => d.status !== "idle").length} Active Devices / Monitors</span>
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                          {connectedDevices.map((device) => {
+                            let icon = <Laptop className="h-4 w-4 text-blue-600" />;
+                            if (device.type === "mobile") icon = <Smartphone className="h-4 w-4 text-purple-600" />;
+                            if (device.type === "tablet") icon = <Tablet className="h-4 w-4 text-teal-600" />;
+                            if (device.type === "monitor") icon = <Monitor className="h-4 w-4 text-amber-600" />;
+                            if (device.type === "desktop") icon = <Cpu className="h-4 w-4 text-emerald-600" />;
+
+                            return (
+                              <div key={device.id} className="p-3 bg-white rounded-xl border border-[#e4e4e7] shadow-xs flex items-start justify-between space-x-3 hover:border-indigo-300 transition-colors">
+                                <div className="flex items-start space-x-3 min-w-0">
+                                  <div className="p-2 bg-[#f4f4f5] rounded-lg shrink-0">
+                                    {icon}
+                                  </div>
+                                  <div className="min-w-0 space-y-0.5">
+                                    <h4 className="text-xs font-bold text-[#09090b] truncate">{device.name}</h4>
+                                    <p className="text-[10px] font-mono text-[#71717a]">{device.os}</p>
+                                    <p className="text-[10px] text-[#71717a] font-medium">{device.lastSync}</p>
+                                  </div>
+                                </div>
+                                <span className={`status-dot shrink-0 mt-1 ${
+                                  device.status === "active" || device.status === "display_active"
+                                    ? "status-dot-emerald"
+                                    : device.status === "online"
+                                    ? "status-dot-indigo"
+                                    : "status-dot-amber"
+                                }`} title={device.status} />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* WORKSPACE PIPELINE CONNECTIVITY STRIP */}
                   <div className="studio-card p-4 space-y-3">
