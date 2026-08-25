@@ -65,11 +65,10 @@ export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
     setAlertsFilter,
   } = useMobileNavigation();
 
-  const userName = user?.name || "Developer";
-  const userEmail = user?.email || "user@endocore.dev";
+  const userName = user?.name || "";
   const avatarUrl = user?.avatarUrl;
-  const workstationName = user?.deviceConnected || "WS-WORKSTATION-11";
-  const isConnected = true;
+  const workstationName = user?.deviceConnected || "";
+  const isConnected = !!user;
 
   // Unread alerts counter (incoming requests + nudges)
   const unreadAlertsCount = (connectionsData?.incoming?.length || 0) + (aiInsights ? 1 : 0);

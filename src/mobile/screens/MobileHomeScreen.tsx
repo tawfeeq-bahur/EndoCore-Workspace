@@ -22,7 +22,7 @@ export const MobileHomeScreen: React.FC<MobileHomeScreenProps> = ({
   onUpdateActivity,
   onEnterRoom,
 }) => {
-  const [projectInput, setProjectInput] = useState(myActivity?.project || "EndoCore Workspace");
+  const [projectInput, setProjectInput] = useState(myActivity?.project || "");
 
   const focusSeconds = myActivity ? myActivity.durationSeconds : 0;
   const focusMinutes = Math.floor(focusSeconds / 60);
@@ -41,9 +41,9 @@ export const MobileHomeScreen: React.FC<MobileHomeScreenProps> = ({
         <div>
           <p className="text-[10px] font-mono text-[#71717a] uppercase tracking-widest mb-0.5">Workstation Active</p>
           <h2 className="font-bold text-base text-[#09090b]">
-            {user?.deviceConnected || "WS-WORKSTATION-11"}
+            {user?.deviceConnected || "Unknown Device"}
           </h2>
-          <p className="text-[11px] text-[#71717a] font-mono mt-0.5">{user?.name || "Developer"}</p>
+          <p className="text-[11px] text-[#71717a] font-mono mt-0.5">{user?.name || ""}</p>
         </div>
         <span className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono font-semibold border ${
           isPaused
@@ -103,8 +103,8 @@ export const MobileHomeScreen: React.FC<MobileHomeScreenProps> = ({
         </div>
 
         <div>
-          <p className="font-semibold text-sm text-[#09090b]">{myActivity?.app || "VS Code"}</p>
-          <p className="text-[11px] text-[#71717a] font-mono truncate mt-0.5">↳ {myActivity?.project || "EndoCore Workspace"}</p>
+          <p className="font-semibold text-sm text-[#09090b]">{myActivity?.app || "No Active App"}</p>
+          <p className="text-[11px] text-[#71717a] font-mono truncate mt-0.5">↳ {myActivity?.project || "No Project"}</p>
         </div>
 
         <div className="flex items-center justify-between border-t border-[#e4e4e7] pt-3">
@@ -128,10 +128,11 @@ export const MobileHomeScreen: React.FC<MobileHomeScreenProps> = ({
           <div className="space-y-1">
             <label className="text-[9px] uppercase font-mono text-[#71717a] tracking-wider block">Switch Application Focus</label>
             <select
-              value={myActivity?.app || "VS Code"}
+              value={myActivity?.app || ""}
               onChange={(e) => onUpdateActivity?.(e.target.value, undefined, undefined)}
               className="w-full bg-white border border-[#e4e4e7] rounded-lg px-3 py-2 text-xs font-mono text-[#09090b] focus:outline-none focus:border-[#09090b] cursor-pointer"
             >
+              <option value="">Select App...</option>
               <option value="VS Code">VS Code</option>
               <option value="Chrome">Chrome Browser</option>
               <option value="Figma">Figma Design</option>

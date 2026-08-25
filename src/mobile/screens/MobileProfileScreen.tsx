@@ -18,9 +18,9 @@ export const MobileProfileScreen: React.FC<MobileProfileScreenProps> = ({
   onSubmitSettings,
 }) => {
   const [statusInput, setStatusInput] = useState(user?.customStatus || "");
-  const userName  = user?.name  || "Developer";
-  const userEmail = user?.email || "user@endocore.dev";
-  const userRole  = (user as any)?.role || "Software Developer";
+  const userName  = user?.name || "";
+  const userEmail = user?.email || "";
+  const userRole  = (user as any)?.role || "";
 
   return (
     <div className="p-4 space-y-4 pb-32 bg-[#fafafa] font-sans min-h-screen text-[#09090b]">

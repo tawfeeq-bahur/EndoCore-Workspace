@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import http from "http";
+import multer from "multer";
 import { Server } from "socket.io";
 import { prisma } from "./db";
 import { seedDatabase } from "./seed";
@@ -153,6 +154,18 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use("/uploads", express.static(path.join(process.cwd(), "public/uploads")));
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(process.cwd(), "public/uploads/"));
+  },
+  filename: function (req, file, cb) {
+    const ext = file.originalname.split('.').pop();
+    cb(null, `${req.user?.id}-${Date.now()}.${ext}`);
+  }
+});
+const upload = multer({ storage: storage });
 
 const JWT_SECRET = process.env.JWT_SECRET || "super-secret-dashboard-key";
 
@@ -705,35 +718,19 @@ app.post("/api/auth/register", async (req, res) => {
         passwordHash,
         username,
         headline: "Software Developer",
-        activeGroup: "Engineering Team",
+        activeGroup: "",
         privacyMode: "Level 1: Full Detail",
         customStatus: "Just joined EndoCore Workspace! 👋",
         status: "online",
         role: "Software Developer",
-        broadcastGroups: "Engineering Team,Focus Guild"
-      }
-    });
-
-    // Automatically join default rooms ("Engineering Team" g1 and "Focus Guild" g4)
-    await prisma.groupMember.create({
-      data: {
-        userId: user.id,
-        groupId: "g1",
-        role: "member"
-      }
-    });
-    await prisma.groupMember.create({
-      data: {
-        userId: user.id,
-        groupId: "g4",
-        role: "member"
+        broadcastGroups: ""
       }
     });
 
     // Create initial active activity
     const initialActivity = {
-      app: "VS Code",
-      project: "EndoCore Workspace",
+      app: "Offline",
+      project: "None",
       startedAt: Date.now(),
       durationSeconds: 0,
       isPaused: false,
@@ -1132,6 +1129,33 @@ app.get("/api/rooms", authenticateToken, async (req: any, res) => {
       }))
     }));
 
+    if (req.user?.email === "showcase@endocore.io" && rooms.length === 0) {
+      rooms.push({
+        id: "demo-room-1",
+        name: "Engineering Team",
+        description: "High-performance team collaboration and AI-monitored focus workspace.",
+        iconEmoji: "🚀",
+        category: "Development",
+        timezone: "America/New_York",
+        accessMode: "INVITE_ONLY",
+        role: "OWNER",
+        memberCount: 3,
+        members: []
+      });
+      rooms.push({
+        id: "demo-room-2",
+        name: "Design Guild",
+        description: "UI/UX and product design discussions.",
+        iconEmoji: "🎨",
+        category: "Design",
+        timezone: "America/New_York",
+        accessMode: "OPEN",
+        role: "MEMBER",
+        memberCount: 2,
+        members: []
+      });
+    }
+
     res.json({ success: true, rooms });
   } catch (error: any) {
     res.status(500).json({ error: error.message || "Failed to list rooms" });
@@ -1191,60 +1215,6 @@ app.post("/api/rooms/:id/consent", authenticateToken, async (req: any, res) => {
 app.get("/api/user", authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.id;
-    
-    // Auto-populate activity logs if very few to fill UI charts and graphs
-    const logCount = await prisma.activityLog.count({ where: { userId } });
-    if (logCount < 5) {
-      const sampleApps = ["VS Code", "Chrome", "Figma", "Terminal", "Slack"];
-      const sampleProjects = ["EndoCore Workspace", "AI Research Agent", "Portfolio Redesign", "EndoCore Style Guide"];
-      const now = new Date();
-      
-      // Seed 45 logs over the last 30 days
-      for (let i = 0; i < 45; i++) {
-        const date = new Date();
-        date.setDate(now.getDate() - Math.floor(Math.random() * 30));
-        date.setHours(8 + Math.floor(Math.random() * 10), Math.floor(Math.random() * 60));
-        
-        const app = sampleApps[i % sampleApps.length];
-        const project = sampleProjects[i % sampleProjects.length];
-        const durationMins = 15 + Math.floor(Math.random() * 105);
-        
-        await prisma.activityLog.create({
-          data: {
-            userId,
-            app,
-            project,
-            timestamp: date,
-            durationText: `${durationMins}m`
-          }
-        });
-      }
-
-      // Ensure active duration timer today isn't zero
-      const existingActivity = await prisma.activity.findFirst({ where: { userId } });
-      if (!existingActivity) {
-        await prisma.activity.create({
-          data: {
-            userId,
-            app: "VS Code",
-            project: "EndoCore Workspace",
-            startedAt: new Date(Date.now() - 95 * 60 * 1000),
-            durationSeconds: 5400,
-            isPaused: false
-          }
-        });
-      } else if (existingActivity.durationSeconds < 60) {
-        // Fix stale zero-duration activities so the UI looks populated
-        await prisma.activity.update({
-          where: { id: existingActivity.id },
-          data: {
-            durationSeconds: 5400,
-            isPaused: false,
-            startedAt: new Date(Date.now() - 95 * 60 * 1000)
-          }
-        });
-      }
-    }
 
     const user = await prisma.user.findUnique({ 
       where: { id: userId },
@@ -1266,7 +1236,44 @@ app.get("/api/user", authenticateToken, async (req: any, res) => {
       duration: log.durationText
     }));
 
+    if (req.user?.email === "showcase@endocore.io") {
+      (formatted as any).timeline = [
+        { time: "09:00 – 10:20", date: "Today", app: "VS Code & Antigravity IDE", project: "EndoCore Workspace", duration: "80 mins" },
+        { time: "10:20 – 10:35", date: "Today", app: "Resting", project: "Planned Break", duration: "15 mins" },
+        { time: "10:35 – 12:00", date: "Today", app: "Terminal & Git", project: "Deployment Pipeline", duration: "85 mins" },
+        { time: "13:00 – 14:45", date: "Today", app: "Figma", project: "UI Mockups", duration: "105 mins" }
+      ];
+      formatted.productivityGoal = 6;
+      formatted.focusScore = 78;
+      formatted.todayFocusTime = "4h 20m";
+      formatted.activeGroup = "Engineering Team";
+      formatted.deviceConnected = "WS-WORKSTATION-11";
+    }
+
     res.json(formatted);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload Profile Avatar
+app.post("/api/user/avatar", authenticateToken, upload.single("avatar"), async (req: any, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    const myId = req.user.id;
+    const avatarUrl = `/uploads/${req.file.filename}`;
+    
+    const updatedUser = await prisma.user.update({
+      where: { id: myId },
+      data: { avatarUrl }
+    });
+    
+    // Broadcast activity to all peers so their UI updates
+    await broadcastActivityUpdate(updatedUser.id);
+    
+    res.json({ success: true, user: updatedUser });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1764,6 +1771,24 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
 
     const friendList = await Promise.all(friendPromises);
 
+    if (req.user?.email === "showcase@endocore.io") {
+      friendList.forEach((f: any, index: number) => {
+        if (index === 0) {
+          f.todayFocusTime = "6h";
+          f.focusScore = 91;
+          f.currentActivity = { app: "Figma", project: "UI Design", startedAt: Date.now(), durationText: "1h 12m" };
+        } else if (index === 1) {
+          f.todayFocusTime = "5.5h";
+          f.focusScore = 85;
+          f.currentActivity = { app: "Slack", project: "Standup", startedAt: Date.now(), durationText: "14m" };
+        } else {
+          f.todayFocusTime = "3.8h";
+          f.focusScore = 65;
+          f.currentActivity = { app: "VS Code", project: "Backend API", startedAt: Date.now(), durationText: "45m" };
+        }
+      });
+    }
+
     res.json(friendList);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -1898,7 +1923,7 @@ app.get("/api/analytics", authenticateToken, async (req: any, res: any) => {
       where: { userId: req.user.id }
     });
 
-    res.json({
+    const payload: any = {
       appBreakdown,
       focusScoreHistory,
       comparisonStats,
@@ -1906,7 +1931,52 @@ app.get("/api/analytics", authenticateToken, async (req: any, res: any) => {
       weeklyProdGoalAchieved,
       averageDailyFocus,
       dailySummaries
-    });
+    };
+
+    if (req.user?.email === "showcase@endocore.io") {
+      payload.appBreakdown = [
+        { name: "VS Code", value: 165, color: "#2563EB" },
+        { name: "Figma", value: 105, color: "#EC4899" },
+        { name: "Chrome", value: 45, color: "#10B981" },
+        { name: "Terminal", value: 85, color: "#6B7280" },
+        { name: "Slack", value: 20, color: "#F59E0B" }
+      ];
+      payload.focusScoreHistory = [
+        { day: "Sun", score: 0, ideal: 80 },
+        { day: "Mon", score: 85, ideal: 80 },
+        { day: "Tue", score: 92, ideal: 80 },
+        { day: "Wed", score: 88, ideal: 80 },
+        { day: "Thu", score: 95, ideal: 80 },
+        { day: "Fri", score: 78, ideal: 80 },
+        { day: "Sat", score: 0, ideal: 80 }
+      ];
+      payload.comparisonStats = [
+        { name: "Tawfeeq", hours: 4.3, score: 78 },
+        { name: "Alex", hours: 6.2, score: 91 },
+        { name: "Sarah", hours: 5.5, score: 85 },
+        { name: "Mike", hours: 3.8, score: 65 }
+      ];
+      payload.weeklyTotalHours = 32.5;
+      payload.weeklyProdGoalAchieved = 92;
+      payload.averageDailyFocus = 6.5;
+
+      const mockSummaries = [];
+      const today = new Date();
+      for (let i = 0; i < 180; i++) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        if (d.getDay() !== 0 && d.getDay() !== 6) {
+          mockSummaries.push({
+            date: d.toISOString().split("T")[0],
+            totalFocusSeconds: Math.floor(Math.random() * 14400) + 14400,
+            productivityScore: Math.floor(Math.random() * 30) + 70
+          });
+        }
+      }
+      payload.dailySummaries = mockSummaries;
+    }
+
+    res.json(payload);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -2049,19 +2119,42 @@ app.get("/api/reports", authenticateToken, async (req: any, res) => {
 });
 
 // 5. Get and Create groups
-app.get("/api/groups", authenticateToken, async (req, res) => {
+app.get("/api/groups", authenticateToken, async (req: any, res) => {
   try {
-    const groups = await prisma.group.findMany({
-      include: { members: true }
+    const userId = req.user.id;
+    const userGroups = await prisma.groupMember.findMany({
+      where: { userId },
+      include: {
+        group: {
+          include: { members: true }
+        }
+      }
     });
     
-    const formatted = groups.map(g => ({
-      id: g.id,
-      name: g.name,
-      description: g.description,
-      members: g.members.map(m => m.userId),
-      createdAt: g.createdAt.toISOString()
+    const formatted = userGroups.map(m => ({
+      id: m.group.id,
+      name: m.group.name,
+      description: m.group.description,
+      members: m.group.members.map(gm => gm.userId),
+      createdAt: m.group.createdAt.toISOString()
     }));
+    
+    if (req.user?.email === "showcase@endocore.io" && formatted.length === 0) {
+      formatted.push({
+        id: "demo-group-1",
+        name: "Engineering Team",
+        description: "Collaborating workspace and focus channel for the engineering team.",
+        members: [userId, "mock-1", "mock-2"],
+        createdAt: new Date().toISOString()
+      });
+      formatted.push({
+        id: "demo-group-2",
+        name: "Design Guild",
+        description: "UI/UX and product design discussions.",
+        members: [userId, "mock-3"],
+        createdAt: new Date().toISOString()
+      });
+    }
     
     res.json(formatted);
   } catch (error: any) {
@@ -2106,6 +2199,106 @@ app.post("/api/groups/create", authenticateToken, async (req: any, res) => {
   }
 });
 
+// Get Groups Directory (Discoverable rooms the user is NOT a member of)
+app.get("/api/groups/directory", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const query = req.query.q as string || "";
+
+    // Find all groups the user is ALREADY a member of
+    const userMemberships = await prisma.groupMember.findMany({
+      where: { userId },
+      select: { groupId: true }
+    });
+    const joinedGroupIds = userMemberships.map((m: any) => m.groupId);
+
+    // Find groups they are NOT in, filtering by public/approval access types
+    const availableGroups = await prisma.group.findMany({
+      where: {
+        id: { notIn: joinedGroupIds },
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { description: { contains: query, mode: "insensitive" } }
+        ]
+      },
+      include: {
+        _count: {
+          select: { members: true }
+        }
+      },
+      take: 20
+    });
+
+    const formatted = availableGroups.map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      memberCount: g._count.members,
+      accessType: g.accessType || "PUBLIC",
+      createdAt: g.createdAt.toISOString()
+    }));
+    
+    res.json(formatted);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Join a Group from Directory
+app.post("/api/groups/:id/join", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const groupId = req.params.id;
+
+    const group = await prisma.group.findUnique({
+      where: { id: groupId }
+    });
+
+    if (!group) return res.status(404).json({ error: "Group not found" });
+
+    // Check if already member
+    const existing = await prisma.groupMember.findUnique({
+      where: { userId_groupId: { userId, groupId } }
+    });
+
+    if (existing) {
+      return res.status(400).json({ error: "Already a member of this group" });
+    }
+
+    // Join Group directly (Assuming all are PUBLIC for this phase, or handle REQUIRE_APPROVAL via join requests)
+    if (group.accessType === "REQUIRE_APPROVAL") {
+      await prisma.groupJoinRequest.create({
+        data: {
+          userId,
+          groupId,
+          status: "PENDING"
+        }
+      });
+      return res.json({ success: true, status: "pending", message: "Join request submitted." });
+    } else {
+      await prisma.groupMember.create({
+        data: {
+          userId,
+          groupId,
+          role: "member"
+        }
+      });
+      
+      // Auto-set as active group if user has none
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (user && (!user.activeGroup || user.activeGroup === "")) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { activeGroup: group.name }
+        });
+      }
+
+      return res.json({ success: true, status: "joined", message: "Successfully joined the group." });
+    }
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 // Get chat history for a group
 app.get("/api/chat/:groupId", authenticateToken, async (req: any, res) => {
   try {
@@ -2835,7 +3028,7 @@ app.patch("/api/focus-challenges/:challengeId/respond", authenticateToken, async
       io.to("user:" + challenge.createdById).emit("challenge:started", startPayload);
       io.to("user:" + challenge.invitedUserId).emit("challenge:started", startPayload);
 
-      res.json({ success: true, challenge: updated });
+      res.json({ success: true, challenge: startPayload });
     } else {
       const updated = await prisma.focusChallenge.update({
         where: { id: challengeId },
@@ -2882,6 +3075,41 @@ app.post("/api/focus-challenges/:challengeId/cancel", authenticateToken, async (
 
     const otherUserId = challenge.createdById === myId ? challenge.invitedUserId : challenge.createdById;
     io.to("user:" + otherUserId).emit("challenge:canceled", { challengeId: challenge.id });
+
+    res.json({ success: true, challenge: updated });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Complete active challenge
+app.post("/api/focus-challenges/:challengeId/complete", authenticateToken, async (req: any, res) => {
+  try {
+    const myId = req.user.id;
+    const { challengeId } = req.params;
+
+    const challenge = await prisma.focusChallenge.findUnique({
+      where: { id: challengeId }
+    });
+
+    if (!challenge) {
+      return res.status(404).json({ error: "Challenge not found" });
+    }
+
+    if (challenge.createdById !== myId && challenge.invitedUserId !== myId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    const updated = await prisma.focusChallenge.update({
+      where: { id: challengeId },
+      data: { 
+        status: "COMPLETED",
+        completedAt: new Date()
+      }
+    });
+
+    const otherUserId = challenge.createdById === myId ? challenge.invitedUserId : challenge.createdById;
+    io.to("user:" + otherUserId).emit("challenge:completed", { challengeId: challenge.id, winnerId: myId });
 
     res.json({ success: true, challenge: updated });
   } catch (error: any) {

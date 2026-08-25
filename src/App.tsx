@@ -64,8 +64,14 @@ import {
 } from "./types";
 import { RoomCreationWizard } from "./components/RoomCreationWizard";
 import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
+import { NumberTicker } from "./components/NumberTicker";
+import { TiltCard } from "./components/TiltCard";
+import { CommandPalette } from "./components/CommandPalette";
+import { SkeletonLoader } from "./components/SkeletonLoader";
 
 export default function App() {
+  const [cmdKOpen, setCmdKOpen] = useState(false);
+
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [mobileTab, setMobileTab] = useState<"home" | "focus" | "routines" | "experts" | "profile" | "control" | "room" | "me">("home");
   const [mobileRoutines, setMobileRoutines] = useState([
@@ -88,6 +94,17 @@ export default function App() {
     checkDevice();
     window.addEventListener("resize", checkDevice);
     return () => window.removeEventListener("resize", checkDevice);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdKOpen(open => !open);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   // Navigation & Workspace Panel states
@@ -132,12 +149,18 @@ export default function App() {
   const [creatingGroup, setCreatingGroup] = useState<boolean>(false);
 
   // Interactive Controls Input Buffers
-  const [appInput, setAppInput] = useState<string>("VS Code");
-  const [projectInput, setProjectInput] = useState<string>("EndoCore Workspace");
+  const [appInput, setAppInput] = useState<string>("");
+  const [projectInput, setProjectInput] = useState<string>("");
   const [statusInput, setStatusInput] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState<string>("");
   const [newGroupDesc, setNewGroupDesc] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Public Directory State
+  const [directoryGroups, setDirectoryGroups] = useState<any[]>([]);
+  const [directoryQuery, setDirectoryQuery] = useState<string>("");
+  const [isSearchingDirectory, setIsSearchingDirectory] = useState<boolean>(false);
+
   const [profileNameInput, setProfileNameInput] = useState<string>("");
   const [profileAvatarInput, setProfileAvatarInput] = useState<string>("");
   const [profileDeviceInput, setProfileDeviceInput] = useState<string>("");
@@ -263,7 +286,7 @@ export default function App() {
         deviceName = "MacBook Pro (macOS Browser)";
         platform = "MACOS";
       } else if (userAgent.includes("windows")) {
-        deviceName = "WS-WORKSTATION-11 (Windows PC)";
+        deviceName = "Windows PC (Browser)";
         platform = "WINDOWS";
       }
 
@@ -520,6 +543,11 @@ export default function App() {
       }
     });
 
+    socket.on("challenge:completed", (data: any) => {
+      triggerToast(`🎉 Challenge completed! Winner: ${data.winnerId === user?.id ? "You" : "Your partner"}!`);
+      setActiveChallenge(null);
+    });
+
     return () => {
       clearInterval(clockInterval);
       clearInterval(healthInterval);
@@ -593,9 +621,8 @@ export default function App() {
       const end = new Date(activeChallenge.endAt).getTime();
       const left = Math.max(0, Math.round((end - Date.now()) / 1000));
       setChallengeSecondsLeft(left);
-      if (left === 0) {
-        triggerToast("🏆 Focus challenge completed!");
-        setActiveChallenge(null);
+      if (left === 0 && activeChallenge) {
+        completeFocusChallenge(activeChallenge.challengeId);
       }
     };
     updateChallengeTimer();
@@ -724,6 +751,42 @@ export default function App() {
       console.error("API Fetch Error (Groups):", e);
     }
   };
+  const searchDirectory = async (q: string = "") => {
+    setIsSearchingDirectory(true);
+    try {
+      const res = await apiFetch(`/api/groups/directory?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDirectoryGroups(data);
+      }
+    } catch (e) {
+      console.error("Error searching directory", e);
+    } finally {
+      setIsSearchingDirectory(false);
+    }
+  };
+
+  const joinRoom = async (groupId: string) => {
+    try {
+      const res = await apiFetch(`/api/groups/${groupId}/join`, { method: "POST" });
+      if (res.ok) {
+        showToast("Successfully requested/joined room!");
+        await fetchGroups(); // refresh sidebar/groups
+        await searchDirectory(directoryQuery); // refresh directory list
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to join room");
+      }
+    } catch (e) {
+      showToast("Error joining room.");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "groups") {
+      searchDirectory(directoryQuery);
+    }
+  }, [activeTab]);
 
   const fetchAllRoomsDetails = async (rooms: Group[]) => {
     try {
@@ -968,6 +1031,20 @@ export default function App() {
       }
     } catch (e) {
       console.error("Error canceling focus challenge:", e);
+    }
+  };
+
+  const completeFocusChallenge = async (challengeId: string) => {
+    try {
+      const res = await apiFetch(`/api/focus-challenges/${challengeId}/complete`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        triggerToast("🎉 Challenge complete! You finished first!");
+        setActiveChallenge(null);
+      }
+    } catch (e) {
+      console.error("Error completing focus challenge:", e);
     }
   };
 
@@ -1327,6 +1404,35 @@ export default function App() {
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    try {
+      setUpdatingActivity(true);
+      const res = await fetch("/api/user/avatar", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUser(data.user);
+        setProfileAvatarInput(data.user.avatarUrl || "");
+        triggerToast("Profile picture updated successfully");
+      }
+    } catch (err) {
+      console.error("Avatar upload failed:", err);
+    } finally {
+      setUpdatingActivity(false);
+    }
+  };
+
   const executeCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName) return;
@@ -1516,7 +1622,7 @@ export default function App() {
 
   const getGreeting = () => {
     const hours = new Date().getHours();
-    const name = user ? user.name.split(" ")[0] : "Developer";
+    const name = user ? user.name.split(" ")[0] : "";
     if (hours < 12) return `Good Morning, ${name}`;
     if (hours < 17) return `Good Afternoon, ${name}`;
     return `Good Evening, ${name}`;
@@ -1648,6 +1754,17 @@ export default function App() {
   const borderRule = "border-[#e4e4e7]";
   const formInput  = "input-field";
 
+  // ── Ambient Theming Helper ──
+  const getAmbientBackground = () => {
+    switch (activeTab) {
+      case "dashboard": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-blue-50/40";
+      case "rooms": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-indigo-50/40";
+      case "analytics": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-emerald-50/40";
+      case "connections": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-rose-50/40";
+      default: return "bg-[#fafafa]";
+    }
+  };
+
   // Reusable Sidebar Render Helper (closed over App states)
   const renderSidebar = (isMobileDrawer: boolean = false) => {
     return (
@@ -1719,14 +1836,19 @@ export default function App() {
                 setSelectedFriendId(null);
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                   activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
-                    ? "nav-item-active"
+                    ? "text-white font-semibold"
                     : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <Home className="h-4 w-4 shrink-0" />
-              <span>My Productivity</span>
+              {activeTab === "dashboard" && !selectedRoomName && !selectedFriendId && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Home className="h-4 w-4 shrink-0" />
+                <span>My Productivity</span>
+              </span>
             </button>
 
             <button
@@ -1736,13 +1858,18 @@ export default function App() {
                 setSelectedFriendId(null);
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "analytics"
-                  ? "nav-item-active"
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "analytics"
+                  ? "text-white font-semibold"
                   : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <BarChart3 className="h-4 w-4 shrink-0" />
-              <span>My Analytics</span>
+              {activeTab === "analytics" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <span>My Analytics</span>
+              </span>
             </button>
 
             <button
@@ -1752,13 +1879,18 @@ export default function App() {
                 setSelectedFriendId(null);
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "focus"
-                  ? "nav-item-active"
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "focus"
+                  ? "text-white font-semibold"
                   : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <Target className="h-4 w-4 shrink-0" />
-              <span>My Goals</span>
+              {activeTab === "focus" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Target className="h-4 w-4 shrink-0" />
+                <span>My Goals</span>
+              </span>
             </button>
 
             <button
@@ -1769,13 +1901,18 @@ export default function App() {
                 fetchConnections();
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "connections"
-                  ? "nav-item-active"
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "connections"
+                  ? "text-white font-semibold"
                   : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <Users className="h-4 w-4 shrink-0" />
-              <span>My Connections</span>
+              {activeTab === "connections" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Users className="h-4 w-4 shrink-0" />
+                <span>My Connections</span>
+              </span>
             </button>
           </div>
 
@@ -1804,16 +1941,19 @@ export default function App() {
                         enterRoomChannel(group.name);
                         if (isMobileDrawer) setMobileMenuOpen(false);
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all duration-150 cursor-pointer ${isSelected
-                          ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
-                          : "text-stone-500 hover:text-stone-300"
+                      className={`relative w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-mono transition-colors cursor-pointer ${isSelected
+                          ? "text-white font-semibold"
+                          : "text-stone-500 hover:text-[#09090b] hover:bg-zinc-200/60"
                         }`}
                     >
-                      <div className="flex items-center space-x-3 text-ellipsis overflow-hidden">
-                        <span className="text-zinc-650 font-mono">#</span>
+                      {isSelected && (
+                        <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                      )}
+                      <div className="relative z-10 flex items-center space-x-3 text-ellipsis overflow-hidden">
+                        <span className="text-zinc-500 font-mono">#</span>
                         <span className="truncate">{group.name}</span>
                       </div>
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="relative z-10 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     </button>
 
                     {/* Indented room sub-navigation */}
@@ -2300,7 +2440,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* 🚀 CENTRAL VIEW CONTAINER */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative bg-[#fafafa]">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-y-auto relative transition-colors duration-500 ${getAmbientBackground()}`}>
         {/* Sleek Top Gradient Accent Strip */}
         <div className="gradient-bar-primary shrink-0"></div>
 
@@ -2418,7 +2558,7 @@ export default function App() {
           {/* VIEWPORT CONTROLLER CHANNELS */}
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={activeTab + (selectedRoomName || "")}
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
@@ -2671,31 +2811,37 @@ export default function App() {
                   {/* CARDS GRID */}
                   <div className="grid grid-cols-12 gap-3 sm:gap-5">
                     {/* Focus Time Card */}
-                    <div className="col-span-12 sm:col-span-6 lg:col-span-2 studio-card flex flex-col justify-between p-4 h-28 sm:h-32">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Focus Time</span>
-                      <div className="space-y-1">
-                        <div className="text-2xl font-display font-bold text-[#09090b]">{myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0"} <span className="text-xs font-normal text-[#71717a]">hrs</span></div>
-                        <div className="text-[11px] text-[#71717a] font-mono">Goal: {user?.productivityGoal || 6} hrs</div>
+                    <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Focus Time</span>
+                        <div className="space-y-1">
+                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-normal text-[#71717a]">hrs</span></div>
+                          <div className="text-[11px] text-[#71717a] font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
+                        </div>
                       </div>
-                    </div>
+                    </TiltCard>
 
                     {/* Productivity Score */}
-                    <div className="col-span-12 sm:col-span-6 lg:col-span-2 studio-card flex flex-col justify-between p-4 h-28 sm:h-32">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
-                      <div className="space-y-1">
-                        <div className="text-2xl font-display font-bold text-[#09090b]">{myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0}%</div>
-                        <div className="text-[11px] text-[#71717a]">Target achieved</div>
+                    <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
+                        <div className="space-y-1">
+                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
+                          <div className="text-[11px] text-[#71717a]">Target achieved</div>
+                        </div>
                       </div>
-                    </div>
+                    </TiltCard>
 
                     {/* Current Session */}
-                    <div className="col-span-12 sm:col-span-6 lg:col-span-2 studio-card flex flex-col justify-between p-4 h-28 sm:h-32">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Current Session</span>
-                      <div className="space-y-0.5">
-                        <div className="text-base font-semibold text-[#09090b] truncate">{myActivity ? myActivity.app : "Inactive"}</div>
-                        <div className="text-[11px] text-[#71717a] font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                    <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Current Session</span>
+                        <div className="space-y-0.5">
+                          <div className="text-base font-semibold text-[#09090b] truncate">{myActivity ? myActivity.app : "Inactive"}</div>
+                          <div className="text-[11px] text-[#71717a] font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                        </div>
                       </div>
-                    </div>
+                    </TiltCard>
 
                     {/* Today's Progress / Activity Tracker Controls */}
                     {myActivity && (
@@ -2894,11 +3040,7 @@ export default function App() {
                                 </div>
 
                                 {loadingInsights ? (
-                                  <div className="space-y-2 py-1">
-                                    <div className="h-2 bg-zinc-200 rounded w-1/3 animate-pulse"></div>
-                                    <div className="h-2 bg-zinc-200 rounded w-full animate-pulse"></div>
-                                    <div className="h-2 bg-zinc-200 rounded w-5/6 animate-pulse"></div>
-                                  </div>
+                                  <SkeletonLoader lines={3} className="py-1" />
                                 ) : aiInsights && aiInsights.success ? (() => {
                                   const roomSummary = aiInsights.roomSummary || { status: "Active Room", productivityPercentage: 50, description: "Compiling room data...", activeCount: 0, totalCount: 1 };
                                   const topPerformer = aiInsights.topPerformer || { name: "None", focusTime: "0m", apps: [], score: 0, reason: "" };
@@ -3524,17 +3666,17 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="studio-card studio-card-indigo p-5">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Average Daily Focus</span>
-                      <div className="text-3xl font-bold text-[#09090b]">{analytics.averageDailyFocus} hrs</div>
+                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.averageDailyFocus} decimals={1} /> hrs</div>
                       <p className="text-[10px] text-[#71717a] font-mono mt-1">Calculated on active window durations</p>
                     </div>
                     <div className="studio-card studio-card-emerald p-5">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Daily Focus Goal</span>
-                      <div className="text-3xl font-bold text-[#09090b]">{user?.productivityGoal || 6} hrs</div>
+                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                       <p className="text-[10px] text-[#71717a] font-mono mt-1">Configured target parameters</p>
                     </div>
                     <div className="studio-card studio-card-amber p-5">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Weekly Goal Achievement</span>
-                      <div className="text-3xl font-bold text-[#09090b]">{analytics.weeklyProdGoalAchieved}%</div>
+                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.weeklyProdGoalAchieved} />%</div>
                       <p className="text-[10px] text-[#71717a] font-mono mt-1">Goal compliance indicator</p>
                     </div>
                   </div>
@@ -3601,13 +3743,20 @@ export default function App() {
                             const colors = ["#2563eb", "#10b981", "#d97706", "#8b5cf6", "#ec4899", "#64748b", "#06b6d4", "#f97316"];
                             const color = item.color || colors[id % colors.length];
                             return (
-                              <div key={id} className="flex justify-between items-center text-xs p-1.5 rounded hover:bg-[#f4f4f5] transition-colors">
+                              <motion.div 
+                                key={id} 
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: id * 0.05, type: "spring", stiffness: 300 }}
+                                whileHover={{ scale: 1.02, x: 5, backgroundColor: "#f4f4f5" }}
+                                className="flex justify-between items-center text-xs p-1.5 rounded transition-colors cursor-default"
+                              >
                                 <div className="flex items-center space-x-2">
                                   <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
                                   <span className="font-semibold text-[#09090b]">{item.name}</span>
                                 </div>
-                                <span className="font-mono text-xs font-bold text-[#09090b]">{item.value}%</span>
-                              </div>
+                                <span className="font-mono text-xs font-bold text-[#09090b]"><NumberTicker value={item.value} />%</span>
+                              </motion.div>
                             );
                           })}
                         </div>
@@ -3625,23 +3774,31 @@ export default function App() {
 
                       <div className="space-y-3.5 pt-1">
                         {analytics.focusScoreHistory.map((item, id) => (
-                          <div key={id} className="space-y-1">
+                          <motion.div 
+                            key={id} 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: id * 0.1, type: "spring", stiffness: 200 }}
+                            className="space-y-1"
+                          >
                             <div className="flex justify-between items-center text-xs">
                               <span className="font-semibold text-[#09090b]">{item.day}</span>
-                              <span className="font-mono text-[11px] text-[#71717a]">score: <strong className="text-[#09090b]">{item.score}%</strong> / ideal {item.ideal}%</span>
+                              <span className="font-mono text-[11px] text-[#71717a]">score: <strong className="text-[#09090b]"><NumberTicker value={item.score} />%</strong> / ideal {item.ideal}%</span>
                             </div>
                             <div className="h-2.5 w-full bg-[#f4f4f5] rounded-full border border-[#e4e4e7] overflow-hidden relative">
-                              <div
-                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500"
-                                style={{ width: `${item.score}%` }}
-                              ></div>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${item.score}%` }}
+                                transition={{ duration: 1, delay: 0.2 + (id * 0.1), ease: "easeOut" }}
+                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"
+                              ></motion.div>
                               <div
                                 className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10"
                                 style={{ left: `${item.ideal}%` }}
                                 title="Goal baseline margin"
                               ></div>
                             </div>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     </div>
@@ -4038,6 +4195,69 @@ export default function App() {
                           );
                         })}
                       </div>
+
+                      {/* Public Rooms Directory Search */}
+                      <div className="mt-12 space-y-6 pt-8 border-t border-[#e4e4e7]">
+                        <div className="space-y-1">
+                          <h3 className="text-xl font-bold text-[#09090b] tracking-tight">Discover Public Rooms</h3>
+                          <p className="text-xs text-[#71717a]">
+                            Search for open guilds and teams to join across the EndoCore workspace.
+                          </p>
+                        </div>
+                        
+                        <div className="flex space-x-3">
+                          <input
+                            type="text"
+                            placeholder="Search by room name or description..."
+                            value={directoryQuery}
+                            onChange={(e) => {
+                              setDirectoryQuery(e.target.value);
+                              searchDirectory(e.target.value);
+                            }}
+                            className={`flex-1 rounded-xl px-4 py-3 text-sm font-sans ${formInput} transition-all`}
+                          />
+                          <button
+                            onClick={() => searchDirectory(directoryQuery)}
+                            className="px-6 py-3 bg-[#09090b] hover:bg-[#27272a] text-white font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center"
+                          >
+                            {isSearchingDirectory ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+                          {directoryGroups.length === 0 && !isSearchingDirectory ? (
+                            <div className="col-span-1 md:col-span-2 p-8 text-center text-sm font-mono text-[#71717a] bg-zinc-50 rounded-xl border border-dashed border-[#e4e4e7]">
+                              No public rooms available to join right now.
+                            </div>
+                          ) : (
+                            directoryGroups.map(group => (
+                              <div
+                                key={group.id}
+                                className="p-6 bg-white border border-[#e4e4e7] rounded-2xl flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
+                              >
+                                <div className="space-y-2">
+                                  <div className="flex items-start justify-between">
+                                    <h4 className="text-md font-bold text-[#09090b] tracking-tight">{group.name}</h4>
+                                    <span className="text-[10px] font-mono font-semibold tracking-wider uppercase px-2 py-1 rounded bg-zinc-100 text-zinc-600">
+                                      {group.accessType === "REQUIRE_APPROVAL" ? "Approval Req." : "Public"}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-[#71717a] font-mono leading-relaxed line-clamp-2">{group.description}</p>
+                                </div>
+                                <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
+                                  <span className="text-xs font-mono text-zinc-500">{group.memberCount} members</span>
+                                  <button
+                                    onClick={() => joinRoom(group.id)}
+                                    className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 font-bold text-[10px] rounded-lg shadow-sm font-mono uppercase tracking-wider transition-all cursor-pointer"
+                                  >
+                                    Join Room
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -4119,11 +4339,9 @@ export default function App() {
                                 </div>
 
                                 {loadingInsights ? (
-                                  <div className="space-y-4 py-2">
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-1/4 animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-full animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-5/6 animate-pulse"></div>
-                                    <span className="text-[10px] font-mono text-stone-500">Retrieving intelligence briefs...</span>
+                                  <div className="py-2">
+                                    <SkeletonLoader lines={3} />
+                                    <span className="text-[10px] font-mono text-stone-500 mt-4 block">Retrieving intelligence briefs...</span>
                                   </div>
                                 ) : (
                                   <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
@@ -4286,7 +4504,7 @@ export default function App() {
                                 <p className={`text-xs ${textSub}`}>Real-time focus and system app state transitions streamed from room workstations.</p>
                               </div>
 
-                              <div className="terminal-window p-0 max-h-96 overflow-hidden">
+                              <div className="bg-[#09090b] rounded-2xl shadow-lg border border-[#27272a] p-0 max-h-96 overflow-hidden">
                                 {/* macOS-style window header */}
                                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
                                   <span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" />
@@ -4295,24 +4513,33 @@ export default function App() {
                                   <span className="ml-3 text-[10px] text-white/30 font-mono tracking-widest">// rtime-pipeline · live stream</span>
                                 </div>
                                 <div className="p-5 font-mono text-xs space-y-2.5 max-h-80 overflow-y-auto">
-                                  {friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name }))).length > 0 ? (
-                                    friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name })))
-                                      .sort((a, b) => b.time.localeCompare(a.time))
-                                      .map((evt, idx) => (
-                                        <div key={idx} className="flex justify-between items-center py-1.5 border-b border-white/[0.04]">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-white/30">[{evt.time}]</span>
-                                            <span className="text-violet-400 font-semibold">{evt.name}</span>
-                                            <span className="text-white/40">active:</span>
-                                            <span className="text-emerald-400 font-bold">{evt.app}</span>
-                                            <span className="text-white/30">— {evt.project}</span>
-                                          </div>
-                                          <span className="text-white/25 shrink-0 ml-3">{evt.duration}</span>
-                                        </div>
-                                      ))
-                                  ) : (
-                                    <div className="text-white/30 italic py-4 text-center">No workspace event streams compiled.</div>
-                                  )}
+                                  <AnimatePresence initial={false}>
+                                    {friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name }))).length > 0 ? (
+                                      friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name })))
+                                        .sort((a, b) => b.time.localeCompare(a.time))
+                                        .map((evt, idx) => (
+                                          <motion.div 
+                                            key={`${evt.name}-${evt.time}-${idx}`}
+                                            layout
+                                            initial={{ opacity: 0, x: -20, backgroundColor: "rgba(16, 185, 129, 0.2)" }}
+                                            animate={{ opacity: 1, x: 0, backgroundColor: "rgba(0, 0, 0, 0)" }}
+                                            transition={{ duration: 0.4 }}
+                                            className="flex justify-between items-center py-1.5 border-b border-white/[0.04]"
+                                          >
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="text-white/30">[{evt.time}]</span>
+                                              <span className="text-violet-400 font-semibold">{evt.name}</span>
+                                              <span className="text-white/40">active:</span>
+                                              <span className="text-emerald-400 font-bold">{evt.app}</span>
+                                              <span className="text-white/30">— {evt.project}</span>
+                                            </div>
+                                            <span className="text-white/25 shrink-0 ml-3">{evt.duration}</span>
+                                          </motion.div>
+                                        ))
+                                    ) : (
+                                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-white/30 italic py-4 text-center">No workspace event streams compiled.</motion.div>
+                                    )}
+                                  </AnimatePresence>
                                 </div>
                               </div>
                             </div>
@@ -4337,41 +4564,56 @@ export default function App() {
                                   <div className="flex items-end justify-center pt-8 pb-4 max-w-md mx-auto">
                                     {/* 2nd Place */}
                                     {roomLeaderboard[1] && (
-                                      <div className="flex flex-col items-center space-y-2 flex-1">
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 50 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+                                        className="flex flex-col items-center space-y-2 flex-1"
+                                      >
                                         <img src={roomLeaderboard[1].avatarUrl} className="h-10 w-10 rounded-full border border-neutral-700 object-cover" />
-                                        <span className="text-xs font-semibold truncate max-w-[80px]">{roomLeaderboard[1].name}</span>
+                                        <span className="text-xs font-semibold truncate max-w-[80px] text-stone-900 dark:text-white">{roomLeaderboard[1].name}</span>
                                         <div className={`w-full h-24 ${themeMode === 'dark' ? 'bg-zinc-800/60' : 'bg-neutral-200'} rounded-t-xl flex flex-col items-center justify-center border-t border-x dark:border-neutral-700`}>
                                           <span className="text-xl font-bold font-serif italic text-stone-400">2nd</span>
-                                          <span className="text-[10px] font-mono text-stone-500">{roomLeaderboard[1].hours}h</span>
+                                          <span className="text-[10px] font-mono text-stone-500"><NumberTicker value={roomLeaderboard[1].hours} decimals={1} />h</span>
                                         </div>
-                                      </div>
+                                      </motion.div>
                                     )}
 
                                     {/* 1st Place */}
                                     {roomLeaderboard[0] && (
-                                      <div className="flex flex-col items-center space-y-2 flex-1">
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 80 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
+                                        className="flex flex-col items-center space-y-2 flex-1"
+                                      >
                                         <div className="relative">
                                           <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg">👑</span>
                                           <img src={roomLeaderboard[0].avatarUrl} className="h-12 w-12 rounded-full border-2 border-amber-400 object-cover" />
                                         </div>
-                                        <span className="text-xs font-semibold truncate max-w-[80px]">{roomLeaderboard[0].name}</span>
+                                        <span className="text-xs font-semibold truncate max-w-[80px] text-stone-900 dark:text-white">{roomLeaderboard[0].name}</span>
                                         <div className={`w-full h-32 ${themeMode === 'dark' ? 'bg-zinc-850' : 'bg-neutral-350'} rounded-t-xl flex flex-col items-center justify-center border-t border-x dark:border-amber-400/50`}>
                                           <span className="text-2xl font-bold font-serif italic text-amber-500">1st</span>
-                                          <span className="text-[10px] font-mono text-stone-500">{roomLeaderboard[0].hours}h</span>
+                                          <span className="text-[10px] font-mono text-stone-500"><NumberTicker value={roomLeaderboard[0].hours} decimals={1} />h</span>
                                         </div>
-                                      </div>
+                                      </motion.div>
                                     )}
 
                                     {/* 3rd Place */}
                                     {roomLeaderboard[2] && (
-                                      <div className="flex flex-col items-center space-y-2 flex-1">
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 30 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                                        className="flex flex-col items-center space-y-2 flex-1"
+                                      >
                                         <img src={roomLeaderboard[2].avatarUrl} className="h-10 w-10 rounded-full border border-neutral-700 object-cover" />
-                                        <span className="text-xs font-semibold truncate max-w-[80px]">{roomLeaderboard[2].name}</span>
+                                        <span className="text-xs font-semibold truncate max-w-[80px] text-stone-900 dark:text-white">{roomLeaderboard[2].name}</span>
                                         <div className={`w-full h-18 ${themeMode === 'dark' ? 'bg-zinc-800/40' : 'bg-neutral-100'} rounded-t-xl flex flex-col items-center justify-center border-t border-x dark:border-neutral-800`}>
                                           <span className="text-base font-bold font-serif italic text-amber-700">3rd</span>
-                                          <span className="text-[10px] font-mono text-stone-500">{roomLeaderboard[2].hours}h</span>
+                                          <span className="text-[10px] font-mono text-stone-500"><NumberTicker value={roomLeaderboard[2].hours} decimals={1} />h</span>
                                         </div>
-                                      </div>
+                                      </motion.div>
                                     )}
                                   </div>
 
@@ -4380,14 +4622,20 @@ export default function App() {
                                     <h4 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">Rankings Overview</h4>
                                     <div className="space-y-3 font-mono text-xs">
                                       {roomLeaderboard.map((peer, idx) => (
-                                        <div key={idx} className="flex justify-between items-center py-2.5 border-b dark:border-neutral-850 border-stone-200/50">
+                                        <motion.div 
+                                          key={idx} 
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          transition={{ delay: 0.6 + (idx * 0.05), type: "spring", stiffness: 300 }}
+                                          className="flex justify-between items-center py-2.5 border-b dark:border-neutral-850 border-stone-200/50"
+                                        >
                                           <div className="flex items-center space-x-3">
                                             <span className="text-stone-500">0{idx + 1}.</span>
                                             <img src={peer.avatarUrl} className="h-6 w-6 rounded-full object-cover" />
-                                            <span className="font-semibold text-stone-300 dark:text-white leading-none">{peer.name}</span>
+                                            <span className="font-semibold text-stone-900 dark:text-white leading-none">{peer.name}</span>
                                           </div>
-                                          <span className="text-stone-500">hours: {peer.hours}h</span>
-                                        </div>
+                                          <span className="text-stone-500">hours: <NumberTicker value={peer.hours} decimals={1} />h</span>
+                                        </motion.div>
                                       ))}
                                     </div>
                                   </div>
@@ -4419,11 +4667,9 @@ export default function App() {
 
                               <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} relative overflow-hidden`}>
                                 {loadingInsights ? (
-                                  <div className="space-y-4 py-2">
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-1/4 animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-full animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-5/6 animate-pulse"></div>
-                                    <span className="text-[10px] font-mono text-stone-500">Retrieving intelligence briefs...</span>
+                                  <div className="py-2">
+                                    <SkeletonLoader lines={3} />
+                                    <span className="text-[10px] font-mono text-stone-500 mt-4 block">Retrieving intelligence briefs...</span>
                                   </div>
                                 ) : aiInsights && aiInsights.success ? (
                                   <div className="text-xs space-y-5 leading-relaxed font-sans mt-2">
@@ -4744,9 +4990,9 @@ export default function App() {
                                   className="h-10 w-10 rounded-full object-cover shrink-0"
                                 />
                                 <div className="min-w-0">
-                                  <h4 className="text-xs font-semibold text-white truncate">{userItem.name}</h4>
-                                  <p className="text-[10px] font-mono text-amber-400/90 truncate">{userItem.email}</p>
-                                  <p className="text-[10px] font-mono text-stone-500 truncate">@{userItem.username}</p>
+                                  <h4 className="text-xs font-semibold text-stone-900 dark:text-white truncate">{userItem.name}</h4>
+                                  <p className="text-[10px] font-mono text-stone-500 dark:text-amber-400/90 truncate">{userItem.email}</p>
+                                  <p className="text-[10px] font-mono text-stone-400 dark:text-stone-500 truncate">@{userItem.username}</p>
                                 </div>
                               </div>
 
@@ -4807,41 +5053,51 @@ export default function App() {
                   {/* Incoming Challenge Invites Bar */}
                   {incomingChallenges.length > 0 && (
                     <div className="space-y-4">
-                      {incomingChallenges.map((chal) => (
-                        <div key={chal.challengeId} className="p-6 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="space-y-1">
-                            <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 block font-bold">// Incoming 1v1 Challenge Invite</span>
-                            <h4 className="text-sm font-semibold text-white">
-                              {chal.creator.name} has challenged you to a {chal.durationMinutes}m {chal.challengeMode.replace("_", " ")} session!
-                            </h4>
-                            <p className="text-xs text-stone-400 italic">Objective: "{chal.creatorObjective || "Co-focus Pomodoro Sprints"}"</p>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                            <input
-                              type="text"
-                              placeholder="Your objective..."
-                              value={challengeObjectiveInput}
-                              onChange={(e) => setChallengeObjectiveInput(e.target.value)}
-                              className={`rounded-xl px-4 py-2.5 text-xs ${formInput}`}
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => respondFocusChallenge(chal.challengeId, "accept", challengeObjectiveInput)}
-                                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-mono uppercase font-semibold cursor-pointer transition-all"
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => respondFocusChallenge(chal.challengeId, "decline", "")}
-                                className="px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-xl text-xs font-mono uppercase cursor-pointer transition-all border border-stone-700"
-                              >
-                                Decline
-                              </button>
+                      <AnimatePresence>
+                        {incomingChallenges.map((chal) => (
+                          <motion.div 
+                            key={chal.challengeId} 
+                            layout
+                            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            className="p-6 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4 origin-top"
+                          >
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 block font-bold">// Incoming 1v1 Challenge Invite</span>
+                              <h4 className="text-sm font-semibold text-stone-900 dark:text-white">
+                                {chal.creator.name} has challenged you to a {chal.durationMinutes}m {chal.challengeMode.replace("_", " ")} session!
+                              </h4>
+                              <p className="text-xs text-stone-400 italic">Objective: "{chal.creatorObjective || "Co-focus Pomodoro Sprints"}"</p>
                             </div>
-                          </div>
-                        </div>
-                      ))}
+
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                              <input
+                                type="text"
+                                placeholder="Your objective..."
+                                value={challengeObjectiveInput}
+                                onChange={(e) => setChallengeObjectiveInput(e.target.value)}
+                                className={`rounded-xl px-4 py-2.5 text-xs ${formInput}`}
+                              />
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => respondFocusChallenge(chal.challengeId, "accept", challengeObjectiveInput)}
+                                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-mono uppercase font-semibold cursor-pointer transition-all"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => respondFocusChallenge(chal.challengeId, "decline", "")}
+                                  className="px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-xl text-xs font-mono uppercase cursor-pointer transition-all border border-stone-700"
+                                >
+                                  Decline
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   )}
 
@@ -4860,12 +5116,20 @@ export default function App() {
                           </h3>
                         </div>
 
-                        <button
-                          onClick={() => cancelFocusChallenge(activeChallenge.challengeId)}
-                          className="px-4 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
-                        >
-                          Terminate Challenge
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => completeFocusChallenge(activeChallenge.challengeId)}
+                            className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
+                          >
+                            Finish Objective First 🏆
+                          </button>
+                          <button
+                            onClick={() => cancelFocusChallenge(activeChallenge.challengeId)}
+                            className="px-4 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
+                          >
+                            Terminate
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
@@ -4945,7 +5209,7 @@ export default function App() {
                                       <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${themeMode === 'dark' ? 'border-[#121215]' : 'border-white'} ${statusColor}`}></span>
                                     </div>
                                     <div className="min-w-0">
-                                      <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
+                                      <h4 className="text-sm font-semibold truncate text-stone-900 dark:text-stone-300">
                                         {friend.profile.name}
                                       </h4>
                                       <p className="text-[10px] font-mono text-[#D4AF37] block truncate max-w-[170px]">
@@ -4975,7 +5239,7 @@ export default function App() {
                                   <div className={`p-3.5 rounded-xl border dark:border-[#1e1e23] border-stone-200/50 flex items-center justify-between ${bgInternal}`}>
                                     <div className="min-w-0">
                                       <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block leading-none">Activity telemetry</span>
-                                      <span className="text-xs font-semibold text-stone-300 dark:text-white truncate block mt-1 leading-none">
+                                      <span className="text-xs font-semibold text-stone-900 dark:text-white truncate block mt-1 leading-none">
                                         {presence.appName || presence.appCategory}
                                       </span>
                                       {presence.appCategory && presence.appName && (
@@ -5355,15 +5619,29 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Avatar Image Link</label>
-                          <input
-                            type="text"
-                            value={profileAvatarInput}
-                            onChange={(e) => setProfileAvatarInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                            className="input-field font-mono"
-                          />
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Avatar Image</label>
+                          <div className="flex gap-2 h-9">
+                            <input
+                              type="text"
+                              value={profileAvatarInput}
+                              onChange={(e) => setProfileAvatarInput(e.target.value)}
+                              onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
+                              onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
+                              className="input-field font-mono flex-1"
+                              placeholder="Image URL"
+                            />
+                            <div className="relative overflow-hidden inline-block shrink-0">
+                              <button className="h-full flex items-center justify-center px-4 rounded-xl border dark:border-[#222227] border-stone-200/50 bg-[#fafafa] dark:bg-[#18181c] text-xs font-semibold text-[#09090b] dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#1f1f23] transition-colors cursor-pointer">
+                                Upload
+                              </button>
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={handleAvatarUpload}
+                                className="absolute left-0 top-0 opacity-0 w-full h-full cursor-pointer"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         <div className="space-y-1.5">
@@ -5729,6 +6007,20 @@ export default function App() {
           </div>
         </div>
       )}
+      <CommandPalette 
+        isOpen={cmdKOpen} 
+        onClose={() => setCmdKOpen(false)}
+        onNavigate={(tab) => {
+          setActiveTab(tab);
+          if (tab === "rooms") {
+            setSelectedRoomName(null);
+          }
+        }}
+        onJoinRoom={(room) => {
+          setSelectedRoomName(room);
+          setActiveTab("rooms");
+        }}
+      />
     </div>
   );
 }
