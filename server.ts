@@ -767,8 +767,101 @@ app.post("/api/auth/login", async (req, res) => {
     return res.status(400).json({ error: "Email and password are required" });
   }
 
+  const cleanEmail = (email || "").trim().toLowerCase();
+
+  // SPECIAL JUDGE SHOWCASE DEMO ACCOUNT AUTO-HANDLER
+  if (cleanEmail === "showcase" || cleanEmail === "showcase@endocore.io") {
+    if (password !== "123") {
+      return res.status(400).json({ error: "Invalid email or password. Password for showcase is 123" });
+    }
+
+    try {
+      let showcaseUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { email: "showcase@endocore.io" },
+            { username: "showcase" }
+          ]
+        }
+      });
+
+      if (!showcaseUser) {
+        showcaseUser = await prisma.user.create({
+          data: {
+            email: "showcase@endocore.io",
+            username: "showcase",
+            passwordHash: bcrypt.hashSync("123", 10),
+            name: "Alex Mercer",
+            role: "Lead Systems Architect & Core Developer",
+            avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+            activeGroup: "Engineering Group",
+            privacyMode: "Public",
+            deviceConnected: "WS-STUDIO-PRO-01",
+            productivityGoal: 6,
+            status: "online",
+            focusStreak: 3
+          }
+        });
+
+        // Seed initial activity for Showcase User
+        try {
+          await prisma.activity.create({
+            data: {
+              userId: showcaseUser.id,
+              app: "Antigravity IDE",
+              project: "EndoCore Workstation Pipeline Engine",
+              startedAt: new Date(Date.now() - 5.8 * 3600 * 1000),
+              durationSeconds: Math.floor(5.8 * 3600),
+              isPaused: false
+            }
+          });
+        } catch (e) {}
+
+        // Seed Connected Devices for Showcase User
+        const defaultDevices = [
+          { deviceName: "WS-STUDIO-PRO-01 (Windows Workstation)", platform: "WINDOWS", pushToken: `token_showcase_ws11` },
+          { deviceName: "Pixel 8 Pro (Mobile Browser)", platform: "ANDROID", pushToken: `token_showcase_pixel8` },
+          { deviceName: "MacBook Pro 16\" (M3 Max)", platform: "MACOS", pushToken: `token_showcase_macbook` },
+          { deviceName: "Dell UltraSharp U2723QE (4K Dual Display)", platform: "WINDOWS", pushToken: `token_showcase_dell` },
+          { deviceName: "iPad Pro 12.9\" (Tablet Companion)", platform: "IOS", pushToken: `token_showcase_ipad` }
+        ];
+
+        for (const dev of defaultDevices) {
+          try {
+            await prisma.userDevice.upsert({
+              where: { pushToken: dev.pushToken },
+              update: { enabled: true, lastSeenAt: new Date() },
+              create: {
+                userId: showcaseUser.id,
+                deviceName: dev.deviceName,
+                platform: dev.platform as any,
+                pushToken: dev.pushToken,
+                enabled: true,
+                lastSeenAt: new Date()
+              }
+            });
+          } catch (e) {}
+        }
+      }
+
+      const token = jwt.sign({ id: showcaseUser.id, email: showcaseUser.email }, JWT_SECRET, { expiresIn: "7d" });
+      return res.json({ success: true, token, user: formatUserProfile(showcaseUser) });
+    } catch (err: any) {
+      console.error("Error creating/logging into Showcase user:", err);
+      return res.status(500).json({ error: "Showcase account error: " + err.message });
+    }
+  }
+
   try {
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { email: cleanEmail },
+          { email: `${cleanEmail}@endocore.io` }
+        ]
+      }
+    });
+
     if (!user) {
       return res.status(400).json({ error: "Invalid email or password" });
     }
@@ -1249,6 +1342,133 @@ app.post("/api/user/broadcast-groups", authenticateToken, async (req: any, res) 
     broadcastActivityUpdate(req.user.id);
 
     res.json({ success: true, broadcastGroups: updated.broadcastGroups });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// MULTI-DEVICE IDENTITY & PAIRING SYSTEM ENDPOINTS
+// ════════════════════════════════════════════════════════════
+
+// GET /api/devices - Fetch all active devices for logged-in user
+app.get("/api/devices", authenticateToken, async (req: any, res) => {
+  try {
+    const devices = await prisma.userDevice.findMany({
+      where: {
+        userId: req.user.id,
+        enabled: true
+      },
+      orderBy: { lastSeenAt: "desc" }
+    });
+
+    const formattedDevices = devices.map(d => {
+      let type: "desktop" | "laptop" | "mobile" | "tablet" | "monitor" = "desktop";
+      const plt = (d.platform || "").toUpperCase();
+      if (plt === "ANDROID" || plt === "IOS" || (d.deviceName || "").toLowerCase().includes("mobile") || (d.deviceName || "").toLowerCase().includes("pixel") || (d.deviceName || "").toLowerCase().includes("iphone")) {
+        type = "mobile";
+      } else if ((d.deviceName || "").toLowerCase().includes("ipad") || (d.deviceName || "").toLowerCase().includes("tablet")) {
+        type = "tablet";
+      } else if (plt === "MACOS" || (d.deviceName || "").toLowerCase().includes("macbook") || (d.deviceName || "").toLowerCase().includes("laptop")) {
+        type = "laptop";
+      } else if ((d.deviceName || "").toLowerCase().includes("monitor") || (d.deviceName || "").toLowerCase().includes("display")) {
+        type = "monitor";
+      }
+
+      const diffSec = Math.floor((Date.now() - new Date(d.lastSeenAt).getTime()) / 1000);
+      let status: "active" | "online" | "idle" | "display_active" = "online";
+      let lastSync = `${diffSec}s ago`;
+
+      if (diffSec < 30) {
+        status = "active";
+        lastSync = "Live (Current Session)";
+      } else if (diffSec < 300) {
+        status = "online";
+        lastSync = `Synced ${Math.floor(diffSec / 60)}m ago`;
+      } else {
+        status = "idle";
+        lastSync = `Last seen ${Math.floor(diffSec / 60)}m ago`;
+      }
+
+      return {
+        id: d.id,
+        name: d.deviceName || "Workstation Node",
+        type,
+        os: d.platform,
+        status,
+        lastSync,
+        lastSeenAt: d.lastSeenAt
+      };
+    });
+
+    // Provide default demo devices ONLY for showcase presentation account
+    if (req.user?.email === "showcase@endocore.io" && formattedDevices.length < 2) {
+      const demoDevices = [
+        ...formattedDevices,
+        { id: "dev-1", name: "WS-WORKSTATION-11 (Windows PC)", type: "desktop", os: "WINDOWS 11", status: "active", lastSync: "Live (Current Machine)" },
+        { id: "dev-2", name: "Pixel 8 Pro (Mobile Browser)", type: "mobile", os: "ANDROID 14", status: "online", lastSync: "Synced 15s ago" },
+        { id: "dev-3", name: "MacBook Pro 16\" (M3 Max)", type: "laptop", os: "MACOS Sequoia", status: "idle", lastSync: "Synced 12m ago" },
+        { id: "dev-4", name: "Dell UltraSharp U2723QE (Dual Monitor)", type: "monitor", os: "3840x2160 @ 60Hz", status: "display_active", lastSync: "Monitor Active" },
+        { id: "dev-5", name: "iPad Pro 12.9\" (Tablet Companion)", type: "tablet", os: "IOS 17.5", status: "online", lastSync: "Synced 2m ago" }
+      ];
+      return res.json({ devices: demoDevices });
+    }
+
+    res.json({ devices: formattedDevices });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/devices/register - Auto-register or heartbeat device
+app.post("/api/devices/register", authenticateToken, async (req: any, res) => {
+  try {
+    const { deviceName, platform, pushToken } = req.body;
+    const tokenKey = pushToken || `token_${req.user.id}_${(deviceName || "browser").replace(/\s+/g, "_")}`;
+
+    const device = await prisma.userDevice.upsert({
+      where: { pushToken: tokenKey },
+      update: {
+        deviceName: deviceName || "Web Workstation Browser",
+        platform: (platform || "WEB").toUpperCase() as any,
+        enabled: true,
+        lastSeenAt: new Date()
+      },
+      create: {
+        userId: req.user.id,
+        pushToken: tokenKey,
+        deviceName: deviceName || "Web Workstation Browser",
+        platform: (platform || "WEB").toUpperCase() as any,
+        enabled: true,
+        lastSeenAt: new Date()
+      }
+    });
+
+    res.json({ success: true, device });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/devices/disconnect - Revoke or disconnect a device session
+app.post("/api/devices/disconnect", authenticateToken, async (req: any, res) => {
+  try {
+    const { deviceId } = req.body;
+    if (!deviceId) {
+      return res.status(400).json({ error: "deviceId is required" });
+    }
+
+    // Revoke device if in database
+    try {
+      await prisma.userDevice.update({
+        where: { id: deviceId },
+        data: { enabled: false, revokedAt: new Date() }
+      });
+    } catch (e) {
+      // Device might be a fallback demo device ID
+    }
+
+    res.json({ success: true, message: "Device disconnected successfully" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

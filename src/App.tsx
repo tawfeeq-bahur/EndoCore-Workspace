@@ -204,13 +204,7 @@ export default function App() {
     os: string;
     status: "active" | "online" | "idle" | "display_active";
     lastSync: string;
-  }>>([
-    { id: "dev-1", name: "WS-WORKSTATION-11 (Windows PC)", type: "desktop", os: "Windows 11 Pro", status: "active", lastSync: "Live (Current Machine)" },
-    { id: "dev-2", name: "Pixel 8 Pro (Mobile Browser)", type: "mobile", os: "Android 14", status: "online", lastSync: "Synced 15s ago" },
-    { id: "dev-3", name: "MacBook Pro 16\" (M3 Max)", type: "laptop", os: "macOS Sequoia", status: "idle", lastSync: "Synced 12m ago" },
-    { id: "dev-4", name: "Dell UltraSharp U2723QE (Dual Monitor)", type: "monitor", os: "3840x2160 @ 60Hz", status: "display_active", lastSync: "Monitor Active" },
-    { id: "dev-5", name: "iPad Pro 12.9\" (Tablet Companion)", type: "tablet", os: "iPadOS 17.5", status: "online", lastSync: "Synced 2m ago" },
-  ]);
+  }>>([]);
 
   useEffect(() => {
     groupsRef.current = groups;
@@ -235,6 +229,79 @@ export default function App() {
     }
     return res;
   }
+
+  const fetchDevices = async () => {
+    try {
+      const res = await apiFetch("/api/devices");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.devices && Array.isArray(data.devices)) {
+          setConnectedDevices(data.devices);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching devices:", err);
+    }
+  };
+
+  const registerCurrentDevice = async () => {
+    try {
+      const userAgent = navigator.userAgent.toLowerCase();
+      let deviceName = "Chrome (Web Workstation)";
+      let platform = "WEB";
+
+      if (userAgent.includes("android")) {
+        deviceName = "Mobile Chrome (Android Phone)";
+        platform = "ANDROID";
+      } else if (userAgent.includes("iphone")) {
+        deviceName = "Mobile Safari (iPhone)";
+        platform = "IOS";
+      } else if (userAgent.includes("ipad")) {
+        deviceName = "iPad (Tablet Browser)";
+        platform = "IOS";
+      } else if (userAgent.includes("macintosh") || userAgent.includes("mac os")) {
+        deviceName = "MacBook Pro (macOS Browser)";
+        platform = "MACOS";
+      } else if (userAgent.includes("windows")) {
+        deviceName = "WS-WORKSTATION-11 (Windows PC)";
+        platform = "WINDOWS";
+      }
+
+      await apiFetch("/api/devices/register", {
+        method: "POST",
+        body: JSON.stringify({
+          deviceName,
+          platform,
+          pushToken: `browser_token_${token ? token.slice(-8) : "guest"}`
+        })
+      });
+      fetchDevices();
+    } catch (err) {
+      console.error("Error registering current device:", err);
+    }
+  };
+
+  const disconnectDevice = async (deviceId: string, deviceName: string) => {
+    setConfirmModal({
+      title: "Disconnect Remote Device",
+      message: `Are you sure you want to revoke remote session access for ${deviceName}?`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          const res = await apiFetch("/api/devices/disconnect", {
+            method: "POST",
+            body: JSON.stringify({ deviceId })
+          });
+          if (res.ok) {
+            triggerToast(`Device access revoked for ${deviceName}`);
+            setConnectedDevices(prev => prev.filter(d => d.id !== deviceId));
+          }
+        } catch (err) {
+          triggerToast(`Failed to disconnect ${deviceName}`);
+        }
+      }
+    });
+  };
 
   const socketRef = useRef<any>(null);
   const chatEndRef = useRef<any>(null);
@@ -269,6 +336,7 @@ export default function App() {
     fetchAiBriefing();
     checkHealth();
     fetchConnections();
+    registerCurrentDevice();
 
     const updateTime = () => {
       const now = new Date();
@@ -1310,6 +1378,33 @@ export default function App() {
     }
   };
 
+  const executeShowcaseLogin = async () => {
+    setAuthEmail("showcase");
+    setAuthPassword("123");
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "showcase", password: "123" })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Showcase login failed");
+
+      localStorage.setItem("token", data.token);
+      if (data.user) {
+        setUser(data.user);
+      }
+      setToken(data.token);
+      triggerToast("🏆 Connected to Judge Demo Showcase World!");
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthLoading(true);
@@ -1932,15 +2027,31 @@ export default function App() {
 
           {authView === "login" ? (
             <form onSubmit={handleLogin} className="space-y-5">
+              {/* 🏆 ONE-CLICK JUDGE SHOWCASE DEMO BUTTON */}
+              <button
+                type="button"
+                onClick={executeShowcaseLogin}
+                disabled={authLoading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-indigo-600 to-emerald-500 text-white font-bold text-xs tracking-wider uppercase shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer border border-amber-400/30"
+              >
+                <span>🏆 Launch Judge Demo Showcase Mode</span>
+              </button>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
+                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono tracking-widest text-zinc-400">or sign in manually</span>
+                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
+              </div>
+
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email / Username</label>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="name@email.com"
+                  placeholder="showcase or name@email.com"
                 />
               </div>
 
@@ -1975,10 +2086,10 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1 bg-[#fafafa]/50 dark:bg-[#151518]/20">
-                <p className="font-semibold text-stone-400">Demo workstation credentials:</p>
-                <p>Email: <span className="dark:text-stone-300 select-all">tawfeeqbahur@gmail.com</span></p>
-                <p>Password: <span className="dark:text-stone-300 select-all">password123</span></p>
+              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1.5 bg-[#fafafa]/50 dark:bg-[#151518]/20">
+                <p className="font-bold text-amber-500 uppercase tracking-wider">🏆 Judge Competition Demo Credentials:</p>
+                <p>Username: <span className="dark:text-emerald-400 font-bold select-all">showcase</span> (or showcase@endocore.io)</p>
+                <p>Password: <span className="dark:text-emerald-400 font-bold select-all">123</span></p>
               </div>
             </form>
           ) : (
@@ -2429,24 +2540,45 @@ export default function App() {
                             if (device.type === "desktop") icon = <Cpu className="h-4 w-4 text-emerald-600" />;
 
                             return (
-                              <div key={device.id} className="p-3 bg-white rounded-xl border border-[#e4e4e7] shadow-xs flex items-start justify-between space-x-3 hover:border-indigo-300 transition-colors">
-                                <div className="flex items-start space-x-3 min-w-0">
-                                  <div className="p-2 bg-[#f4f4f5] rounded-lg shrink-0">
-                                    {icon}
+                              <div key={device.id} className="p-3 bg-white rounded-xl border border-[#e4e4e7] shadow-xs flex flex-col justify-between space-y-2.5 hover:border-indigo-300 transition-colors">
+                                <div className="flex items-start justify-between space-x-3">
+                                  <div className="flex items-start space-x-3 min-w-0">
+                                    <div className="p-2 bg-[#f4f4f5] rounded-lg shrink-0">
+                                      {icon}
+                                    </div>
+                                    <div className="min-w-0 space-y-0.5">
+                                      <h4 className="text-xs font-bold text-[#09090b] truncate">{device.name}</h4>
+                                      <p className="text-[10px] font-mono text-[#71717a]">{device.os}</p>
+                                      <p className="text-[10px] text-[#71717a] font-medium">{device.lastSync}</p>
+                                    </div>
                                   </div>
-                                  <div className="min-w-0 space-y-0.5">
-                                    <h4 className="text-xs font-bold text-[#09090b] truncate">{device.name}</h4>
-                                    <p className="text-[10px] font-mono text-[#71717a]">{device.os}</p>
-                                    <p className="text-[10px] text-[#71717a] font-medium">{device.lastSync}</p>
-                                  </div>
+                                  <span className={`status-dot shrink-0 mt-1 ${
+                                    device.status === "active" || device.status === "display_active"
+                                      ? "status-dot-emerald"
+                                      : device.status === "online"
+                                      ? "status-dot-indigo"
+                                      : "status-dot-amber"
+                                  }`} title={device.status} />
                                 </div>
-                                <span className={`status-dot shrink-0 mt-1 ${
-                                  device.status === "active" || device.status === "display_active"
-                                    ? "status-dot-emerald"
-                                    : device.status === "online"
-                                    ? "status-dot-indigo"
-                                    : "status-dot-amber"
-                                }`} title={device.status} />
+
+                                <div className="flex items-center justify-between border-t border-[#f4f4f5] pt-2">
+                                  <span className="text-[9px] font-mono text-emerald-700 font-semibold uppercase">
+                                    {device.status === "active" ? "Primary Workstation" : device.status === "display_active" ? "Display Connected" : "Paired Session"}
+                                  </span>
+                                  {device.status === "active" ? (
+                                    <span className="text-[10px] font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200" title="This machine is your current active workstation session">
+                                      This Machine (Active) ✓
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => disconnectDevice(device.id, device.name)}
+                                      className="text-[10px] font-mono font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                      title="Disconnect and revoke remote device session"
+                                    >
+                                      Disconnect ✕
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
