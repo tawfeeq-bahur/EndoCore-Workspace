@@ -185,7 +185,7 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
           >
             <span>REQUESTS</span>
             <span className="px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold">
-              {incomingList.length || 2}
+              {incomingList.length}
             </span>
           </button>
         </div>
@@ -246,7 +246,7 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
             <UserCheck className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-2xl font-black font-display text-[#09090b]">{onlineFriends.length || 2}</div>
+            <div className="text-2xl font-black font-display text-[#09090b]">{onlineFriends.length}</div>
             <div className="text-xs font-bold text-[#09090b]">Online</div>
             <p className="text-[10px] text-[#71717a]">Available to connect</p>
           </div>
@@ -258,7 +258,7 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
             <UserX className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-2xl font-black font-display text-[#09090b]">{offlineFriends.length || 5}</div>
+            <div className="text-2xl font-black font-display text-[#09090b]">{offlineFriends.length}</div>
             <div className="text-xs font-bold text-[#09090b]">Offline</div>
             <p className="text-[10px] text-[#71717a]">Not currently active</p>
           </div>
@@ -270,7 +270,7 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
             <Target className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-2xl font-black font-display text-[#09090b]">{focusingCount || 1}</div>
+            <div className="text-2xl font-black font-display text-[#09090b]">{focusingCount}</div>
             <div className="text-xs font-bold text-[#09090b]">Focusing</div>
             <p className="text-[10px] text-[#71717a]">Deep work in progress</p>
           </div>
@@ -282,7 +282,7 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
             <Laptop className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-2xl font-black font-display text-[#09090b]">3</div>
+            <div className="text-2xl font-black font-display text-[#09090b]">0</div>
             <div className="text-xs font-bold text-[#09090b]">In Session</div>
             <p className="text-[10px] text-[#71717a]">Active Pomodoro session</p>
           </div>
@@ -309,102 +309,54 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
                 onClick={() => setActiveSubTab("lobby")}
                 className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer font-mono"
               >
-                <span>2 online</span>
+                <span>{onlineFriends.length} online</span>
                 <ArrowRight className="h-3 w-3" />
               </button>
             </div>
 
             {/* PEER CARDS GRID */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {demoOnlinePeers.map((peer) => (
+              {onlineFriends.length > 0 ? onlineFriends.map((peer: any) => (
                 <div key={peer.id} className="p-5 rounded-2xl bg-white border border-[#e4e4e7] shadow-xs space-y-4 flex flex-col justify-between hover:border-emerald-300 transition-all">
-                  
-                  {/* Top info */}
                   <div className="flex items-start justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <img src={peer.avatarUrl} alt={peer.name} className="h-12 w-12 rounded-full object-cover border-2 border-emerald-400" />
+                        <img src={peer.profile?.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${peer.profile?.name}`} alt={peer.profile?.name} className="h-12 w-12 rounded-full object-cover border-2 border-emerald-400" />
                         <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white"></span>
                       </div>
                       <div className="min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <h4 className="text-sm font-bold text-[#09090b] truncate">{peer.name}</h4>
-                          {peer.badge && (
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-extrabold font-mono">
-                              {peer.badge}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-[#71717a] truncate">{peer.role}</p>
+                        <h4 className="text-sm font-bold text-[#09090b] truncate">{peer.profile?.name}</h4>
+                        <p className="text-[11px] text-[#71717a] truncate">{peer.profile?.headline || peer.profile?.role || "Developer"}</p>
                       </div>
                     </div>
-
-                    <div className="flex items-center space-x-2 text-[#71717a]">
-                      <span className="text-xs font-mono font-bold text-[#09090b]">{peer.duration}</span>
-                      <button className="p-1 hover:text-[#09090b] rounded cursor-pointer">
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
-                    </div>
                   </div>
-
-                  {/* App info */}
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-emerald-700 truncate">{peer.app}</p>
-                    <p className="text-[11px] text-[#71717a] flex items-center gap-1">
-                      <span>💬</span>
-                      <span>{peer.note}</span>
-                    </p>
-                  </div>
-
-                  {/* Segmented Focus Progress Bar */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-[#71717a]">
-                      <span>Focus time</span>
-                      <span className="font-bold text-[#09090b]">{peer.focusTimeMin} min</span>
-                    </div>
-                    {/* Segmented bar */}
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: 16 }).map((_, idx) => (
-                        <div
-                          key={idx}
-                          className={`h-2 flex-1 rounded-xs ${
-                            idx < 9 ? "bg-emerald-500" : "bg-slate-200"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Footer actions */}
                   <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-                    <div className="flex items-center space-x-1 text-[10px] font-mono text-[#71717a]">
-                      <Clock className="h-3 w-3" />
-                      <span>Last interaction {peer.lastInteraction}</span>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleNudgeClick(peer.name, peer.id)}
-                        disabled={nudgedState[peer.id]}
-                        className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-xs font-bold text-[#09090b] transition-all cursor-pointer shadow-2xs"
-                      >
-                        {nudgedState[peer.id] ? "Waved! 👋" : "Wave"}
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (onJoinSession) onJoinSession(peer.name);
-                          if (triggerToast) triggerToast(`Joining Pomodoro co-focus session with ${peer.name}`);
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-[#09090b] hover:bg-[#18181b] text-white text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        <span>Join Session</span>
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handleNudgeClick(peer.profile?.name, peer.id)}
+                      disabled={nudgedState[peer.id]}
+                      className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-xs font-bold text-[#09090b] transition-all cursor-pointer shadow-2xs"
+                    >
+                      {nudgedState[peer.id] ? "Waved! 👋" : "Wave"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (onJoinSession) onJoinSession(peer.profile?.name);
+                        if (triggerToast) triggerToast(`Joining session with ${peer.profile?.name}`);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-[#09090b] hover:bg-[#18181b] text-white text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
+                    >
+                      <Users className="h-3.5 w-3.5" />
+                      <span>Join Session</span>
+                    </button>
                   </div>
-
                 </div>
-              ))}
+              )) : (
+                <div className="md:col-span-2 p-8 text-center bg-white border border-dashed border-[#e4e4e7] rounded-2xl">
+                  <UserCheck className="h-8 w-8 text-[#d4d4d8] mx-auto mb-3" />
+                  <p className="text-sm font-bold text-[#09090b]">No connections online</p>
+                  <p className="text-xs text-[#71717a] mt-1">Connect with peers to see their live activity here.</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -429,48 +381,19 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
 
             {/* RECOMMENDATIONS CARDS GRID */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {demoRecommendations.map((rec) => (
-                <div key={rec.id} className="p-4 rounded-2xl bg-white border border-[#e4e4e7] shadow-xs space-y-4 flex flex-col justify-between hover:border-indigo-300 transition-all">
-                  
-                  <div className="flex items-start space-x-3">
-                    <img src={rec.avatarUrl} alt={rec.name} className="h-10 w-10 rounded-full object-cover border border-slate-200 shrink-0" />
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-[#09090b] truncate">{rec.name}</h4>
-                      <p className="text-[10px] text-[#71717a] truncate">{rec.role}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 text-[11px] text-[#71717a]">
-                    <div className="flex items-center space-x-1.5 truncate">
-                      <span>🏢</span>
-                      <span>{rec.room}</span>
-                    </div>
-                    <div className="flex items-center space-x-1.5 truncate">
-                      <span>🎨</span>
-                      <span>{rec.app}</span>
-                    </div>
-                    <div className="flex items-center space-x-1.5 truncate">
-                      <span>👥</span>
-                      <span>{rec.shared}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-100 pt-3">
-                    <span className="text-xs font-mono font-bold text-emerald-600">{rec.match} match</span>
-                    <button
-                      onClick={() => {
-                        if (onConnect) onConnect(rec.id);
-                        if (triggerToast) triggerToast(`Connection request sent to ${rec.name}`);
-                      }}
-                      className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-xs font-bold text-[#09090b] transition-all cursor-pointer shadow-2xs flex items-center gap-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      <span>Connect</span>
-                    </button>
-                  </div>
-
+              {friendsList.length > 0 ? (
+                <div className="sm:col-span-3 p-8 text-center bg-white border border-dashed border-[#e4e4e7] rounded-2xl">
+                  <Sparkles className="h-8 w-8 text-[#d4d4d8] mx-auto mb-3" />
+                  <p className="text-sm font-bold text-[#09090b]">Recommendations coming soon</p>
+                  <p className="text-xs text-[#71717a] mt-1">As you connect with more peers, we'll suggest people you may want to collaborate with.</p>
                 </div>
-              ))}
+              ) : (
+                <div className="sm:col-span-3 p-8 text-center bg-white border border-dashed border-[#e4e4e7] rounded-2xl">
+                  <UserPlus className="h-8 w-8 text-[#d4d4d8] mx-auto mb-3" />
+                  <p className="text-sm font-bold text-[#09090b]">No connections yet</p>
+                  <p className="text-xs text-[#71717a] mt-1">Search for peers by email or username above to start building your network.</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -520,17 +443,10 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
             </div>
 
             <div className="space-y-3 font-sans text-xs">
-              {sessionActivities.map((act) => (
-                <div key={act.id} className="flex items-center justify-between py-1 border-b border-slate-100 last:border-0 pb-2">
-                  <div className="flex items-center space-x-2.5 min-w-0">
-                    <span className={`h-7 w-7 rounded-full flex items-center justify-center text-xs shrink-0 ${act.color}`}>
-                      {act.icon}
-                    </span>
-                    <span className="font-semibold text-[#09090b] truncate text-xs">{act.text}</span>
-                  </div>
-                  <span className="text-[10px] font-mono text-[#71717a] shrink-0 ml-2">{act.time}</span>
-                </div>
-              ))}
+              <div className="p-6 text-center text-[#71717a]">
+                <p className="text-xs font-medium">No activity yet.</p>
+                <p className="text-[10px] mt-1">Session updates from your connections will appear here.</p>
+              </div>
             </div>
           </div>
 
@@ -553,38 +469,10 @@ export const MyConnections: React.FC<MyConnectionsProps> = ({
             </div>
 
             <div className="space-y-3 font-sans text-xs">
-              {recentCollaborations.map((collab) => (
-                <div key={collab.id} className="p-3 rounded-xl bg-slate-50/70 border border-slate-100 space-y-2">
-                  <div className="flex items-center justify-between">
-                    
-                    {/* User 1 */}
-                    <div className="flex items-center space-x-2 min-w-0">
-                      <img src={collab.user1.avatarUrl} alt={collab.user1.name} className="h-7 w-7 rounded-full object-cover border border-slate-200 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="font-bold text-[#09090b] text-[11px] truncate">{collab.user1.name}</p>
-                        <p className="text-[9px] text-[#71717a] truncate">{collab.user1.app}</p>
-                      </div>
-                    </div>
-
-                    <ArrowLeftRight className="h-3.5 w-3.5 text-[#71717a] shrink-0 mx-1" />
-
-                    {/* User 2 */}
-                    <div className="flex items-center space-x-2 min-w-0 text-right justify-end">
-                      <div className="min-w-0">
-                        <p className="font-bold text-[#09090b] text-[11px] truncate">{collab.user2.name}</p>
-                        <p className="text-[9px] text-[#71717a] truncate">{collab.user2.app}</p>
-                      </div>
-                      <img src={collab.user2.avatarUrl} alt={collab.user2.name} className="h-7 w-7 rounded-full object-cover border border-slate-200 shrink-0" />
-                    </div>
-
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px] font-mono border-t border-slate-200/60 pt-1.5 text-[#71717a]">
-                    <span className="font-bold text-emerald-600">{collab.duration}</span>
-                    <span>{collab.time}</span>
-                  </div>
-                </div>
-              ))}
+              <div className="p-6 text-center text-[#71717a]">
+                <p className="text-xs font-medium">No collaborations yet.</p>
+                <p className="text-[10px] mt-1">Your co-work sessions with connections will appear here.</p>
+              </div>
             </div>
           </div>
 

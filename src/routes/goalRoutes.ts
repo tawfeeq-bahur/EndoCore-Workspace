@@ -78,10 +78,8 @@ router.get("/", (req: any, res: any) => {
   let userGoals = allGoals.filter((g: any) => g.userId === userId);
   
   if (userGoals.length === 0) {
-    const defaults = seedDefaultGoals(userId);
-    allGoals = [...allGoals, ...defaults];
-    writeGoals(allGoals);
-    userGoals = defaults;
+    // No auto-seed — new users start fresh with no goals
+    userGoals = [];
   }
   
   res.json(userGoals);

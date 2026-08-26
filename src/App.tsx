@@ -84,6 +84,7 @@ import { SkeletonLoader } from "./components/SkeletonLoader";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import { GoalsDashboard } from "./components/GoalsDashboard";
 import { MyConnections } from "./components/MyConnections";
+import { RoomsDirectory } from "./components/RoomsDirectory";
 
 export default function App() {
   const [cmdKOpen, setCmdKOpen] = useState(false);
@@ -4043,151 +4044,15 @@ export default function App() {
               {activeTab === "groups" && (
                 <div className="space-y-6">
                   {selectedRoomName === null ? (
-                    <>
-                      {/* Directory View */}
-                      <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-[#09090b] tracking-tight">Rooms Directory</h2>
-                        <p className="text-xs text-[#71717a]">
-                          Select a room workspace to collaborate, monitor active telemetry, or commission a new channel.
-                        </p>
-                      </div>
-
-                      {/* 5-Step Room Creation Wizard Launch Card */}
-                      <div className="p-6 sm:p-8 rounded-2xl bg-[#09090b] text-white border border-[#27272a] flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-md relative overflow-hidden">
-                        <div className="space-y-2 z-10">
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-mono font-semibold">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            5-STEP ROOM INTELLIGENCE WIZARD
-                          </div>
-                          <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                            Commission a New Intelligence Room
-                          </h3>
-                          <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
-                            Configure room basics, access permissions, roles, individual & team work expectations, and versioned AI privacy policies in a guided 5-step setup experience.
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={() => setIsRoomWizardOpen(true)}
-                          className="px-6 py-3 bg-white hover:bg-zinc-100 text-[#09090b] font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all transform hover:scale-102 cursor-pointer shrink-0 flex items-center justify-center gap-2 z-10"
-                        >
-                          <Plus className="w-4 h-4 text-[#09090b]" />
-                          Launch 5-Step Wizard
-                        </button>
-                      </div>
-
-                      {/* Classroom Portal Card Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                        {groups.map(group => {
-                          const groupOnlineCount = user?.activeGroup === group.name
-                            ? (friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0))
-                            : Math.max(1, Math.round(group.members.length * 0.6));
-
-                          const isConnected = user?.activeGroup === group.name;
-
-                          return (
-                            <div
-                              key={group.id}
-                              className="studio-card p-6 flex flex-col justify-between space-y-6"
-                            >
-                              <div className="space-y-3">
-                                <div className="flex items-start justify-between">
-                                  <h4 className="text-lg font-bold text-[#09090b] tracking-tight">
-                                    {group.name}
-                                  </h4>
-                                  <span className={`text-[10px] font-mono font-semibold tracking-wider uppercase px-3 py-1 rounded-full border ${isConnected
-                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                      : "bg-zinc-100 text-zinc-600 border-zinc-200"
-                                    }`}>
-                                    {isConnected ? "Connected" : "Inactive"}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-[#71717a] font-mono leading-relaxed">{group.description}</p>
-                              </div>
-
-                              <div className="space-y-4 pt-3 border-t border-[#e4e4e7]">
-                                <div className="flex justify-between items-center text-xs font-mono">
-                                  <span className="text-[#71717a] font-semibold">Occupants: <strong className="text-[#09090b]">{group.members.length} peers</strong></span>
-                                  <span className="flex items-center text-emerald-700 font-semibold">
-                                    <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                                    {groupOnlineCount} Live Online
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => enterRoomChannel(group.name)}
-                                  className="w-full py-2.5 rounded-lg bg-[#09090b] text-white text-xs font-semibold hover:bg-[#27272a] transition-all shadow-xs cursor-pointer"
-                                >
-                                  Enter Room Workspace
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Public Rooms Directory Search */}
-                      <div className="mt-12 space-y-6 pt-8 border-t border-[#e4e4e7]">
-                        <div className="space-y-1">
-                          <h3 className="text-xl font-bold text-[#09090b] tracking-tight">Discover Public Rooms</h3>
-                          <p className="text-xs text-[#71717a]">
-                            Search for open guilds and teams to join across the EndoCore workspace.
-                          </p>
-                        </div>
-                        
-                        <div className="flex space-x-3">
-                          <input
-                            type="text"
-                            placeholder="Search by room name or description..."
-                            value={directoryQuery}
-                            onChange={(e) => {
-                              setDirectoryQuery(e.target.value);
-                              searchDirectory(e.target.value);
-                            }}
-                            className={`flex-1 rounded-xl px-4 py-3 text-sm font-sans ${formInput} transition-all`}
-                          />
-                          <button
-                            onClick={() => searchDirectory(directoryQuery)}
-                            className="px-6 py-3 bg-[#09090b] hover:bg-[#27272a] text-white font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center"
-                          >
-                            {isSearchingDirectory ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                          {directoryGroups.length === 0 && !isSearchingDirectory ? (
-                            <div className="col-span-1 md:col-span-2 p-8 text-center text-sm font-mono text-[#71717a] bg-zinc-50 rounded-xl border border-dashed border-[#e4e4e7]">
-                              No public rooms available to join right now.
-                            </div>
-                          ) : (
-                            directoryGroups.map(group => (
-                              <div
-                                key={group.id}
-                                className="p-6 bg-white border border-[#e4e4e7] rounded-2xl flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
-                              >
-                                <div className="space-y-2">
-                                  <div className="flex items-start justify-between">
-                                    <h4 className="text-md font-bold text-[#09090b] tracking-tight">{group.name}</h4>
-                                    <span className="text-[10px] font-mono font-semibold tracking-wider uppercase px-2 py-1 rounded bg-zinc-100 text-zinc-600">
-                                      {group.accessType === "REQUIRE_APPROVAL" ? "Approval Req." : "Public"}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-[#71717a] font-mono leading-relaxed line-clamp-2">{group.description}</p>
-                                </div>
-                                <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
-                                  <span className="text-xs font-mono text-zinc-500">{group.memberCount} members</span>
-                                  <button
-                                    onClick={() => joinRoom(group.id)}
-                                    className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 font-bold text-[10px] rounded-lg shadow-sm font-mono uppercase tracking-wider transition-all cursor-pointer"
-                                  >
-                                    Join Room
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </>
+                    <RoomsDirectory
+                      groups={groups}
+                      directoryGroups={directoryGroups}
+                      user={user}
+                      onEnterRoom={(roomName) => enterRoomChannel(roomName)}
+                      onOpenWizard={() => setIsRoomWizardOpen(true)}
+                      onJoinDirectoryGroup={(id) => joinRoom(id)}
+                      triggerToast={(msg) => triggerToast(msg)}
+                    />
                   ) : (
                     <>
                       {/* Inside Room View */}

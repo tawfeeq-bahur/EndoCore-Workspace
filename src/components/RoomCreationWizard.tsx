@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { 
   X, Check, ChevronRight, ChevronLeft, Shield, Users, Target, Cpu, Lock, 
-  Sparkles, Clock, Calendar, AlertCircle, Info, UserPlus, Globe, HelpCircle, Eye
+  Sparkles, Clock, Calendar, AlertCircle, Info, UserPlus, Globe, Upload, Image as ImageIcon,
+  Crown, Bookmark, Save, ArrowRight, Layers, FileText, UserCheck, Eye, HelpCircle, Code, Briefcase
 } from "lucide-react";
 
 interface ConnectionItem {
@@ -30,15 +31,18 @@ export const RoomCreationWizard: React.FC<RoomCreationWizardProps> = ({ isOpen, 
   const [connections, setConnections] = useState<ConnectionItem[]>([]);
   const [loadingConnections, setLoadingConnections] = useState(false);
 
-  // Step 1: Basics
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [iconEmoji, setIconEmoji] = useState("🚀");
-  const [category, setCategory] = useState("Development");
-  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  // STEP 1: Room Identity State
+  const [name, setName] = useState("Engineering Team");
+  const [description, setDescription] = useState("Development operations, API integrations, and infrastructure.");
+  const [imageMode, setImageMode] = useState<"upload" | "icon">("upload");
+  const [roomType, setRoomType] = useState("Team");
+  const [category, setCategory] = useState("Engineering");
+  const [timezone, setTimezone] = useState("Asia/Kolkata (IST)");
+  const [lifecycle, setLifecycle] = useState("Ongoing");
   const [deadline, setDeadline] = useState("");
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
 
-  // Step 2: Access & Invitations
+  // STEP 2: Access & Invites State
   const [accessMode, setAccessMode] = useState<"OPEN" | "APPROVAL_REQUIRED" | "INVITE_ONLY">("APPROVAL_REQUIRED");
   const [allowAdminInvites, setAllowAdminInvites] = useState(true);
   const [linkExpiryDays, setLinkExpiryDays] = useState(7);
@@ -46,29 +50,28 @@ export const RoomCreationWizard: React.FC<RoomCreationWizardProps> = ({ isOpen, 
   const [requireVerifiedAccount, setRequireVerifiedAccount] = useState(false);
   const [defaultMemberRole, setDefaultMemberRole] = useState<"MEMBER" | "OBSERVER">("MEMBER");
 
-  // Step 3: Members & Roles
+  // STEP 3: Members & Roles State
   const [selectedMembers, setSelectedMembers] = useState<Array<{ userId: string; name: string; avatarUrl?: string; role: string }>>([]);
 
-  // Step 4: Expectations
+  // STEP 4: Work Policy State
   const [expectationTab, setExpectationTab] = useState<"individual" | "team">("individual");
   const [memberTargets, setMemberTargets] = useState<Record<string, { focusMinutes: number; taskTarget: number; workingDays: string }>>({});
-  const [ownerFocusMinutes, setOwnerFocusMinutes] = useState(360); // 6 hours
+  const [ownerFocusMinutes, setOwnerFocusMinutes] = useState(360);
   const [ownerTaskTarget, setOwnerTaskTarget] = useState(5);
   const [teamFocusHours, setTeamFocusHours] = useState(40);
   const [teamTaskPoints, setTeamTaskPoints] = useState(50);
 
-  // Step 5: AI Policy & Privacy
+  // STEP 5 & 6: AI & Automation State
   const [memberSelfNudge, setMemberSelfNudge] = useState(true);
   const [ownerEscalation, setOwnerEscalation] = useState(true);
   const [warningThreshold, setWarningThreshold] = useState(45);
   const [gracePeriod, setGracePeriod] = useState(120);
+
+  // STEP 6 & 7: Privacy & Review State
   const [trackAppName, setTrackAppName] = useState(true);
   const [hideWindowTitle, setHideWindowTitle] = useState(true);
   const [hideWebsiteUrl, setHideWebsiteUrl] = useState(true);
   const [consentAccepted, setConsentAccepted] = useState(false);
-
-  const emojiList = ["🚀", "💻", "🎨", "🔬", "📚", "⚡", "🛡️", "💡", "🎯", "🔥", "🔮", "🧠"];
-  const categoryList = ["Development", "Design", "Research", "Study", "Custom"];
 
   useEffect(() => {
     if (isOpen) {
@@ -106,16 +109,11 @@ export const RoomCreationWizard: React.FC<RoomCreationWizardProps> = ({ isOpen, 
         avatarUrl: conn.profile.avatarUrl,
         role: defaultMemberRole
       }]);
-      // Set default target
       setMemberTargets(prev => ({
         ...prev,
         [conn.profile.id]: { focusMinutes: 360, taskTarget: 5, workingDays: "Mon,Tue,Wed,Thu,Fri" }
       }));
     }
-  };
-
-  const handleMemberRoleChange = (userId: string, role: string) => {
-    setSelectedMembers(selectedMembers.map(m => m.userId === userId ? { ...m, role } : m));
   };
 
   const handleSubmit = async () => {
@@ -134,7 +132,7 @@ export const RoomCreationWizard: React.FC<RoomCreationWizardProps> = ({ isOpen, 
       const payload = {
         name,
         description,
-        iconEmoji,
+        iconEmoji: "🚀",
         category,
         timezone,
         deadline: deadline || null,
@@ -207,658 +205,688 @@ export const RoomCreationWizard: React.FC<RoomCreationWizardProps> = ({ isOpen, 
 
   if (!isOpen) return null;
 
+  // Generate Initials Badge (e.g. "Engineering Team" -> "ET")
+  const getInitials = (str: string) => {
+    if (!str) return "ET";
+    const parts = str.trim().split(" ");
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return str.slice(0, 2).toUpperCase();
+  };
+
+  const stepsList = [
+    { num: 1, name: "Identity", desc: "Basic details" },
+    { num: 2, name: "Access", desc: "Security & join" },
+    { num: 3, name: "Members", desc: "Add & assign roles" },
+    { num: 4, name: "Work Policy", desc: "Goals & targets" },
+    { num: 5, name: "AI & Automation", desc: "Assistant settings" },
+    { num: 6, name: "Privacy", desc: "Data & telemetry" },
+    { num: 7, name: "Review", desc: "Confirm & launch" }
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto font-sans">
-      <div className="relative w-full max-w-4xl bg-white border border-[#e4e4e7] rounded-2xl shadow-2xl text-[#09090b] overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 bg-[#fafafa] overflow-y-auto font-sans text-[#09090b]">
+      
+      {/* Container Layout */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         
-        {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#e4e4e7] bg-[#fafafa]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-zinc-100 border border-[#e4e4e7] flex items-center justify-center text-xl shadow-xs">
-              {iconEmoji}
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-[#09090b] flex items-center gap-2 tracking-tight">
-                Create Intelligence Room
-                <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-zinc-100 text-[#09090b] border border-[#e4e4e7] font-mono font-semibold">
-                  Step {step} of 5
-                </span>
-              </h2>
-              <p className="text-xs text-[#71717a]">Configure team targets, privacy policies, and AI nudge settings</p>
-            </div>
+        {/* 1. PAGE HEADER ROW */}
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#09090b]">
+              Create a New Room
+            </h1>
+            <p className="text-xs text-[#71717a] font-medium">
+              Set up your workspace with the right people, policies and goals.
+            </p>
           </div>
-          <button 
+
+          <button
             onClick={onClose}
-            className="p-2 text-[#71717a] hover:text-[#09090b] rounded-lg hover:bg-zinc-100 transition cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-white border border-[#e4e4e7] hover:bg-zinc-100 text-xs font-bold text-[#09090b] flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 text-[#71717a]" />
+            <span>Cancel Creation</span>
           </button>
         </div>
 
-        {/* Step Progress Bar */}
-        <div className="grid grid-cols-5 bg-zinc-50 border-b border-[#e4e4e7]">
-          {[
-            { num: 1, label: "Basics" },
-            { num: 2, label: "Access & Invites" },
-            { num: 3, label: "Members & Roles" },
-            { num: 4, label: "Work Expectations" },
-            { num: 5, label: "AI & Privacy Policy" }
-          ].map(s => (
-            <div 
-              key={s.num} 
-              className={`py-2.5 px-3 text-center border-b-2 text-xs font-semibold transition ${
-                step === s.num 
-                  ? "border-[#09090b] text-[#09090b] bg-white shadow-xs" 
-                  : step > s.num 
-                  ? "border-emerald-600 text-emerald-700 bg-emerald-50/40" 
-                  : "border-transparent text-[#71717a]"
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1.5">
-                <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold ${
-                  step > s.num ? "bg-emerald-600 text-white" : step === s.num ? "bg-[#09090b] text-white" : "bg-zinc-200 text-[#71717a]"
-                }`}>
-                  {step > s.num ? "✓" : s.num}
-                </span>
-                <span className="hidden sm:inline">{s.label}</span>
-              </div>
-            </div>
-          ))}
+        {/* 2. 7-STEP PROGRESS STEPPER BAR */}
+        <div className="bg-white border border-[#e4e4e7] rounded-2xl p-4 shadow-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+            {stepsList.map((s, idx) => {
+              const isActive = step === s.num;
+              const isCompleted = step > s.num;
+
+              return (
+                <div key={s.num} className="relative flex flex-col items-center text-center">
+                  
+                  {/* Step Circle & Connecting Line */}
+                  <div className="flex items-center w-full justify-center relative mb-2">
+                    {idx > 0 && (
+                      <div className={`absolute left-0 right-1/2 top-1/2 -translate-y-1/2 h-0.5 ${
+                        isCompleted || isActive ? "bg-purple-600" : "bg-zinc-200"
+                      }`} />
+                    )}
+                    {idx < stepsList.length - 1 && (
+                      <div className={`absolute left-1/2 right-0 top-1/2 -translate-y-1/2 h-0.5 ${
+                        isCompleted ? "bg-purple-600" : "bg-zinc-200"
+                      }`} />
+                    )}
+
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition z-10 ${
+                      isActive 
+                        ? "bg-purple-600 text-white ring-4 ring-purple-100 shadow-xs" 
+                        : isCompleted 
+                        ? "bg-purple-600 text-white" 
+                        : "bg-zinc-100 text-[#71717a] border border-[#e4e4e7]"
+                    }`}>
+                      {isCompleted ? "✓" : s.num}
+                    </div>
+                  </div>
+
+                  {/* Step Title & Subtitle */}
+                  <div className="space-y-0.5">
+                    <div className={`text-xs font-bold ${isActive ? "text-[#09090b]" : "text-[#71717a]"}`}>
+                      {s.name}
+                    </div>
+                    <div className="text-[10px] text-[#a1a1aa] font-medium hidden lg:block">
+                      {s.desc}
+                    </div>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        {/* Error Alert */}
+        {/* ERROR ALERT IF ANY */}
         {error && (
-          <div className="mx-6 mt-4 p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
             <span>{error}</span>
           </div>
         )}
 
-        {/* Step Content */}
-        <div className="p-6 max-h-[65vh] overflow-y-auto">
+        {/* 3. MAIN WORKSPACE GRID: STEP CONTENT (LEFT/CENTER) + SUMMARY SIDEBAR (RIGHT) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-          {/* STEP 1: Room Basics */}
-          {step === 1 && (
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-2">
-                  Icon & Emoji
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {emojiList.map(emoji => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => setIconEmoji(emoji)}
-                      className={`w-10 h-10 rounded-xl text-xl flex items-center justify-center border transition cursor-pointer ${
-                        iconEmoji === emoji 
-                          ? "bg-[#09090b] text-white border-[#09090b] shadow-xs scale-105" 
-                          : "bg-white border-[#e4e4e7] hover:bg-zinc-100 text-[#09090b]"
-                      }`}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              </div>
+          {/* LEFT/CENTER STEP CONTENT PANEL */}
+          <div className="lg:col-span-8 space-y-6">
 
-              <div>
-                <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                  Room Name *
-                </label>
-                <input 
-                  type="text" 
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="e.g. EndoCore Backend Guild"
-                  className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] focus:outline-none focus:border-[#09090b] text-xs font-sans shadow-xs placeholder-zinc-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                  Description & Purpose
-                </label>
-                <textarea 
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  rows={3}
-                  placeholder="Describe the main objectives, goals, and focus expectations of this room..."
-                  className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] focus:outline-none focus:border-[#09090b] text-xs font-sans shadow-xs resize-none placeholder-zinc-400"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                    Room Category
-                  </label>
-                  <select 
-                    value={category}
-                    onChange={e => setCategory(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] focus:outline-none focus:border-[#09090b] text-xs font-sans shadow-xs cursor-pointer"
-                  >
-                    {categoryList.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
+            {/* STEP 1: ROOM IDENTITY */}
+            {step === 1 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-6 shadow-xs">
+                
+                {/* Step Sub-Header */}
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">
+                    Step 1 of 7
+                  </div>
+                  <h2 className="text-xl font-bold text-[#09090b] tracking-tight">
+                    Room Identity
+                  </h2>
+                  <p className="text-xs text-[#71717a]">
+                    Give your room a clear identity and purpose.
+                  </p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                    Time Zone
-                  </label>
-                  <input 
-                    type="text" 
-                    value={timezone}
-                    onChange={e => setTimezone(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] focus:outline-none focus:border-[#09090b] text-xs font-mono shadow-xs"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                  
+                  {/* Left Column: Image Upload & Live Preview */}
+                  <div className="md:col-span-5 space-y-5">
+                    
+                    {/* Room Image Selector Box */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold text-[#09090b]">
+                        Room Image
+                      </label>
+                      <p className="text-[11px] text-[#71717a]">
+                        Choose how your room will appear across EndoCore.
+                      </p>
+
+                      {/* Mode Switcher Buttons */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setImageMode("upload")}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                            imageMode === "upload" 
+                              ? "border-purple-600 bg-purple-50 text-purple-700 shadow-xs" 
+                              : "border-[#e4e4e7] bg-white text-[#71717a] hover:text-[#09090b]"
+                          }`}
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Upload Image</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImageMode("icon")}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                            imageMode === "icon" 
+                              ? "border-purple-600 bg-purple-50 text-purple-700 shadow-xs" 
+                              : "border-[#e4e4e7] bg-white text-[#71717a] hover:text-[#09090b]"
+                          }`}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" />
+                          <span>Choose Icon</span>
+                        </button>
+                      </div>
+
+                      {/* Drag & Drop Zone */}
+                      <div className="border-2 border-dashed border-[#e4e4e7] hover:border-purple-300 rounded-2xl p-6 text-center space-y-3 bg-zinc-50/50 transition">
+                        <div className="w-12 h-12 rounded-full bg-white border border-[#e4e4e7] flex items-center justify-center mx-auto text-[#09090b] shadow-2xs">
+                          <Upload className="w-5 h-5 text-[#09090b]" />
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-bold text-[#09090b]">Drag and drop your image here</p>
+                          <p className="text-[11px] text-[#71717a]">or</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-[#09090b] hover:bg-[#27272a] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer inline-flex items-center gap-1.5"
+                        >
+                          Upload Image
+                        </button>
+                        <p className="text-[10px] text-[#a1a1aa] font-mono pt-1">
+                          PNG, JPG or WEBP • Max 5 MB • 1:1 recommended
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Preview Box */}
+                    <div className="space-y-2">
+                      <label className="block text-xs font-bold text-[#09090b]">
+                        Preview
+                      </label>
+                      <div className="p-4 rounded-2xl bg-white border border-[#e4e4e7] flex items-center gap-3.5 shadow-2xs">
+                        <div className="w-14 h-14 rounded-2xl bg-purple-600 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                          {getInitials(name)}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-extrabold text-[#09090b] truncate">{name || "Room Name"}</h4>
+                          <p className="text-[11px] text-[#71717a]">This is how your room will look.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tip Box */}
+                    <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-100 text-xs text-purple-900 space-y-1">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-purple-600" />
+                        <span>Tip</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed text-purple-800">
+                        A square image works best. We'll automatically crop and resize it.
+                      </p>
+                    </div>
+
+                  </div>
+
+                  {/* Right Column: Form Inputs */}
+                  <div className="md:col-span-7 space-y-5">
+                    
+                    {/* Room Name */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Room Name <span className="text-rose-500">*</span>
+                        </label>
+                        <span className="text-[11px] font-mono text-[#a1a1aa]">{name.length} / 60</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        placeholder="e.g. Engineering Team"
+                        maxLength={60}
+                        className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-semibold text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs"
+                      />
+                      <p className="text-[11px] text-[#71717a]">This name will be visible to all room members.</p>
+                    </div>
+
+                    {/* Description */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Description
+                        </label>
+                        <span className="text-[11px] font-mono text-[#a1a1aa]">{description.length} / 250</span>
+                      </div>
+                      <textarea
+                        value={description}
+                        onChange={e => setDescription(e.target.value)}
+                        rows={3}
+                        maxLength={250}
+                        placeholder="Describe the main objectives, goals, and focus expectations of this room..."
+                        className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-medium text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs resize-none"
+                      />
+                      <p className="text-[11px] text-[#71717a]">Describe the purpose and focus of this room.</p>
+                    </div>
+
+                    {/* Room Type & Category Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Room Type <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={roomType}
+                            onChange={e => setRoomType(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-semibold text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs appearance-none cursor-pointer pr-8"
+                          >
+                            <option value="Team">👤 Team</option>
+                            <option value="Guild">🛡️ Guild</option>
+                            <option value="Project">🎯 Project</option>
+                            <option value="Personal">⚡ Personal</option>
+                          </select>
+                          <ChevronRight className="w-4 h-4 text-[#71717a] absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                        </div>
+                        <p className="text-[11px] text-[#71717a]">This helps organize and filter rooms.</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Category <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={category}
+                            onChange={e => setCategory(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-semibold text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs appearance-none cursor-pointer pr-8"
+                          >
+                            <option value="Engineering">{"</>"} Engineering</option>
+                            <option value="Design">🎨 Design</option>
+                            <option value="Research">🔬 Research</option>
+                            <option value="Product">📦 Product</option>
+                            <option value="Marketing">📣 Marketing</option>
+                          </select>
+                          <ChevronRight className="w-4 h-4 text-[#71717a] absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                        </div>
+                        <p className="text-[11px] text-[#71717a]">Helps members discover your room.</p>
+                      </div>
+                    </div>
+
+                    {/* Time Zone & Room Lifecycle Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Time Zone <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={timezone}
+                            onChange={e => setTimezone(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-semibold text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs appearance-none cursor-pointer pr-8"
+                          >
+                            <option value="Asia/Kolkata (IST)">🌐 Asia/Kolkata (IST)</option>
+                            <option value="UTC">🌐 UTC (Coordinated Universal Time)</option>
+                            <option value="America/New_York (EST)">🌐 America/New_York (EST)</option>
+                            <option value="Europe/London (GMT)">🌐 Europe/London (GMT)</option>
+                          </select>
+                          <ChevronRight className="w-4 h-4 text-[#71717a] absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                        </div>
+                        <p className="text-[11px] text-[#71717a]">Detected from your location.</p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Room Lifecycle
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={lifecycle}
+                            onChange={e => setLifecycle(e.target.value)}
+                            className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-semibold text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs appearance-none cursor-pointer pr-8"
+                          >
+                            <option value="Ongoing">Ongoing</option>
+                            <option value="Fixed Period">Fixed Period</option>
+                          </select>
+                          <ChevronRight className="w-4 h-4 text-[#71717a] absolute right-3 top-1/2 -translate-y-1/2 rotate-90 pointer-events-none" />
+                        </div>
+                        <p className="text-[11px] text-[#71717a]">This room will run without an end date.</p>
+                      </div>
+                    </div>
+
+                    {/* Project Deadline & Room Owner Box Row */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-[#09090b]">
+                          Project Deadline (Optional)
+                        </label>
+                        <input
+                          type="date"
+                          value={deadline}
+                          onChange={e => setDeadline(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-xs font-semibold text-[#09090b] focus:outline-none focus:border-purple-600 transition shadow-2xs cursor-pointer"
+                        />
+                        <p className="text-[11px] text-[#71717a]">Set a target completion date if applicable.</p>
+                      </div>
+
+                      {/* Room Owner Card */}
+                      <div className="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/60 flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                          <Crown className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-[#09090b]">Room Owner</h4>
+                          <p className="text-[11px] text-[#71717a] leading-tight mt-0.5">
+                            You will be set as the owner with full control over this room.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                  Optional Project Deadline
-                </label>
-                <input 
-                  type="date" 
-                  value={deadline}
-                  onChange={e => setDeadline(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] focus:outline-none focus:border-[#09090b] text-xs font-sans shadow-xs"
-                />
               </div>
+            )}
 
-              <div className="p-3.5 rounded-xl bg-zinc-100 border border-[#e4e4e7] text-xs text-[#09090b] flex items-start gap-2.5">
-                <Shield className="w-4 h-4 shrink-0 text-[#09090b] mt-0.5" />
-                <div>
-                  <span className="font-bold">Automatic Role Assignment:</span> As room creator, you will automatically be assigned the <span className="underline font-bold">Owner</span> role with full administrative control.
+            {/* STEP 2 to 7 PLACEHOLDERS / STEPS */}
+            {step === 2 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-5 shadow-xs">
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">Step 2 of 7</div>
+                  <h2 className="text-xl font-bold text-[#09090b]">Access & Security</h2>
+                  <p className="text-xs text-[#71717a]">Configure access permissions and join requirements.</p>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 2: Access & Invitations */}
-          {step === 2 && (
-            <div className="space-y-5">
-              <div>
-                <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-3">
-                  Select Room Access Mode
-                </label>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {[
-                    {
-                      id: "APPROVAL_REQUIRED",
-                      name: "Approval Required",
-                      badge: "Recommended Default",
-                      desc: "Users request access; Room Owner or Admin approves them. Best balance of security & speed."
-                    },
-                    {
-                      id: "OPEN",
-                      name: "Open Room",
-                      badge: "Public Access",
-                      desc: "Anyone with the link or browsing rooms can join immediately without manual approval."
-                    },
-                    {
-                      id: "INVITE_ONLY",
-                      name: "Invite Only",
-                      badge: "Strict Private",
-                      desc: "Only users explicitly invited from My Connections, email, or private hash links can join."
-                    }
-                  ].map(mode => (
+                    { id: "APPROVAL_REQUIRED", name: "Approval Required", desc: "Users request access; Room Owner approves them." },
+                    { id: "OPEN", name: "Open Room", desc: "Anyone with the link can join immediately." },
+                    { id: "INVITE_ONLY", name: "Invite Only", desc: "Only explicitly invited members can join." }
+                  ].map(m => (
                     <div 
-                      key={mode.id}
-                      onClick={() => setAccessMode(mode.id as any)}
-                      className={`p-4 rounded-xl border cursor-pointer transition relative ${
-                        accessMode === mode.id 
-                          ? "bg-zinc-100 border-[#09090b] shadow-xs" 
-                          : "bg-white border-[#e4e4e7] hover:bg-zinc-50"
-                      }`}
+                      key={m.id} 
+                      onClick={() => setAccessMode(m.id as any)}
+                      className={`p-4 rounded-2xl border cursor-pointer ${accessMode === m.id ? "bg-purple-50 border-purple-600" : "bg-white border-[#e4e4e7]"}`}
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-sm text-[#09090b]">{mode.name}</span>
-                        {mode.badge === "Recommended Default" && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-semibold">
-                            Recommended
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-[#71717a] leading-relaxed font-sans">{mode.desc}</p>
+                      <h4 className="font-bold text-xs">{m.name}</h4>
+                      <p className="text-[11px] text-[#71717a] mt-1">{m.desc}</p>
                     </div>
                   ))}
                 </div>
               </div>
+            )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#e4e4e7]">
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-white border border-[#e4e4e7]">
-                  <div>
-                    <div className="text-xs font-bold text-[#09090b]">Allow Admins to Invite</div>
-                    <div className="text-[11px] text-[#71717a]">Admins can send invite links to new members</div>
+            {step === 3 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-5 shadow-xs">
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">Step 3 of 7</div>
+                  <h2 className="text-xl font-bold text-[#09090b]">Members & Roles</h2>
+                  <p className="text-xs text-[#71717a]">Invite network connections and assign roles.</p>
+                </div>
+                <div className="text-xs text-[#71717a]">
+                  {connections.length > 0 ? `${connections.length} connections available to invite.` : "No connections found."}
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-5 shadow-xs">
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">Step 4 of 7</div>
+                  <h2 className="text-xl font-bold text-[#09090b]">Work Expectations</h2>
+                  <p className="text-xs text-[#71717a]">Define focus duration targets and task goals.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+                  <div className="p-4 rounded-xl border border-[#e4e4e7]">
+                    <span className="text-[#71717a]">Weekly Team Target:</span>
+                    <p className="text-base font-bold text-[#09090b] mt-1">{teamFocusHours} Hours</p>
                   </div>
-                  <input 
-                    type="checkbox" 
-                    checked={allowAdminInvites} 
-                    onChange={e => setAllowAdminInvites(e.target.checked)}
-                    className="w-4 h-4 accent-[#09090b] cursor-pointer" 
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-white border border-[#e4e4e7]">
-                  <div>
-                    <div className="text-xs font-bold text-[#09090b]">Require Verified Account</div>
-                    <div className="text-[11px] text-[#71717a]">Members must have verified email profile</div>
-                  </div>
-                  <input 
-                    type="checkbox" 
-                    checked={requireVerifiedAccount} 
-                    onChange={e => setRequireVerifiedAccount(e.target.checked)}
-                    className="w-4 h-4 accent-[#09090b] cursor-pointer" 
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                    Link Expiry Duration
-                  </label>
-                  <select 
-                    value={linkExpiryDays}
-                    onChange={e => setLinkExpiryDays(Number(e.target.value))}
-                    className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] text-xs font-sans cursor-pointer shadow-xs"
-                  >
-                    <option value={1}>1 Day</option>
-                    <option value={7}>7 Days (Default)</option>
-                    <option value={30}>30 Days</option>
-                    <option value={365}>1 Year</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                    Max Member Capacity
-                  </label>
-                  <input 
-                    type="number" 
-                    value={maxMemberCount}
-                    onChange={e => setMaxMemberCount(Number(e.target.value))}
-                    min={2}
-                    max={500}
-                    className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] text-xs font-mono shadow-xs"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: Members & Roles */}
-          {step === 3 && (
-            <div className="space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-[#09090b]">Add Members from My Connections</h3>
-                  <p className="text-xs text-[#71717a]">Select network connections to invite directly with predefined roles</p>
-                </div>
-                <span className="text-xs font-mono font-semibold px-3 py-1 rounded-full bg-zinc-100 text-[#09090b] border border-[#e4e4e7]">
-                  {selectedMembers.length} Invited
-                </span>
-              </div>
-
-              {loadingConnections ? (
-                <div className="py-8 text-center text-xs text-[#71717a] font-mono">Loading your connections...</div>
-              ) : connections.length === 0 ? (
-                <div className="p-6 rounded-xl bg-zinc-50 border border-[#e4e4e7] text-center">
-                  <UserPlus className="w-8 h-8 mx-auto text-[#71717a] mb-2" />
-                  <p className="text-xs text-[#71717a] font-mono">No active connections found in My Connections.</p>
-                  <p className="text-[11px] text-[#71717a] mt-1">You can still create the room and invite members later via room links.</p>
-                </div>
-              ) : (
-                <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
-                  {connections.map(conn => {
-                    const isSelected = selectedMembers.some(m => m.userId === conn.profile.id);
-                    const currentMemberObj = selectedMembers.find(m => m.userId === conn.profile.id);
-
-                    return (
-                      <div 
-                        key={conn.connectionId}
-                        className={`p-3 rounded-xl border flex items-center justify-between transition ${
-                          isSelected ? "bg-zinc-100 border-[#09090b]" : "bg-white border-[#e4e4e7] hover:bg-zinc-50"
-                        }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <input 
-                            type="checkbox" 
-                            checked={isSelected}
-                            onChange={() => handleToggleMember(conn)}
-                            className="w-4 h-4 accent-[#09090b] cursor-pointer"
-                          />
-                          <img 
-                            src={conn.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                            alt={conn.profile.name}
-                            className="w-9 h-9 rounded-full object-cover border border-[#e4e4e7]"
-                          />
-                          <div>
-                            <div className="text-xs font-bold text-[#09090b]">{conn.profile.name}</div>
-                            <div className="text-[10px] text-[#71717a] font-mono">@{conn.profile.username} • {conn.profile.headline}</div>
-                          </div>
-                        </div>
-
-                        {isSelected && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-[#71717a] font-mono">Role:</span>
-                            <select
-                              value={currentMemberObj?.role || "MEMBER"}
-                              onChange={e => handleMemberRoleChange(conn.profile.id, e.target.value)}
-                              className="px-2.5 py-1 bg-white border border-[#e4e4e7] rounded-lg text-xs text-[#09090b] font-bold cursor-pointer"
-                            >
-                              <option value="ADMIN">Admin</option>
-                              <option value="MANAGER">Manager</option>
-                              <option value="MEMBER">Member</option>
-                              <option value="OBSERVER">Observer</option>
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Role Permissions Reference Table */}
-              <div className="p-3.5 rounded-xl bg-zinc-100 border border-[#e4e4e7] text-xs space-y-2">
-                <div className="font-bold text-[#09090b] flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-[#09090b]" />
-                  Role Hierarchy & Permissions Reference:
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-[#71717a] font-mono">
-                  <div><span className="text-amber-700 font-bold">Owner:</span> Full control & delete</div>
-                  <div><span className="text-blue-700 font-bold">Admin:</span> Manage members & goals</div>
-                  <div><span className="text-emerald-700 font-bold">Manager:</span> View reports & tasks</div>
-                  <div><span className="text-[#09090b] font-bold">Observer:</span> Read-only telemetry</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: Work Expectations */}
-          {step === 4 && (
-            <div className="space-y-5">
-              <div className="flex border-b border-[#e4e4e7]">
-                <button
-                  type="button"
-                  onClick={() => setExpectationTab("individual")}
-                  className={`py-2 px-4 text-xs font-bold border-b-2 transition cursor-pointer ${
-                    expectationTab === "individual" 
-                      ? "border-[#09090b] text-[#09090b] bg-zinc-100" 
-                      : "border-transparent text-[#71717a] hover:text-[#09090b]"
-                  }`}
-                >
-                  Individual Targets Per Member
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExpectationTab("team")}
-                  className={`py-2 px-4 text-xs font-bold border-b-2 transition cursor-pointer ${
-                    expectationTab === "team" 
-                      ? "border-[#09090b] text-[#09090b] bg-zinc-100" 
-                      : "border-transparent text-[#71717a] hover:text-[#09090b]"
-                  }`}
-                >
-                  Team Level Targets & Milestones
-                </button>
-              </div>
-
-              {expectationTab === "individual" ? (
-                <div className="space-y-4">
-                  <p className="text-xs text-[#71717a]">
-                    Set customized targets for each member. Target records are stored separately for every member!
-                  </p>
-
-                  {/* Owner Target Card */}
-                  <div className="p-4 rounded-xl bg-white border border-[#e4e4e7] space-y-3 studio-card">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-bold text-[#09090b]">You (Room Owner)</div>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 font-semibold">Owner Target</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-[#71717a] mb-1">Required Daily Focus Hours</label>
-                        <input 
-                          type="number" 
-                          value={ownerFocusMinutes / 60} 
-                          onChange={e => setOwnerFocusMinutes(Number(e.target.value) * 60)}
-                          step={0.5} min={1} max={16}
-                          className="w-full px-3 py-1.5 bg-white border border-[#e4e4e7] rounded-lg text-xs text-[#09090b] font-mono shadow-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-[#71717a] mb-1">Daily Task Target</label>
-                        <input 
-                          type="number" 
-                          value={ownerTaskTarget} 
-                          onChange={e => setOwnerTaskTarget(Number(e.target.value))}
-                          min={1} max={50}
-                          className="w-full px-3 py-1.5 bg-white border border-[#e4e4e7] rounded-lg text-xs text-[#09090b] font-mono shadow-xs"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Invited Members Target Cards */}
-                  {selectedMembers.map(m => (
-                    <div key={m.userId} className="p-4 rounded-xl bg-white border border-[#e4e4e7] space-y-3 studio-card">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs font-bold text-[#09090b]">{m.name}</div>
-                        <span className="text-xs text-[#09090b] font-mono font-semibold">{m.role}</span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-[#71717a] mb-1">Daily Focus Target (Hours)</label>
-                          <input 
-                            type="number" 
-                            value={(memberTargets[m.userId]?.focusMinutes || 360) / 60} 
-                            onChange={e => {
-                              const mins = Number(e.target.value) * 60;
-                              setMemberTargets({
-                                ...memberTargets,
-                                [m.userId]: { ...memberTargets[m.userId], focusMinutes: mins, taskTarget: memberTargets[m.userId]?.taskTarget || 5, workingDays: "Mon,Tue,Wed,Thu,Fri" }
-                              });
-                            }}
-                            step={0.5} min={1} max={16}
-                            className="w-full px-3 py-1.5 bg-white border border-[#e4e4e7] rounded-lg text-xs text-[#09090b] font-mono shadow-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-[#71717a] mb-1">Daily Task Target</label>
-                          <input 
-                            type="number" 
-                            value={memberTargets[m.userId]?.taskTarget || 5} 
-                            onChange={e => {
-                              const tasks = Number(e.target.value);
-                              setMemberTargets({
-                                ...memberTargets,
-                                [m.userId]: { ...memberTargets[m.userId], focusMinutes: memberTargets[m.userId]?.focusMinutes || 360, taskTarget: tasks, workingDays: "Mon,Tue,Wed,Thu,Fri" }
-                              });
-                            }}
-                            min={1} max={50}
-                            className="w-full px-3 py-1.5 bg-white border border-[#e4e4e7] rounded-lg text-xs text-[#09090b] font-mono shadow-xs"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                        Total Team Weekly Focus Target (Hours)
-                      </label>
-                      <input 
-                        type="number" 
-                        value={teamFocusHours}
-                        onChange={e => setTeamFocusHours(Number(e.target.value))}
-                        className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] text-xs font-mono shadow-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-[#09090b] uppercase tracking-wider mb-1">
-                        Planned Story Points / Task Target
-                      </label>
-                      <input 
-                        type="number" 
-                        value={teamTaskPoints}
-                        onChange={e => setTeamTaskPoints(Number(e.target.value))}
-                        className="w-full px-4 py-2.5 bg-white border border-[#e4e4e7] rounded-xl text-[#09090b] text-xs font-mono shadow-xs"
-                      />
-                    </div>
+                  <div className="p-4 rounded-xl border border-[#e4e4e7]">
+                    <span className="text-[#71717a]">Planned Story Points:</span>
+                    <p className="text-base font-bold text-[#09090b] mt-1">{teamTaskPoints} Points</p>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
+            )}
 
-          {/* STEP 5: AI Policy & Privacy */}
-          {step === 5 && (
-            <div className="space-y-5">
-              {/* AI Config */}
-              <div className="p-4 rounded-xl bg-white border border-[#e4e4e7] space-y-3 studio-card">
-                <h3 className="text-xs font-bold text-[#09090b] uppercase tracking-wider flex items-center gap-2">
-                  <Cpu className="w-4 h-4 text-[#09090b]" />
-                  AI Agent Nudge & Escalation Settings
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <label className="flex items-center gap-2 text-[#09090b] cursor-pointer font-semibold">
-                    <input 
-                      type="checkbox" 
-                      checked={memberSelfNudge} 
-                      onChange={e => setMemberSelfNudge(e.target.checked)}
-                      className="accent-[#09090b]" 
-                    />
+            {step === 5 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-5 shadow-xs">
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">Step 5 of 7</div>
+                  <h2 className="text-xl font-bold text-[#09090b]">AI & Automation</h2>
+                  <p className="text-xs text-[#71717a]">Configure member self-nudges and owner escalation alerts.</p>
+                </div>
+                <div className="space-y-3 text-xs">
+                  <label className="flex items-center gap-2 font-bold">
+                    <input type="checkbox" checked={memberSelfNudge} onChange={e => setMemberSelfNudge(e.target.checked)} className="accent-purple-600" />
                     Enable Level 1 Member Self-Nudge
                   </label>
-                  <label className="flex items-center gap-2 text-[#09090b] cursor-pointer font-semibold">
-                    <input 
-                      type="checkbox" 
-                      checked={ownerEscalation} 
-                      onChange={e => setOwnerEscalation(e.target.checked)}
-                      className="accent-[#09090b]" 
-                    />
+                  <label className="flex items-center gap-2 font-bold">
+                    <input type="checkbox" checked={ownerEscalation} onChange={e => setOwnerEscalation(e.target.checked)} className="accent-purple-600" />
                     Enable Level 2 Owner Escalation
                   </label>
                 </div>
               </div>
+            )}
 
-              {/* Privacy Config */}
-              <div className="p-4 rounded-xl bg-white border border-[#e4e4e7] space-y-3 studio-card">
-                <h3 className="text-xs font-bold text-[#09090b] uppercase tracking-wider flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-[#09090b]" />
-                  Privacy & Telemetry Controls
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <label className="flex items-center gap-2 text-[#09090b] cursor-pointer font-semibold">
-                    <input 
-                      type="checkbox" 
-                      checked={trackAppName} 
-                      onChange={e => setTrackAppName(e.target.checked)}
-                      className="accent-[#09090b]" 
-                    />
+            {step === 6 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-5 shadow-xs">
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">Step 6 of 7</div>
+                  <h2 className="text-xl font-bold text-[#09090b]">Privacy & Telemetry</h2>
+                  <p className="text-xs text-[#71717a]">Set window title masking and website URL privacy rules.</p>
+                </div>
+                <div className="space-y-3 text-xs">
+                  <label className="flex items-center gap-2 font-bold">
+                    <input type="checkbox" checked={trackAppName} onChange={e => setTrackAppName(e.target.checked)} className="accent-purple-600" />
                     Track Application Name
                   </label>
-                  <label className="flex items-center gap-2 text-[#09090b] cursor-pointer font-semibold">
-                    <input 
-                      type="checkbox" 
-                      checked={hideWindowTitle} 
-                      onChange={e => setHideWindowTitle(e.target.checked)}
-                      className="accent-[#09090b]" 
-                    />
+                  <label className="flex items-center gap-2 font-bold">
+                    <input type="checkbox" checked={hideWindowTitle} onChange={e => setHideWindowTitle(e.target.checked)} className="accent-purple-600" />
                     Hide Document & Window Titles
                   </label>
-                  <label className="flex items-center gap-2 text-[#09090b] cursor-pointer font-semibold">
+                </div>
+              </div>
+            )}
+
+            {step === 7 && (
+              <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-5 shadow-xs">
+                <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                  <div className="text-xs font-mono font-bold text-purple-600 uppercase tracking-wider">Step 7 of 7</div>
+                  <h2 className="text-xl font-bold text-[#09090b]">Review & Launch</h2>
+                  <p className="text-xs text-[#71717a]">Review your room setup and accept the consent policy before launching.</p>
+                </div>
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs space-y-3">
+                  <div className="font-bold text-emerald-900 flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-emerald-700" />
+                    <span>Required Member Tracking Consent Policy</span>
+                  </div>
+                  <label className="flex items-center gap-2 text-emerald-950 font-bold cursor-pointer pt-1">
                     <input 
                       type="checkbox" 
-                      checked={hideWebsiteUrl} 
-                      onChange={e => setHideWebsiteUrl(e.target.checked)}
-                      className="accent-[#09090b]" 
+                      checked={consentAccepted}
+                      onChange={e => setConsentAccepted(e.target.checked)}
+                      className="w-4 h-4 accent-emerald-600 cursor-pointer"
                     />
-                    Hide Website URLs
+                    <span>I review, accept, and enforce the Room Tracking & Privacy Policy</span>
                   </label>
+                </div>
+              </div>
+            )}
+
+          </div>
+
+          {/* RIGHT COLUMN: ROOM SUMMARY PANEL */}
+          <div className="lg:col-span-4 space-y-6">
+            
+            <div className="bg-white border border-[#e4e4e7] rounded-2xl p-6 space-y-6 shadow-xs sticky top-8">
+              
+              {/* Summary Header */}
+              <div className="space-y-1 pb-4 border-b border-[#e4e4e7]">
+                <h3 className="text-sm font-bold text-[#09090b] tracking-tight">
+                  Room Summary
+                </h3>
+                <p className="text-[11px] text-[#71717a]">
+                  Preview of your room configuration
+                </p>
+              </div>
+
+              {/* Big Badge & Room Title */}
+              <div className="flex items-center gap-3.5">
+                <div className="w-14 h-14 rounded-2xl bg-purple-600 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                  {getInitials(name)}
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h4 className="text-sm font-extrabold text-[#09090b] truncate">{name || "Engineering Team"}</h4>
+                  <div className="flex items-center gap-1.5 flex-wrap text-[10px] font-semibold text-[#71717a]">
+                    <span className="px-2 py-0.5 rounded-full bg-zinc-100 border border-[#e4e4e7]">{roomType}</span>
+                    <span>•</span>
+                    <span className="px-2 py-0.5 rounded-full bg-zinc-100 border border-[#e4e4e7]">{category}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Consent Policy Acceptance Checkbox */}
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-xs space-y-3">
-                <div className="font-bold text-emerald-900 flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-emerald-700" />
-                  Required Member Tracking Consent Policy
+              {/* Configuration Checklist Summary */}
+              <div className="space-y-4 pt-2 text-xs">
+                
+                {/* Item 1: Access */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-zinc-100 text-[#71717a] flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono text-[#71717a] font-semibold uppercase block">Access</span>
+                    <span className="font-bold text-blue-600 text-xs">
+                      {accessMode === "APPROVAL_REQUIRED" ? "Approval Required" : accessMode === "OPEN" ? "Open Room" : "Invite Only"}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-emerald-900 leading-relaxed text-[11px]">
-                  By creating this room, you agree that activity telemetry (focus duration, app categories) will be collected according to the configured privacy settings (Version 1.0). Every invited member will review and accept this consent policy before room tracking begins.
-                </p>
-                <label className="flex items-center gap-2 text-emerald-950 font-bold cursor-pointer pt-1">
-                  <input 
-                    type="checkbox" 
-                    checked={consentAccepted}
-                    onChange={e => setConsentAccepted(e.target.checked)}
-                    className="w-4 h-4 accent-emerald-600 cursor-pointer"
-                  />
-                  I review, accept, and enforce the Room Tracking & Privacy Policy
-                </label>
+
+                {/* Item 2: Members */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-zinc-100 text-[#71717a] flex items-center justify-center shrink-0 mt-0.5">
+                    <Users className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono text-[#71717a] font-semibold uppercase block">Members</span>
+                    <span className="font-bold text-[#09090b] text-xs">
+                      {selectedMembers.length} members
+                    </span>
+                  </div>
+                </div>
+
+                {/* Item 3: Work Policy */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-zinc-100 text-[#71717a] flex items-center justify-center shrink-0 mt-0.5">
+                    <Target className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono text-[#71717a] font-semibold uppercase block">Work Policy</span>
+                    <span className="font-bold text-[#71717a] text-xs">
+                      {step >= 4 ? `${teamFocusHours}h / week` : "Not configured"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Item 4: AI Assistance */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-zinc-100 text-[#71717a] flex items-center justify-center shrink-0 mt-0.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono text-[#71717a] font-semibold uppercase block">AI Assistance</span>
+                    <span className="font-bold text-[#71717a] text-xs">
+                      {step >= 5 ? (memberSelfNudge ? "Level 1 Active" : "Configured") : "Not configured"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Item 5: Privacy */}
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-zinc-100 text-[#71717a] flex items-center justify-center shrink-0 mt-0.5">
+                    <Shield className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-mono text-[#71717a] font-semibold uppercase block">Privacy</span>
+                    <span className="font-bold text-[#71717a] text-xs">
+                      Default settings
+                    </span>
+                  </div>
+                </div>
+
               </div>
+
+              {/* Bottom Notice Box */}
+              <div className="p-3.5 rounded-2xl bg-zinc-50 border border-[#e4e4e7] text-[11px] text-[#71717a] leading-relaxed flex items-start gap-2">
+                <Info className="w-4 h-4 text-[#71717a] shrink-0 mt-0.5" />
+                <span>
+                  You can review and modify all settings before launching your room.
+                </span>
+              </div>
+
             </div>
-          )}
+
+          </div>
 
         </div>
 
-        {/* Modal Footer Controls */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-[#e4e4e7] bg-[#fafafa]">
-          <button
-            type="button"
-            onClick={() => setStep(Math.max(1, step - 1))}
-            disabled={step === 1 || loading}
-            className="px-4 py-2 rounded-xl text-xs font-semibold text-[#09090b] bg-white border border-[#e4e4e7] hover:bg-zinc-100 disabled:opacity-40 transition cursor-pointer flex items-center gap-1.5 shadow-xs"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back
-          </button>
-
-          {step < 5 ? (
+        {/* 4. STICKY BOTTOM ACTION FOOTER BAR */}
+        <div className="bg-white border border-[#e4e4e7] rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs sticky bottom-4">
+          
+          <div className="flex items-center space-x-3 text-xs text-[#71717a]">
             <button
               type="button"
               onClick={() => {
-                if (step === 1 && !name.trim()) {
-                  setError("Please enter a room name.");
-                  return;
-                }
-                setError(null);
-                setStep(step + 1);
+                if (step > 1) setStep(step - 1);
+                else onClose();
               }}
-              className="px-5 py-2 rounded-xl text-xs font-semibold bg-[#09090b] hover:bg-[#27272a] text-white shadow-xs transition cursor-pointer flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl bg-white border border-[#e4e4e7] hover:bg-zinc-50 font-bold text-[#09090b] transition cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
-              Next Step
-              <ChevronRight className="w-4 h-4" />
+              <Save className="w-4 h-4 text-[#71717a]" />
+              <span>Save & Exit</span>
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading || !consentAccepted}
-              className="px-6 py-2.5 rounded-xl text-xs font-bold bg-[#09090b] hover:bg-[#27272a] text-white shadow-xs disabled:opacity-50 transition cursor-pointer flex items-center gap-2"
-            >
-              {loading ? (
-                <>Creating Room...</>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  Launch Room System
-                </>
-              )}
-            </button>
-          )}
+            <span className="hidden sm:inline font-mono">All progress is saved automatically</span>
+          </div>
+
+          <div className="flex items-center space-x-3 w-full sm:w-auto">
+            {step > 1 && (
+              <button
+                type="button"
+                onClick={() => setStep(step - 1)}
+                className="px-5 py-2.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-zinc-50 font-bold text-xs text-[#09090b] transition cursor-pointer shadow-xs flex items-center gap-1.5"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Back</span>
+              </button>
+            )}
+
+            {step < 7 ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (step === 1 && !name.trim()) {
+                    setError("Please enter a room name.");
+                    return;
+                  }
+                  setError(null);
+                  setStep(step + 1);
+                }}
+                className="w-full sm:w-auto px-6 py-2.5 bg-[#09090b] hover:bg-[#27272a] text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={loading || !consentAccepted}
+                className="w-full sm:w-auto px-8 py-2.5 bg-[#09090b] hover:bg-[#27272a] text-white font-extrabold text-xs rounded-xl shadow-xs disabled:opacity-50 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                {loading ? "Creating Room..." : "Launch Room System →"}
+              </button>
+            )}
+          </div>
+
         </div>
 
       </div>
+
     </div>
   );
 };

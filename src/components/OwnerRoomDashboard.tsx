@@ -127,25 +127,25 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
     }
   ];
 
-  // Map room occupants dynamically from DB state
-  const mergedMembers = (Array.isArray(occupants) && occupants.length >= 3)
+  // Map room occupants dynamically from DB state — always use real data
+  const mergedMembers = (Array.isArray(occupants) && occupants.length > 0)
     ? occupants.map((occ, idx) => {
         const isOnline = occ.status !== "offline" && occ.currentActivity?.app !== "Offline";
         const focusHrs = parseFloat(occ.todayFocusTime?.replace("h", "") || "0");
         return {
           id: occ.id || `occ-${idx}`,
-          name: occ.name || defaultMembers[idx % defaultMembers.length].name,
-          avatarUrl: occ.avatarUrl || defaultMembers[idx % defaultMembers.length].avatarUrl,
-          role: occ.role || defaultMembers[idx % defaultMembers.length].role,
+          name: occ.name || "Member",
+          avatarUrl: occ.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${occ.name || 'User'}`,
+          role: occ.role || occ.headline || "Developer",
           status: isOnline ? "online" : "offline",
-          currentApp: occ.currentActivity?.app || (isOnline ? "VS Code" : "Offline"),
-          duration: occ.todayFocusTime || (isOnline ? "38m" : "—"),
+          currentApp: occ.currentActivity?.app || (isOnline ? "Workstation" : "Offline"),
+          duration: occ.todayFocusTime || (isOnline ? "—" : "—"),
           focusState: (isOnline ? "Focused" : "Offline") as "Focused" | "Working" | "Offline",
-          focusScore: occ.focusScore || (isOnline ? 85 : 45),
+          focusScore: occ.focusScore || (isOnline ? 85 : 0),
           focusHours: focusHrs
         };
       })
-    : defaultMembers;
+    : [];
 
   // -------------------------------------------------------------
   // DYNAMIC METRIC CALCULATIONS
@@ -204,19 +204,13 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
 
   const timelineLogs = rawTimelineLogs.length > 0
     ? rawTimelineLogs.slice(0, 5).map((t: any) => ({
-        time: t.time || "11:00 PM",
-        user: t.user || "Co-worker",
-        detail: `${t.app || "VS Code"} — ${t.project || "EndoCore Workspace"}`,
-        duration: t.duration || "30m",
+        time: t.time || "—",
+        user: t.user || "Member",
+        detail: `${t.app || "Workstation"} — ${t.project || "Workspace"}`,
+        duration: t.duration || "—",
         color: "bg-emerald-500"
       }))
-    : [
-        { time: "11:09 PM", user: "Sriram", detail: "VS Code — EndoCore Workspace", duration: "38m", color: "bg-emerald-500" },
-        { time: "10:48 PM", user: "Sri", detail: "Slack — Activity hidden", duration: "40m", color: "bg-amber-500" },
-        { time: "10:10 PM", user: "vicky", detail: "Figma — Portfolio Redesign", duration: "1h 02m", color: "bg-emerald-500" },
-        { time: "09:51 PM", user: "Tawfeeq Bahur", detail: "Google Chrome — Activity hidden", duration: "20s", color: "bg-[#71717a]" },
-        { time: "09:50 PM", user: "Tawfeeq Bahur", detail: "ChatGPT Classic — Activity hidden", duration: "25s", color: "bg-[#71717a]" }
-      ];
+    : [];
 
   return (
     <div className="space-y-6 font-sans text-[#09090b]">
@@ -443,7 +437,7 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
               </div>
 
               <div className="space-y-3 font-mono text-xs">
-                {timelineLogs.map((log, idx) => (
+                {timelineLogs.length > 0 ? timelineLogs.map((log, idx) => (
                   <div key={idx} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
                     <div className="flex items-center space-x-2 min-w-0">
                       <span className={`h-2 w-2 rounded-full shrink-0 ${log.color}`}></span>
@@ -453,7 +447,12 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
                     </div>
                     <span className="text-[10px] text-[#71717a] font-semibold shrink-0 ml-2">{log.duration}</span>
                   </div>
-                ))}
+                )) : (
+                  <div className="p-6 text-center text-[#71717a] font-sans">
+                    <p className="text-xs font-medium">No activity logged yet.</p>
+                    <p className="text-[10px] mt-1">Room timeline will populate as members start working.</p>
+                  </div>
+                )}
               </div>
             </div>
 
