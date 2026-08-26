@@ -15,8 +15,7 @@ import Redis from "ioredis";
 import { createRoomTransactional, recordTrackingConsent } from "./src/services/roomService";
 import { requireRoomRole, requireRoomPermission } from "./src/middleware/roomAuth";
 import { generateMultiAgentBriefing } from "./src/ai/multiAgentEngine";
-// import goalRoutes from "./src/routes/goalRoutes";
-// app.use("/api/goals", authenticateToken, goalRoutes);
+
 
 dotenv.config();
 
@@ -159,7 +158,7 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "public/uploads")));
 
 // Mount Goal Routes
-// app.use("/api/goals", authenticateToken, goalRoutes);
+
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -1303,17 +1302,19 @@ app.post("/api/tasks/:id/complete", authenticateToken, async (req: any, res) => 
 
     // Auto-update linked goal progress if goal exists
     try {
-      const goals = await (prisma as any).goal.findMany({
+      const goals = await (prisma as any).goal?.findMany({
         where: { userId: req.user.id, goalType: "TASKS_COMPLETED" }
       });
-      for (const goal of goals) {
-        await (prisma as any).goal.update({
-          where: { id: goal.id },
-          data: { currentProgress: { increment: 1 } }
-        });
+      if (goals) {
+        for (const goal of goals) {
+          await (prisma as any).goal?.update({
+            where: { id: goal.id },
+            data: { currentProgress: { increment: 1 } }
+          });
+        }
       }
     } catch (gErr) {
-      // Goal table optional
+      console.error("Goal progress error:", gErr);
     }
 
     res.json({ success: true, task: updatedTask });
@@ -1669,6 +1670,24 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
           }
         });
 
+        // Auto-update goals
+        try {
+          const userGoals = await (prisma as any).goal?.findMany({
+            where: { userId: req.user.id, goalType: 'FOCUS_TIME' }
+          });
+          if (userGoals) {
+            for (const goal of userGoals) {
+              if (['NOT_STARTED', 'ON_TRACK', 'AT_RISK'].includes(goal.status)) {
+                await (prisma as any).goal?.update({
+                  where: { id: goal.id },
+                  data: { currentProgress: { increment: 25 / 60 } }
+                });
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Failed to update goal progress", e);
+        }
       }
 
       await prisma.user.update({

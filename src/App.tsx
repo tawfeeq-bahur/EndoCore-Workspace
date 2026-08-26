@@ -72,6 +72,7 @@ import { TiltCard } from "./components/TiltCard";
 import { CommandPalette } from "./components/CommandPalette";
 import { SkeletonLoader } from "./components/SkeletonLoader";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import { GoalsDashboard } from "./components/GoalsDashboard";
 
 export default function App() {
   const [cmdKOpen, setCmdKOpen] = useState(false);
@@ -3834,7 +3835,7 @@ export default function App() {
               {/* GOALS TAB VIEW */}
               {activeTab === "goals" && (
                 <div className="goals-container w-full h-full p-0 m-0 relative -mx-4 sm:-mx-6 -my-6 bg-[#f8fafc]">
-                  <AnalyticsDashboard />
+                  <GoalsDashboard />
                 </div>
               )}
 
