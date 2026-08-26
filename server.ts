@@ -1225,6 +1225,113 @@ app.post("/api/rooms/:id/consent", authenticateToken, async (req: any, res) => {
   }
 });
 
+// 5. Update Room Status (Close Group / Complete / Reopen) - Owner/Admin Access
+app.post("/api/rooms/:id/status", authenticateToken, async (req: any, res) => {
+  try {
+    const roomId = req.params.id;
+    const { status } = req.body;
+
+    if (!["active", "completed", "closed", "archived"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status value. Must be active, completed, closed, or archived." });
+    }
+
+    const roomObj = await prisma.room.findUnique({ where: { id: roomId } });
+    if (!roomObj) return res.status(404).json({ error: "Room not found" });
+
+    const member = await prisma.roomMember.findFirst({
+      where: { roomId, userId: req.user.id }
+    });
+
+    const isOwnerOrAdmin = roomObj.ownerId === req.user.id || (member && (member.role === "OWNER" || member.role === "ADMIN"));
+    if (!isOwnerOrAdmin) {
+      return res.status(403).json({ error: "Only Room Owner or Admin can update group status." });
+    }
+
+    const updatedRoom = await prisma.room.update({
+      where: { id: roomId },
+      data: { status }
+    });
+
+    res.json({ success: true, room: updatedRoom });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || "Failed to update room status" });
+  }
+});
+
+// 6. Task Management Endpoints (Create & Complete Tasks)
+app.get("/api/tasks", authenticateToken, async (req: any, res) => {
+  try {
+    const tasks = await prisma.task.findMany({
+      where: { assigneeId: req.user.id },
+      orderBy: { createdAt: "desc" }
+    });
+    res.json({ tasks });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/tasks", authenticateToken, async (req: any, res) => {
+  try {
+    const { title, description, points, roomId } = req.body;
+    if (!title) return res.status(400).json({ error: "Title is required" });
+
+    let activeRoomId = roomId;
+    if (!activeRoomId) {
+      const firstRoom = await prisma.room.findFirst();
+      activeRoomId = firstRoom?.id;
+    }
+    if (!activeRoomId) return res.status(400).json({ error: "No active room found" });
+
+    const newTask = await prisma.task.create({
+      data: {
+        roomId: activeRoomId,
+        assigneeId: req.user.id,
+        title,
+        description: description || "",
+        points: points || 1,
+        status: "TODO"
+      }
+    });
+
+    res.json({ success: true, task: newTask });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/tasks/:id/complete", authenticateToken, async (req: any, res) => {
+  try {
+    const taskId = req.params.id;
+    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    if (!task) return res.status(404).json({ error: "Task not found" });
+
+    const updatedTask = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date()
+      }
+    });
+
+    // Auto-update linked goal progress if goal exists
+    try {
+      const goals = await prisma.goal.findMany({
+        where: { userId: req.user.id, goalType: "TASKS_COMPLETED" }
+      });
+      for (const goal of goals) {
+        await goalService.recordProgress(goal.id, 1, "TASK", taskId);
+      }
+    } catch (gErr) {
+      console.error("Goal progress error:", gErr);
+    }
+
+    res.json({ success: true, task: updatedTask });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get("/api/user", authenticateToken, async (req: any, res) => {
   try {
     const userId = req.user.id;
@@ -1727,7 +1834,6 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
     todayStart.setHours(0,0,0,0);
 
     const friendPromises = members
-      .filter(m => m.userId !== req.user.id)
       .map(async m => {
         const u = m.user;
         const currentAct = await getUserActiveActivity(u.id);
@@ -1770,6 +1876,15 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
         const todayFocusTime = `${uHours}h`;
         const focusScore = await calculateProductivityScore(u.id, uHours, u.productivityGoal || 6, u.distractionsCount);
 
+        const realTasksCompleted = await prisma.task.count({
+          where: { assigneeId: u.id, status: "COMPLETED" }
+        });
+        const realFocusSessions = await prisma.focusSession.count({
+          where: { userId: u.id, completed: true }
+        });
+        const tasksCompleted = realTasksCompleted + realFocusSessions;
+        const taskTarget = u.productivityGoal || 5;
+
         return {
           id: u.id,
           name: u.name,
@@ -1779,6 +1894,8 @@ app.get("/api/friends", authenticateToken, async (req: any, res) => {
           currentActivity: maskedActivity,
           todayFocusTime,
           focusScore,
+          tasksCompleted,
+          taskTarget,
           timeline: u.privacyMode === "Private" ? [] : u.activityLogs.map(log => {
             const rawLogActivity = {
               app: log.app,

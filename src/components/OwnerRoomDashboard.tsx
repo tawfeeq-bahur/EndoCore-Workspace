@@ -29,8 +29,10 @@ interface OwnerRoomDashboardProps {
   roomDetails?: any;
   occupants: any[];
   userRole?: string;
+  roomStatus?: string;
   onRefreshAi?: () => void;
   onNudgeMember?: (name: string, id: string) => void;
+  onToggleRoomStatus?: (newStatus: string) => void;
 }
 
 export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
@@ -38,10 +40,15 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
   roomDetails,
   occupants,
   userRole = "MEMBER",
+  roomStatus = "active",
   onRefreshAi,
-  onNudgeMember
+  onNudgeMember,
+  onToggleRoomStatus
 }) => {
   const [activeTab, setActiveTab] = useState<"health" | "members" | "timeline" | "policies">("health");
+
+  const isAdminOrOwner = userRole === "OWNER" || userRole === "ADMIN" || userRole === "admin";
+  const isClosed = roomStatus === "closed" || roomStatus === "completed";
 
   // Derive metrics safely from occupants and roomDetails
   const totalOccupants = Math.max(1, occupants.length);
@@ -98,10 +105,62 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
 
   const teamEffortProgress = totalTargetHours > 0 ? Math.min(100, Math.round((totalActualHours / totalTargetHours) * 100)) : 0;
   const teamDeliveryProgress = totalTasksTarget > 0 ? Math.min(100, Math.round((totalTasksCompleted / totalTasksTarget) * 100)) : 0;
+  const isAllTasksCompleted = teamDeliveryProgress >= 100 && totalTasksTarget > 0;
 
   return (
     <div className="space-y-6">
       
+      {/* GROUP CLOSED OR TASK COMPLETED BANNER */}
+      {isClosed && (
+        <div className="p-4 rounded-2xl bg-zinc-900 text-white border border-zinc-700 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl font-bold">
+              🔒
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                Group Status: {roomStatus === "completed" ? "COMPLETED" : "CLOSED"}
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                  All Tasks Handled
+                </span>
+              </h4>
+              <p className="text-xs text-zinc-400">
+                This group has completed its targets or was closed by an Admin. Activity logs and history are archived.
+              </p>
+            </div>
+          </div>
+          {isAdminOrOwner && onToggleRoomStatus && (
+            <button
+              onClick={() => onToggleRoomStatus("active")}
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs font-mono rounded-xl transition cursor-pointer shrink-0"
+            >
+              Re-open Group
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* TASK COMPLETED ADMIN PROMPT (If not closed yet but tasks 100% complete) */}
+      {!isClosed && isAllTasksCompleted && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+            <div>
+              <h4 className="text-sm font-bold text-emerald-900">🎉 All Team Tasks & Delivery Completed!</h4>
+              <p className="text-xs text-emerald-700">100% of planned story points/tasks have been completed by the team.</p>
+            </div>
+          </div>
+          {isAdminOrOwner && onToggleRoomStatus && (
+            <button
+              onClick={() => onToggleRoomStatus("completed")}
+              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs font-mono rounded-xl transition cursor-pointer shrink-0 shadow-sm"
+            >
+              Complete & Close Group
+            </button>
+          )}
+        </div>
+      )}
+
       {/* 1. ROOM HEADER & TEAM HEALTH TOP BANNER */}
       <div className="p-6 sm:p-8 rounded-3xl bg-white border border-[#e4e4e7] shadow-lg relative overflow-hidden space-y-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -117,6 +176,11 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
                   {roomDetails?.category || "Development"}
                 </span>
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-bold ${
+                  isClosed ? "bg-zinc-200 text-zinc-800" : "bg-emerald-100 text-emerald-800"
+                }`}>
+                  {roomStatus.toUpperCase()}
+                </span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-zinc-100 text-zinc-600 border border-zinc-200 font-mono">
                   Role: {userRole}
                 </span>
@@ -127,15 +191,30 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="px-4 py-2 rounded-xl bg-zinc-50 border border-zinc-200 text-right">
               <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block">Forecast Status</span>
               <span className={`text-xs font-bold font-mono ${
-                teamEffortProgress > 70 ? "text-emerald-600" : teamEffortProgress > 40 ? "text-amber-500" : "text-rose-500"
+                isClosed ? "text-zinc-500" : teamEffortProgress > 70 ? "text-emerald-600" : teamEffortProgress > 40 ? "text-amber-500" : "text-rose-500"
               }`}>
-                {teamEffortProgress > 70 ? "● ON TRACK" : teamEffortProgress > 40 ? "▲ WATCH" : "✖ AT RISK"}
+                {isClosed ? "● COMPLETED" : teamEffortProgress > 70 ? "● ON TRACK" : teamEffortProgress > 40 ? "▲ WATCH" : "✖ AT RISK"}
               </span>
             </div>
+
+            {/* ADMIN CONTROLS: CLOSE / REOPEN GROUP */}
+            {isAdminOrOwner && onToggleRoomStatus && (
+              <button
+                onClick={() => onToggleRoomStatus(isClosed ? "active" : "closed")}
+                className={`px-4 py-2.5 rounded-xl font-mono text-xs font-bold transition cursor-pointer border shadow-sm flex items-center gap-1.5 ${
+                  isClosed 
+                    ? "bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700" 
+                    : "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                {isClosed ? "Re-open Group" : "Close Group"}
+              </button>
+            )}
 
             {onRefreshAi && (
               <button
@@ -148,6 +227,7 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
             )}
           </div>
         </div>
+
 
         {/* DUAL PROGRESS METRICS CARDS (Separated Effort vs Delivery) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">

@@ -784,6 +784,30 @@ export default function App() {
     }
   };
 
+  const handleToggleRoomStatus = async (newStatus: string) => {
+    try {
+      const activeGroupObj = groups.find(g => g.name === selectedRoomName);
+      if (!activeGroupObj) return;
+
+      const res = await apiFetch(`/api/rooms/${activeGroupObj.id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (res.ok) {
+        showToast(`🚀 Group status updated to "${newStatus.toUpperCase()}"!`);
+        setGroups(prev => prev.map(g => g.name === selectedRoomName ? { ...g, status: newStatus } : g));
+        fetchGroups();
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to update group status");
+      }
+    } catch (e) {
+      showToast("Error updating group status.");
+    }
+  };
+
+
   useEffect(() => {
     if (activeTab === "groups") {
       searchDirectory(directoryQuery);
@@ -4192,8 +4216,10 @@ export default function App() {
                                 roomDetails={groups.find(g => g.name === selectedRoomName)}
                                 occupants={friends}
                                 userRole="OWNER"
+                                roomStatus={(groups.find(g => g.name === selectedRoomName) as any)?.status || "active"}
                                 onRefreshAi={() => fetchAiBriefing(true)}
                                 onNudgeMember={(name, id) => triggerPeerNudge(name, id)}
+                                onToggleRoomStatus={(newStatus) => handleToggleRoomStatus(newStatus)}
                               />
 
                               {/* Quick AI co-working briefing */}
