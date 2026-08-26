@@ -1,0 +1,74 @@
+[
+  {
+    "id": "g1",
+    "userId": "u1",
+    "title": "Design System Migration",
+    "description": "Migrate legacy component styles to V2 Tailwind/Monochrome system",
+    "category": "Design",
+    "targetHours": 15,
+    "currentHours": 15,
+    "status": "completed",
+    "deadline": "2026-08-31",
+    "createdAt": "2026-08-26T07:01:41.986Z"
+  },
+  {
+    "id": "g2",
+    "userId": "u1",
+    "title": "Core API Optimization",
+    "description": "Improve server response times by caching heavy queries in Redis",
+    "category": "Development",
+    "targetHours": 20,
+    "currentHours": 20,
+    "status": "completed",
+    "deadline": "2026-09-05",
+    "createdAt": "2026-08-26T07:01:41.986Z"
+  },
+  {
+    "id": "g3",
+    "userId": "u1",
+    "title": "Write Architecture Docs",
+    "description": "Document multi-device identity pairing & WebSocket events sync flow",
+    "category": "Documentation",
+    "targetHours": 8,
+    "currentHours": 8,
+    "status": "completed",
+    "deadline": "2026-08-26",
+    "createdAt": "2026-08-23T07:01:41.986Z"
+  },
+  {
+    "id": "g1",
+    "userId": "3fcd4dfb-6265-4e9d-902c-6222ff115f4f",
+    "title": "Design System Migration",
+    "description": "Migrate legacy component styles to V2 Tailwind/Monochrome system",
+    "category": "Design",
+    "targetHours": 15,
+    "currentHours": 12.5,
+    "status": "active",
+    "deadline": "2026-08-31",
+    "createdAt": "2026-08-26T09:59:24.153Z"
+  },
+  {
+    "id": "g2",
+    "userId": "3fcd4dfb-6265-4e9d-902c-6222ff115f4f",
+    "title": "Core API Optimization",
+    "description": "Improve server response times by caching heavy queries in Redis",
+    "category": "Development",
+    "targetHours": 20,
+    "currentHours": 8,
+    "status": "active",
+    "deadline": "2026-09-05",
+    "createdAt": "2026-08-26T09:59:24.153Z"
+  },
+  {
+    "id": "g3",
+    "userId": "3fcd4dfb-6265-4e9d-902c-6222ff115f4f",
+    "title": "Write Architecture Docs",
+    "description": "Document multi-device identity pairing & WebSocket events sync flow",
+    "category": "Documentation",
+    "targetHours": 8,
+    "currentHours": 8,
+    "status": "completed",
+    "deadline": "2026-08-26",
+    "createdAt": "2026-08-23T09:59:24.153Z"
+  }
+]
