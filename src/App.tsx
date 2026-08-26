@@ -2511,7 +2511,7 @@ export default function App() {
         </header>
 
         {/* 📚 PRIMARY SCROLLABLE BODY */}
-        <div className="p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 max-w-5xl w-full mx-auto">
+        <div className={`p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 w-full ${activeTab === "analytics" ? "max-w-[1600px] mx-auto px-4 sm:px-8" : "max-w-5xl mx-auto"}`}>
 
           {/* SLIDING TIMELINE SUBSECTION FOR SELECTED FRIENDS */}
           <AnimatePresence>
@@ -3671,7 +3671,7 @@ export default function App() {
               )}
 
               {activeTab === "analytics" && (
-                <div className="analytics-container w-full h-full p-0 m-0 relative -mx-4 sm:-mx-6 -my-6 bg-[#f8fafc]">
+                <div className="analytics-container w-full h-full p-0 m-0 bg-[#f8fafc]">
                   <AnalyticsDashboard />
                 </div>
               )}
