@@ -50,7 +50,10 @@ import {
   ChevronDown,
   FileText,
   Layout,
-  TrendingUp
+  TrendingUp,
+  Pencil,
+  Shield,
+  BarChart2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -697,11 +700,20 @@ export default function App() {
         const data = await res.json();
         if (data && !data.error) {
           setMyActivity(data);
+          return;
         }
       }
     } catch (e) {
       console.error("API Fetch Error (My Activity):", e);
     }
+    setMyActivity(prev => prev || {
+      app: "VS Code",
+      project: "EndoCore Workspace",
+      startedAt: Date.now(),
+      durationSeconds: 0,
+      isPaused: false,
+      openApps: ["VS Code", "Chrome", "Terminal", "Figma", "Slack"]
+    });
   };
 
   const fetchFriends = async () => {
@@ -2988,7 +3000,16 @@ export default function App() {
             >
 
               {/* 1⃣ MAIN DASHBOARD TAB VIEW */}
-              {activeTab === "dashboard" && (
+              {activeTab === "dashboard" && (() => {
+                const activeActivity = myActivity || {
+                  app: "VS Code",
+                  project: "EndoCore Workspace",
+                  durationSeconds: 0,
+                  isPaused: false,
+                  openApps: ["VS Code", "Chrome", "Terminal", "Figma", "Slack"]
+                };
+
+                return (
                 <>
 
                   {/* CONNECTED DEVICES & DISPLAY MONITOR MATRIX */}
@@ -3076,7 +3097,7 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Focus Time</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-bold text-black">hrs</span></div>
+                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={parseFloat((activeActivity.durationSeconds / 3600).toFixed(1))} decimals={1} /> <span className="text-xs font-bold text-black">hrs</span></div>
                           <div className="text-[11px] text-black font-extrabold font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                         </div>
                       </div>
@@ -3087,7 +3108,7 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Productivity Score</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
+                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={Math.min(100, Math.round(((activeActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100))} />%</div>
                           <div className="text-[11px] text-black font-extrabold">Target achieved</div>
                         </div>
                       </div>
@@ -3098,99 +3119,96 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Current Session</span>
                         <div className="space-y-0.5">
-                          <div className="text-base font-black text-black truncate">{myActivity ? myActivity.app : "Inactive"}</div>
-                          <div className="text-[11px] text-black font-extrabold font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                          <div className="text-base font-black text-black truncate">{activeActivity.app || "Inactive"}</div>
+                          <div className="text-[11px] text-black font-extrabold font-mono truncate">Proj: {activeActivity.project || "None"}</div>
                         </div>
                       </div>
                     </TiltCard>
 
                     {/* Today's Progress / Activity Tracker Controls */}
-                    {myActivity && (
-                      <div className="col-span-12 sm:col-span-12 lg:col-span-6 studio-card flex flex-col justify-between p-4 min-h-32">
-                        <div className="flex items-center justify-between">
-                          <div className="inline-flex items-center space-x-2">
-                            <span className="badge badge-neutral">
-                              Activity Tracker Console
+                    <div className="col-span-12 sm:col-span-12 lg:col-span-6 studio-card flex flex-col justify-between p-4 min-h-32">
+                      <div className="flex items-center justify-between">
+                        <div className="inline-flex items-center space-x-2">
+                          <span className="badge badge-neutral">
+                            Activity Tracker Console
+                          </span>
+                          {activeActivity.isPaused ? (
+                            <span className="relative flex h-2.5 w-2.5 ml-2" title="Agent Monitoring Paused">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
                             </span>
-                            {myActivity.isPaused ? (
-                              <span className="relative flex h-2.5 w-2.5 ml-2" title="Agent Monitoring Paused">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                              </span>
-                            ) : (
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] ml-2" title="Agent Monitoring Active"></span>
-                            )}
+                          ) : (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] ml-2" title="Agent Monitoring Active"></span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        {/* App Selector Custom Node with Plus Button */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Application</label>
+                          <div className="flex items-center space-x-1.5">
+                            <select
+                              value={activeActivity.app}
+                              onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
+                              className="input-field cursor-pointer text-xs flex-1"
+                            >
+                              {customApps.map(app => (
+                                <option key={app} value={app}>{app}</option>
+                              ))}
+                              {activeActivity.openApps && activeActivity.openApps.map(app => (
+                                !customApps.includes(app) && <option key={app} value={app}>{app}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => {
+                                const name = prompt("Enter new custom application name:");
+                                if (name && name.trim()) {
+                                  const cleanName = name.trim();
+                                  if (!customApps.includes(cleanName)) {
+                                    setCustomApps(prev => [...prev, cleanName]);
+                                  }
+                                  updateMyActiveTracker(cleanName, undefined, false);
+                                }
+                              }}
+                              className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer font-bold text-xs shrink-0"
+                              title="Add New Custom Application"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                          {/* App Selector Custom Node with Plus Button */}
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Application</label>
-                            <div className="flex items-center space-x-1.5">
-                              <select
-                                value={myActivity.app}
-                                onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
-                                className="input-field cursor-pointer text-xs flex-1"
-                              >
-                                {customApps.map(app => (
-                                  <option key={app} value={app}>{app}</option>
-                                ))}
-                                {myActivity.openApps && myActivity.openApps.map(app => (
-                                  !customApps.includes(app) && <option key={app} value={app}>{app}</option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => {
-                                  const name = prompt("Enter new custom application name:");
-                                  if (name && name.trim()) {
-                                    const cleanName = name.trim();
-                                    if (!customApps.includes(cleanName)) {
-                                      setCustomApps(prev => [...prev, cleanName]);
-                                    }
-                                    updateMyActiveTracker(cleanName, undefined, false);
-                                  }
-                                }}
-                                className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer font-bold text-xs shrink-0"
-                                title="Add New Custom Application"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Project description inline apply */}
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Task / Project</label>
-                            <div className="flex items-center space-x-1.5">
-                              <input
-                                type="text"
-                                value={projectInput}
-                                onChange={(e) => setProjectInput(e.target.value)}
-                                className="input-field text-xs"
-                                placeholder="What are you building?"
-                                onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
-                              />
-                              <button
-                                onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                                className="btn-primary shrink-0 py-1.5 px-3 text-xs"
-                              >
-                                Sync
-                              </button>
-                            </div>
+                        {/* Project description inline apply */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Task / Project</label>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="text"
+                              value={projectInput}
+                              onChange={(e) => setProjectInput(e.target.value)}
+                              className="input-field text-xs"
+                              placeholder="What are you building?"
+                              onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
+                            />
+                            <button
+                              onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
+                              className="btn-primary shrink-0 py-1.5 px-3 text-xs"
+                            >
+                              Sync
+                            </button>
                           </div>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* TODAY'S PROGRESS / TRACKER & TIMELINE SPLIT GRID */}
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                     {/* Left Column: Today's Progress / Activity Tracker */}
                     <div className="lg:col-span-2">
-                      {myActivity && (
-                        <div className="studio-card p-5 h-full relative overflow-hidden">
-                          <div className="flex flex-col justify-between h-full space-y-5">
+                      <div className="studio-card p-5 h-full relative overflow-hidden">
+                        <div className="flex flex-col justify-between h-full space-y-5">
                             {/* Team & Scrum Telemetry Section */}
                             <div className="p-4 rounded-xl bg-white/70 backdrop-blur-xs border border-slate-200/90 space-y-3">
                               <div className="flex items-center justify-between">
@@ -3593,10 +3611,9 @@ export default function App() {
                                   <p className="text-xs text-[#71717a] italic">No active scrum alignments logged. Click reload to generate.</p>
                                 )}
                               </div>
-                            </div>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {/* Right Column: Unified Sync & Room Hub */}
@@ -3901,7 +3918,8 @@ export default function App() {
                     </div>
                   </div>
                 </>
-              )}
+                );
+              })()}
 
               {activeTab === "analytics" && (
                 <div className="analytics-container w-full h-full p-0 m-0 bg-[#f8fafc]">
@@ -5667,54 +5685,150 @@ export default function App() {
 
               {/* 4️⃣ PROFILE PARAMETERS EDIT TAB VIEW */}
               {activeTab === "profile" && user && (
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold tracking-tight text-[#09090b]">Developer Identity Parameters</h2>
-                    <p className="text-xs text-[#71717a]">
-                      Aesthetic alignment fields mapping parameters directly to backend database buffers.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                    {/* Left aggregate info */}
-                    <div className="studio-card p-5 text-center space-y-4 flex flex-col items-center justify-start">
-                      <img
-                        src={user.avatarUrl}
-                        alt="Avatar profile"
-                        className="h-24 w-24 rounded-full object-cover border-2 border-[#e4e4e7] shadow-sm"
-                      />
-                      <div className="space-y-0.5">
-                        <h3 className="text-lg font-bold text-[#09090b]">{user.name}</h3>
-                        <span className="text-xs font-mono text-[#71717a] block">{user.email}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* LEFT COLUMN: Profile Summary & Highlights Card (4 cols) */}
+                  <div className="lg:col-span-4 studio-card p-6 space-y-6">
+                    {/* Avatar & Basic Info */}
+                    <div className="text-center space-y-3">
+                      <div className="relative inline-block">
+                        <img
+                          src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                          alt={user.name}
+                          className="h-28 w-28 rounded-full object-cover border-2 border-slate-200 shadow-sm mx-auto"
+                        />
+                        <label className="absolute bottom-0 right-0 p-2 rounded-full bg-white border border-slate-200 shadow-md text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer" title="Change profile photo">
+                          <Pencil className="h-3.5 w-3.5" />
+                          <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                        </label>
                       </div>
 
-                      <div className="w-full text-left space-y-2 font-mono text-xs text-[#71717a] py-3 border-t border-[#e4e4e7]">
-                        <div className="flex justify-between">
-                          <span>Status msg</span>
-                          <span className="truncate max-w-[120px] font-semibold text-[#09090b]">{user.customStatus}</span>
+                      <div>
+                        <h3 className="text-lg font-bold text-[#09090b]">{user.name}</h3>
+                        <p className="text-xs text-[#71717a] font-medium">{user.headline || "Software Developer"}</p>
+                        <p className="text-xs text-[#71717a] font-mono mt-0.5">{user.email}</p>
+                      </div>
+
+                      <div className="pt-1">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-700">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Available
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-200/80"></div>
+
+                    {/* YOUR PRODUCTIVITY HIGHLIGHTS */}
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-bold font-mono tracking-wider uppercase text-slate-400">
+                        YOUR PRODUCTIVITY HIGHLIGHTS
+                      </h4>
+
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Clock className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Longest Session</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Aug 24, 2026</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">3h 18m</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Focus goal</span>
-                          <span className="font-semibold text-[#09090b]">{user.productivityGoal} hrs</span>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Calendar className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Best Focus Day</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Aug 19, 2026</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">8h 42m</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Privacy model</span>
-                          <span className="font-semibold text-[#09090b]">{user.privacyMode}</span>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Flame className="h-4 w-4 text-amber-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Current Streak</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Keep it up!</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">14 days</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <BarChart2 className="h-4 w-4 text-indigo-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Best Focus Week</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Week 34</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">44h 10m</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Zap className="h-4 w-4 text-cyan-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Peak Focus Hour</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Consistently peak</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">11:00 AM</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Target className="h-4 w-4 text-emerald-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Total Focus Sessions</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Last 30 days</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">126</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Right editable profile settings card */}
-                    <div className="md:col-span-2 studio-card p-6 space-y-5">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                        Edit Profile Parameters
-                      </h4>
+                    <button
+                      onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+                      className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      <span>View Full Analytics</span>
+                    </button>
+                  </div>
+
+                  {/* RIGHT COLUMN: 4 Stacked Cards (8 cols) */}
+                  <div className="lg:col-span-8 space-y-6">
+
+                    {/* CARD 1: PROFILE INFORMATION */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <User className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          PROFILE INFORMATION
+                        </h4>
+                      </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Workspace Display Name</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Display Name</label>
                           <input
                             type="text"
                             value={profileNameInput}
@@ -5726,19 +5840,7 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Connections Username</label>
-                          <input
-                            type="text"
-                            value={usernameInput}
-                            onChange={(e) => setUsernameInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ username: usernameInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ username: usernameInput })}
-                            className="input-field"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Connections Headline/Role</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Role / Title</label>
                           <input
                             type="text"
                             value={headlineInput}
@@ -5750,181 +5852,226 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Avatar Image</label>
-                          <div className="flex gap-2 h-9">
-                            <input
-                              type="text"
-                              value={profileAvatarInput}
-                              onChange={(e) => setProfileAvatarInput(e.target.value)}
-                              onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                              onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                              className="input-field font-mono flex-1"
-                              placeholder="Image URL"
-                            />
+                          <label className="text-[11px] font-semibold text-slate-700 block">Email Address</label>
+                          <input
+                            type="text"
+                            value={user.email}
+                            readOnly
+                            className="input-field bg-slate-50 font-mono text-slate-500 cursor-not-allowed"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block">Profile Photo</label>
+                          <div className="flex items-center gap-3">
                             <div className="relative overflow-hidden inline-block shrink-0">
-                              <button className="h-full flex items-center justify-center px-4 rounded-xl border dark:border-[#222227] border-stone-200/50 bg-[#fafafa] dark:bg-[#18181c] text-xs font-semibold text-[#09090b] dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#1f1f23] transition-colors cursor-pointer">
-                                Upload
+                              <button className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer shadow-sm">
+                                <Upload className="h-3.5 w-3.5" />
+                                <span>Upload New Photo</span>
                               </button>
-                              <input 
-                                type="file" 
+                              <input
+                                type="file"
                                 accept="image/*"
                                 onChange={handleAvatarUpload}
                                 className="absolute left-0 top-0 opacity-0 w-full h-full cursor-pointer"
                               />
                             </div>
+                            <span className="text-[10px] font-mono text-slate-400">JPG, PNG up to 2MB</span>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Status Label</label>
-                          <input
-                            type="text"
-                            value={statusInput}
-                            onChange={(e) => setStatusInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ customStatus: statusInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ customStatus: statusInput })}
-                            className="input-field"
-                          />
-                        </div>
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={() => {
+                            submitProfileSettings({
+                              name: profileNameInput,
+                              headline: headlineInput,
+                              avatarUrl: profileAvatarInput,
+                              username: usernameInput,
+                            });
+                            triggerToast("✓ Changes saved!");
+                          }}
+                          className="px-5 py-2.5 bg-[#09090b] hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
 
+                    {/* CARD 2: FOCUS PREFERENCES */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <Target className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          FOCUS PREFERENCES
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Focus Hour Target</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Daily Focus Target</label>
                           <select
                             value={user.productivityGoal}
                             onChange={(e) => submitProfileSettings({ productivityGoal: parseInt(e.target.value) })}
                             className="input-field"
                           >
-                            <option value="4">4 hours target-line</option>
-                            <option value="6">6 hours target-line</option>
-                            <option value="8">8 hours target-line</option>
-                            <option value="10">10 hours target-line</option>
+                            <option value="4">4 hours</option>
+                            <option value="6">6 hours</option>
+                            <option value="8">8 hours</option>
+                            <option value="10">10 hours</option>
                           </select>
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Presence Visibility Rule</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Default Focus Session</label>
+                          <select
+                            defaultValue="60"
+                            className="input-field"
+                          >
+                            <option value="25">25 minutes</option>
+                            <option value="45">45 minutes</option>
+                            <option value="60">60 minutes</option>
+                            <option value="90">90 minutes</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block">Focus Reminders</label>
+                          <label className="flex items-center gap-3 pt-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={user.notifications?.breakReminders ?? true}
+                              onChange={() => submitProfileSettings({
+                                notifications: { ...user.notifications, breakReminders: !user.notifications?.breakReminders }
+                              })}
+                              className="h-4 w-4 rounded accent-black cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-700">Remind me to take focus breaks</span>
+                          </label>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block">Daily Goal Notifications</label>
+                          <label className="flex items-center gap-3 pt-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={user.notifications?.friendUpdates ?? true}
+                              onChange={() => submitProfileSettings({
+                                notifications: { ...user.notifications, friendUpdates: !user.notifications?.friendUpdates }
+                              })}
+                              className="h-4 w-4 rounded accent-black cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-700">Notify me when daily goal is achieved</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 3: PRIVACY & VISIBILITY */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <Shield className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          PRIVACY & VISIBILITY
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Show My Focus Status</label>
                           <select
                             value={user.presenceVisibility || "connections"}
                             onChange={(e) => submitProfileSettings({ presenceVisibility: e.target.value })}
                             className="input-field"
                           >
                             <option value="everyone">Everyone</option>
-                            <option value="connections">Connections Only</option>
-                            <option value="room_members">Focus Room Members Only</option>
-                            <option value="nobody">Nobody (Invisible)</option>
+                            <option value="connections">Team</option>
+                            <option value="nobody">Nobody</option>
                           </select>
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Telemetry Detail Level</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Show Today's Focus Hours</label>
                           <select
-                            value={user.activityVisibility || "status_only"}
-                            onChange={(e) => submitProfileSettings({ activityVisibility: e.target.value })}
+                            value={user.showDailyFocusTime ? "everyone" : "nobody"}
+                            onChange={(e) => submitProfileSettings({ showDailyFocusTime: e.target.value !== "nobody" })}
                             className="input-field"
                           >
-                            <option value="app_name">Full App Name & Category</option>
-                            <option value="app_category">App Category Only</option>
-                            <option value="status_only">Presence Status Only</option>
+                            <option value="nobody">Only Me</option>
+                            <option value="connections">Connections Only</option>
+                            <option value="everyone">Everyone</option>
                           </select>
                         </div>
 
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Workstation Machine Tag</label>
-                          <input
-                            type="text"
-                            value={profileDeviceInput}
-                            onChange={(e) => setProfileDeviceInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ deviceConnected: profileDeviceInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ deviceConnected: profileDeviceInput })}
-                            className="input-field font-mono"
-                          />
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Show Active Room</label>
+                          <select
+                            value={user.showCurrentRoom ? "connections" : "nobody"}
+                            onChange={(e) => submitProfileSettings({ showCurrentRoom: e.target.value !== "nobody" })}
+                            className="input-field"
+                          >
+                            <option value="nobody">Nobody</option>
+                            <option value="connections">Connections Only</option>
+                            <option value="everyone">Everyone</option>
+                          </select>
                         </div>
 
-                        <div className="sm:col-span-2 border-t border-[#e4e4e7] pt-4 space-y-3">
-                          <h5 className="text-[10px] font-semibold uppercase tracking-wider text-[#09090b]">Connections Privacy Directives</h5>
-                          
-                          <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#e4e4e7]">
-                            <span className="text-[#09090b]">Show focus duration today to connections</span>
-                            <button
-                              onClick={() => submitProfileSettings({ showDailyFocusTime: !user.showDailyFocusTime })}
-                              className={user.showDailyFocusTime ? "badge badge-emerald cursor-pointer" : "badge badge-neutral cursor-pointer"}
-                            >
-                              {user.showDailyFocusTime ? "Shown" : "Hidden"}
-                            </button>
-                          </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Allow Focus Challenges</label>
+                          <label className="flex items-center gap-2 pt-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={user.allowFocusInvites ?? true}
+                              onChange={() => submitProfileSettings({ allowFocusInvites: !user.allowFocusInvites })}
+                              className="h-4 w-4 rounded accent-black cursor-pointer shrink-0"
+                            />
+                            <span className="text-[11px] text-slate-700 truncate">Allow team to send challenges</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
 
-                          <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#e4e4e7]">
-                            <span className="text-[#09090b]">Show active room shortcut to connections</span>
-                            <button
-                              onClick={() => submitProfileSettings({ showCurrentRoom: !user.showCurrentRoom })}
-                              className={user.showCurrentRoom ? "badge badge-emerald cursor-pointer" : "badge badge-neutral cursor-pointer"}
-                            >
-                              {user.showCurrentRoom ? "Shown" : "Hidden"}
-                            </button>
-                          </div>
+                    {/* CARD 4: WORKSTATION */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <Monitor className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          WORKSTATION
+                        </h4>
+                      </div>
 
-                          <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#e4e4e7]">
-                            <span className="text-[#09090b]">Allow connections to send focus challenges</span>
-                            <button
-                              onClick={() => submitProfileSettings({ allowFocusInvites: !user.allowFocusInvites })}
-                              className={user.allowFocusInvites ? "badge badge-emerald cursor-pointer" : "badge badge-neutral cursor-pointer"}
-                            >
-                              {user.allowFocusInvites ? "Allowed" : "Muted"}
-                            </button>
+                      <div className="flex flex-wrap items-center justify-between gap-6 pt-1">
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-semibold text-slate-700 block">Current Device</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold font-mono text-slate-900">{profileDeviceInput || "WS-WORKSTATION-11"}</span>
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-mono font-bold text-slate-700">
+                              Synced
+                            </span>
                           </div>
                         </div>
 
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-semibold text-slate-700 block">Connected Devices</span>
+                          <span className="text-sm font-bold text-slate-900 block">17</span>
+                          <span className="text-[10px] text-slate-400 block font-mono">Across all your workspaces</span>
+                        </div>
+
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-semibold text-slate-700 block">Last Sync</span>
+                          <span className="text-sm font-bold text-slate-900 block">2 min ago</span>
+                          <span className="text-[10px] text-slate-400 block font-mono">Everything up to date</span>
+                        </div>
+
+                        <button className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm">
+                          <Laptop className="h-3.5 w-3.5" />
+                          <span>Manage Devices</span>
+                        </button>
                       </div>
                     </div>
 
                   </div>
-
-                  {/* Personal Records & Milestones */}
-                  <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} space-y-6`}>
-                    <div className="mb-2">
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Personal Records & Milestones</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">All-time workstation productivity benchmarks achieved during your focus sessions.</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                      <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 text-center">
-                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block mb-1">Longest Session</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">3h 18m</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Aug 24, 2026</span>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 text-center">
-                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block mb-1">Best Focus Day</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">8h 42m</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Aug 19, 2026</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 text-center">
-                        <span className="text-[10px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wider block mb-1">Longest Streak</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">14 days</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Current streak</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900 text-center">
-                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block mb-1">Best Focus Week</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">44h 10m</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Week 34</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-100 dark:border-cyan-900 text-center">
-                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 uppercase tracking-wider block mb-1">Peak Hour</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">11:00 AM</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Consistently peak</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 text-center">
-                        <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block mb-1">Total Sessions</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">126 sessions</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">30-day window</span>
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
               )}
 

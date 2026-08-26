@@ -20,18 +20,104 @@ import { exec } from "child_process";
 
 dotenv.config();
 
-// Connect to Redis Cache
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+// Connect to Redis Cache with Resilient In-Memory Fallback
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+  maxRetriesPerRequest: 1,
+  retryStrategy: () => null // Don't hang on connection failures
+});
 redis.on("connect", () => {
   console.log("🚀 Connected to Redis successfully");
 });
 redis.on("error", (err) => {
-  console.error("❌ Redis Connection Error:", err);
+  // Graceful log without crashing process or request handlers
+  console.warn("⚠️ Redis Notice (Using In-Memory Fallback):", err.message || err);
 });
 
-// Redis Caching Helpers
+// In-Memory Fallback Storage
+const memoryCache = new Map<string, { value: string; expiresAt?: number }>();
+
+function safeMemoryGet(key: string): string | null {
+  const item = memoryCache.get(key);
+  if (!item) return null;
+  if (item.expiresAt && Date.now() > item.expiresAt) {
+    memoryCache.delete(key);
+    return null;
+  }
+  return item.value;
+}
+
+function safeMemorySet(key: string, value: string, ttlSeconds?: number) {
+  const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : undefined;
+  memoryCache.set(key, { value, expiresAt });
+}
+
+function safeMemoryKeys(pattern: string): string[] {
+  const now = Date.now();
+  const prefix = pattern.replace("*", "");
+  const result: string[] = [];
+  for (const [key, item] of memoryCache.entries()) {
+    if (item.expiresAt && now > item.expiresAt) {
+      memoryCache.delete(key);
+      continue;
+    }
+    if (key.startsWith(prefix)) {
+      result.push(key);
+    }
+  }
+  return result;
+}
+
+async function safeRedisGet(key: string): Promise<string | null> {
+  try {
+    const val = await redis.get(key);
+    if (val !== null) {
+      safeMemorySet(key, val);
+      return val;
+    }
+  } catch (err) {
+    // Redis limit/network error: fallback to memory cache silently
+  }
+  return safeMemoryGet(key);
+}
+
+async function safeRedisSet(key: string, value: string, mode?: string, duration?: number): Promise<void> {
+  const ttlSeconds = mode === "EX" && typeof duration === "number" ? duration : undefined;
+  safeMemorySet(key, value, ttlSeconds);
+  try {
+    if (mode === "EX" && duration) {
+      await redis.set(key, value, "EX", duration);
+    } else {
+      await redis.set(key, value);
+    }
+  } catch (err) {
+    // Redis limit/network error: memory cache updated successfully
+  }
+}
+
+async function safeRedisKeys(pattern: string): Promise<string[]> {
+  const memKeys = safeMemoryKeys(pattern);
+  try {
+    const redisKeys = await redis.keys(pattern);
+    return Array.from(new Set([...memKeys, ...redisKeys]));
+  } catch (err) {
+    return memKeys;
+  }
+}
+
+async function safeRedisTtl(key: string): Promise<number> {
+  try {
+    return await redis.ttl(key);
+  } catch (err) {
+    const item = memoryCache.get(key);
+    if (!item || !item.expiresAt) return -1;
+    const remaining = Math.ceil((item.expiresAt - Date.now()) / 1000);
+    return remaining > 0 ? remaining : -2;
+  }
+}
+
+// Redis / In-Memory Caching Helpers
 async function getPresence(userId: string): Promise<any> {
-  const cached = await redis.get(`presence:user:${userId}`);
+  const cached = await safeRedisGet(`presence:user:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -42,7 +128,7 @@ async function getPresence(userId: string): Promise<any> {
 
 async function setPresence(userId: string, data: any) {
   // Save with 60s expiration (TTL)
-  await redis.set(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
+  await safeRedisSet(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
 }
 
 async function syncPresenceToRedis(userId: string, activity: any, userStatus: string, activeGroup: string) {
@@ -71,7 +157,7 @@ async function syncPresenceToRedis(userId: string, activity: any, userStatus: st
 }
 
 async function getUserActiveActivity(userId: string) {
-  const cached = await redis.get(`user:active:${userId}`);
+  const cached = await safeRedisGet(`user:active:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -107,16 +193,16 @@ async function getUserActiveActivity(userId: string) {
     lastHeartbeat: Date.now()
   };
 
-  await redis.set(`user:active:${userId}`, JSON.stringify(result));
+  await safeRedisSet(`user:active:${userId}`, JSON.stringify(result));
   return result;
 }
 
 async function setUserActiveActivity(userId: string, activity: any) {
-  await redis.set(`user:active:${userId}`, JSON.stringify(activity));
+  await safeRedisSet(`user:active:${userId}`, JSON.stringify(activity));
 }
 
 async function getUserOpenApps(userId: string): Promise<string[]> {
-  const cached = await redis.get(`user:openapps:${userId}`);
+  const cached = await safeRedisGet(`user:openapps:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -126,7 +212,7 @@ async function getUserOpenApps(userId: string): Promise<string[]> {
 }
 
 async function setUserOpenApps(userId: string, openApps: string[]) {
-  await redis.set(`user:openapps:${userId}`, JSON.stringify(openApps));
+  await safeRedisSet(`user:openapps:${userId}`, JSON.stringify(openApps));
 }
 
 const app = express();
@@ -580,12 +666,12 @@ async function broadcastActivityUpdate(userId: string) {
 // 1. Ticker for Redis active activities (runs every 5 seconds)
 setInterval(async () => {
   try {
-    const keys = await redis.keys("user:active:*");
+    const keys = await safeRedisKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
       if (!userId) continue;
 
-      const data = await redis.get(key);
+      const data = await safeRedisGet(key);
       if (!data) continue;
 
       const act = JSON.parse(data);
@@ -598,7 +684,7 @@ setInterval(async () => {
       }
 
       if (changed) {
-        await redis.set(key, JSON.stringify(act));
+        await safeRedisSet(key, JSON.stringify(act));
         broadcastActivityUpdate(userId);
       }
     }
@@ -610,12 +696,12 @@ setInterval(async () => {
 // 2. Periodic sync of Redis active sessions to PostgreSQL (runs every 60 seconds)
 setInterval(async () => {
   try {
-    const keys = await redis.keys("user:active:*");
+    const keys = await safeRedisKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
       if (!userId) continue;
 
-      const data = await redis.get(key);
+      const data = await safeRedisGet(key);
       if (!data) continue;
 
       const act = JSON.parse(data);
@@ -916,7 +1002,7 @@ app.post(["/api/connections/wave", "/api/connections/:connectionId/wave"], authe
 
     // 3. Spam Protection & Testing Cooldown Check (10 seconds for testing)
     const cooldownKey = `wave:cooldown:${senderId}:${targetUserId}`;
-    const ttl = await redis.ttl(cooldownKey);
+    const ttl = await safeRedisTtl(cooldownKey);
     if (ttl > 0) {
       const cooldownEndsAt = new Date(Date.now() + ttl * 1000).toISOString();
       return res.status(429).json({
@@ -927,7 +1013,7 @@ app.post(["/api/connections/wave", "/api/connections/:connectionId/wave"], authe
     }
 
     // Set 10-second testing cooldown
-    await redis.set(cooldownKey, "active", "EX", 10);
+    await safeRedisSet(cooldownKey, "active", "EX", 10);
 
     // 4. Database Persistence (Save Notification Record for Offline Delivery)
     const notification = await prisma.notification.create({
