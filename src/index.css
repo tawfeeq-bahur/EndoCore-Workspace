@@ -12,31 +12,31 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Arctic Slate Canvas Palette */
+  /* Arctic Slate Canvas Palette — Blended Seamlessly */
   --bg-app:        #fafafa; /* Soft warm white canvas */
-  --bg-sidebar:    #f4f4f5; /* Subtle structural navigation background */
-  --bg-surface:    #ffffff; /* Primary work surface */
-  --bg-subtle:     #f4f4f5; /* Sub-containers / inner panels */
-  --bg-hover:      #f4f4f5; /* Subtle hover state */
+  --bg-sidebar:    rgba(248, 250, 252, 0.95); /* Structural navigation background */
+  --bg-surface:    rgba(255, 255, 255, 0.9); /* Primary work surface - blended */
+  --bg-subtle:     rgba(248, 250, 252, 0.85); /* Sub-containers / inner panels */
+  --bg-hover:      #f1f5f9; /* Subtle hover state */
 
-  /* Structural 1px Crisp Borders - Zero fuzzy shadows */
-  --border-subtle: #f4f4f5;
-  --border-main:   #e4e4e7; /* Zinc 200 */
-  --border-strong: #d4d4d8; /* Zinc 300 */
-  --border-active: #18181b; /* Zinc 900 */
+  /* Structural 1px Crisp Borders */
+  --border-subtle: #f1f5f9;
+  --border-main:   #e2e8f0; /* Crisp soft slate border */
+  --border-strong: #cbd5e1; /* Slate 300 */
+  --border-active: #09090b; /* Zinc 950 */
 
-  /* High Legibility Typography Scale */
-  --text-main:     #09090b; /* Zinc 950 (Crisp, primary contrast) */
-  --text-body:     #27272a; /* Zinc 800 (High-contrast reading text) */
-  --text-muted:    #71717a; /* Zinc 500 (Subtitles, secondary labels) */
-  --text-subtle:   #a1a1aa; /* Zinc 400 (Captions, placeholders) */
+  /* High Legibility Typography Scale — SOLID CRISP BLACK */
+  --text-main:     #000000; /* Pure Crisp Black */
+  --text-body:     #000000; /* Pure Crisp Black */
+  --text-muted:    #09090b; /* Crisp Black */
+  --text-subtle:   #18181b; /* Dark Zinc / Black */
 
   /* Strategic Accents */
-  --accent-primary: #18181b; /* Solid dark zinc for primary buttons/nav */
-  --accent-indigo:  #4338ca; /* Indigo 700 for active actions */
-  --accent-emerald: #059669; /* Emerald 600 for online status */
-  --accent-amber:   #d97706; /* Amber 600 for warnings/paused */
-  --accent-rose:    #e11d48; /* Rose 600 for errors */
+  --accent-primary: #09090b;
+  --accent-indigo:  #4338ca;
+  --accent-emerald: #059669;
+  --accent-amber:   #d97706;
+  --accent-rose:    #e11d48;
 }
 
 @layer base {
@@ -51,7 +51,7 @@
 
   body {
     background-color: var(--bg-app);
-    color: var(--text-body);
+    color: #000000;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -61,7 +61,7 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-display);
     font-weight: 700;
-    color: var(--text-main);
+    color: #000000 !important;
     letter-spacing: -0.02em;
   }
 
@@ -69,49 +69,53 @@
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: #d4d4d8;
+    background: #cbd5e1;
     border-radius: 99px;
   }
-  ::-webkit-scrollbar-thumb:hover { background: #a1a1aa; }
+  ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
 /* ═══════════════════════════════════════════════
-   STUDIO LAYOUT & CONTAINER CLASSES
+   STUDIO LAYOUT & CONTAINER CLASSES (BLENDED)
    ═══════════════════════════════════════════════ */
 
-/* Main Stage Card Container (Replaces floating cards) */
+/* Main Stage Card Container — Blends with webpage canvas */
 .studio-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-main);
-  border-radius: 0.75rem; /* 12px clean radius */
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  background-color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem; /* 14px clean radius */
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
 }
 
 .studio-panel {
-  background-color: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
-  border-radius: 0.5rem; /* 8px inner radius */
+  background-color: rgba(248, 250, 252, 0.85);
+  backdrop-filter: blur(4px);
+  border: 1px solid #e2e8f0;
+  border-radius: 0.625rem;
 }
 
 /* Sidebar Styling */
 .studio-sidebar {
-  background-color: var(--bg-sidebar);
-  border-right: 1px solid var(--border-main);
+  background-color: rgba(248, 250, 252, 0.95);
+  backdrop-filter: blur(12px);
+  border-right: 1px solid #e2e8f0;
 }
 
 /* Top Header Bar */
 .studio-header {
-  background-color: var(--bg-surface);
-  border-bottom: 1px solid var(--border-main);
+  background-color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 /* Active Sidebar Item */
 .nav-item-active {
-  background-color: #18181b !important;
+  background-color: #09090b !important;
   color: #ffffff !important;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 0.5rem;
 }
 
@@ -297,10 +301,10 @@ input::placeholder, textarea::placeholder {
    TYPOGRAPHY HELPERS
    ═══════════════════════════════════════════════ */
 
-.t-main   { color: var(--text-main) !important; }
-.t-body   { color: var(--text-body) !important; }
-.t-muted  { color: var(--text-muted) !important; }
-.t-subtle { color: var(--text-subtle) !important; }
+.t-main   { color: #000000 !important; font-weight: 700; }
+.t-body   { color: #000000 !important; font-weight: 500; }
+.t-muted  { color: #000000 !important; font-weight: 600; }
+.t-subtle { color: #18181b !important; font-weight: 500; }
 
 /* ═══════════════════════════════════════════════
    PREMIUM VISUAL ENHANCEMENTS & MICRO-INTERACTIONS

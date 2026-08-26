@@ -47,7 +47,10 @@ import {
   Tablet,
   Monitor,
   Cpu,
-  ChevronDown
+  ChevronDown,
+  FileText,
+  Layout,
+  TrendingUp
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -1806,27 +1809,40 @@ export default function App() {
     }
   };
 
+  // Room icon symbol resolver matching navigation aesthetics
+  const getRoomIcon = (name: string, index: number) => {
+    const lower = name.toLowerCase();
+    if (lower.includes("engineering") || lower.includes("dev") || lower.includes("code")) {
+      return <Terminal className="h-4 w-4 shrink-0 text-zinc-500" />;
+    }
+    if (lower.includes("design") || lower.includes("ui") || lower.includes("art")) {
+      return <Sparkles className="h-4 w-4 shrink-0 text-zinc-500" />;
+    }
+    if (lower.includes("focus") || lower.includes("deep") || lower.includes("sprint")) {
+      return <Flame className="h-4 w-4 shrink-0 text-zinc-500" />;
+    }
+    if (lower.includes("general") || lower.includes("chat") || lower.includes("lounge")) {
+      return <MessageSquare className="h-4 w-4 shrink-0 text-zinc-500" />;
+    }
+    if (lower.includes("global") || lower.includes("world") || lower.includes("all")) {
+      return <Globe className="h-4 w-4 shrink-0 text-zinc-500" />;
+    }
+    const icons = [MessageSquare, Compass, Globe, Sparkles, Flame, Target, Terminal, Zap, Layout];
+    const IconComp = icons[index % icons.length];
+    return <IconComp className="h-4 w-4 shrink-0 text-zinc-500" />;
+  };
+
   // Reusable Sidebar Render Helper (closed over App states)
   const renderSidebar = (isMobileDrawer: boolean = false) => {
-    return (
-      <aside className={`${isMobileDrawer ? 'w-full h-full' : 'hidden md:flex w-64 border-r border-[#e4e4e7] h-screen sticky top-0'} flex flex-col shrink-0 bg-[#f4f4f5]`}>
-
-        {/* Studio Branding Section */}
-        <div className="p-5 border-b border-[#e4e4e7] flex items-center justify-between">
-          <div className="space-y-1">
+    if (isMobileDrawer) {
+      return (
+        <aside className="w-full h-full flex flex-col shrink-0 bg-[#f4f4f5] select-none">
+          {/* Header */}
+          <div className="p-4 border-b border-[#e4e4e7] flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <span className="font-display text-xl font-bold tracking-tight text-[#09090b]">EndoCore</span>
               <span className="badge badge-neutral">v1.0</span>
             </div>
-            <div className="flex items-center space-x-1.5 text-[10px] font-mono t-muted">
-              <span className={`h-2 w-2 rounded-full ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
-                  ? "bg-emerald-500"
-                  : "bg-rose-500"
-                }`}></span>
-              <span>Workstation Pipeline</span>
-            </div>
-          </div>
-          {isMobileDrawer && (
             <button
               onClick={() => setMobileMenuOpen(false)}
               className="p-1.5 text-[#71717a] hover:text-[#09090b] rounded-md hover:bg-zinc-200/60 cursor-pointer"
@@ -1834,21 +1850,19 @@ export default function App() {
             >
               <X className="h-5 w-5" />
             </button>
-          )}
-        </div>
+          </div>
 
-        {/* Dynamic Guild Selector */}
-        {user && (
-          <div className="p-3.5 border-b border-[#e4e4e7] bg-white/60">
-            <label className="text-[10px] font-semibold uppercase tracking-wider t-muted block mb-1">
-              Active Focus Guild
-            </label>
-            <div className="relative">
+          {/* Dynamic Guild Selector */}
+          {user && (
+            <div className="p-3.5 border-b border-[#e4e4e7] bg-white/60">
+              <label className="text-[10px] font-semibold uppercase tracking-wider t-muted block mb-1">
+                Active Focus Guild
+              </label>
               <select
                 value={user.activeGroup}
                 onChange={(e) => {
                   submitProfileSettings({ activeGroup: e.target.value });
-                  if (isMobileDrawer) setMobileMenuOpen(false);
+                  setMobileMenuOpen(false);
                 }}
                 className="w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 py-1.5 font-sans text-xs font-medium text-[#09090b] cursor-pointer focus:outline-none"
               >
@@ -1859,330 +1873,435 @@ export default function App() {
                 ))}
               </select>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Studio Navigation List */}
-        <nav className="p-3 flex-1 select-none overflow-y-auto space-y-5">
-          {/* HOME Section */}
-          <div className="space-y-1">
-            <div className="px-3 mb-1.5 text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
-              Home
+          {/* Nav Links */}
+          <nav className="p-3 flex-1 select-none overflow-y-auto space-y-4">
+            <div className="space-y-1">
+              <div className="px-3 mb-1 text-[10px] font-extrabold tracking-wider text-black uppercase">
+                Home
+              </div>
+
+              <button
+                onClick={() => { setActiveTab("dashboard"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
+                    ? "bg-[#09090b] text-white font-extrabold"
+                    : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <Home className="h-4 w-4 shrink-0" />
+                <span>My Productivity</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "analytics" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <span>My Analytics</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "focus" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <Clock className="h-4 w-4 shrink-0" />
+                <span>My Focus</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("goals"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "goals" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <FileText className="h-4 w-4 shrink-0" />
+                <span>My Goals</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("connections"); setSelectedRoomName(null); setSelectedFriendId(null); fetchConnections(); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "connections" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <Users className="h-4 w-4 shrink-0" />
+                <span>My Connections</span>
+              </button>
             </div>
 
-            <button
-              onClick={() => {
-                setActiveTab("dashboard");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
-                  activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
-                    ? "text-white font-semibold"
-                    : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+            {/* Rooms Section */}
+            <div className="space-y-1 pt-2 border-t border-slate-200">
+              <div className="px-3 mb-1 text-[10px] font-extrabold tracking-wider text-black uppercase">
+                Rooms
+              </div>
+              {groups.map((group, index) => (
+                <button
+                  key={group.id}
+                  onClick={() => { enterRoomChannel(group.name); setMobileMenuOpen(false); }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono cursor-pointer ${
+                    selectedRoomName === group.name ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                  }`}
+                >
+                  <span className="flex items-center space-x-2">
+                    {getRoomIcon(group.name, index)}
+                    <span className="font-sans font-bold">{group.name}</span>
+                  </span>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                </button>
+              ))}
+            </div>
+
+            {/* Account */}
+            <div className="space-y-1 pt-2 border-t border-slate-200">
+              <div className="px-3 mb-1 text-[10px] font-extrabold tracking-wider text-black uppercase">
+                Account
+              </div>
+              <button
+                onClick={() => { setActiveTab("profile"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "profile" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
                 }`}
+              >
+                <User className="h-4 w-4 shrink-0" />
+                <span>Profile</span>
+              </button>
+              <button
+                onClick={() => { setActiveTab("settings"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "settings" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <Settings className="h-4 w-4 shrink-0" />
+                <span>Settings</span>
+              </button>
+            </div>
+          </nav>
+        </aside>
+      );
+    }
+
+    // Desktop view with iOS animated width & push transitions
+    return (
+      <motion.aside
+        initial={false}
+        animate={{ width: isSidebarOpen ? 256 : 72 }}
+        transition={{ type: "spring", stiffness: 280, damping: 30 }}
+        className="hidden md:flex flex-col shrink-0 bg-[#f4f4f5]/90 backdrop-blur-xl border-r border-[#e4e4e7] h-screen sticky top-0 overflow-hidden shadow-sm z-30 select-none"
+      >
+        {/* Studio Branding & Hamburger Toggle */}
+        <div className="p-3.5 border-b border-[#e4e4e7] flex items-center justify-between h-16 shrink-0">
+          <div className="flex items-center space-x-2.5 overflow-hidden">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 text-[#09090b] hover:text-[#09090b] rounded-xl hover:bg-stone-200/70 transition-all cursor-pointer shrink-0"
+              title={isSidebarOpen ? "Collapse Navigation Menu" : "Expand Navigation Menu"}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
+            {isSidebarOpen && (
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-0.5 whitespace-nowrap overflow-hidden"
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="font-display text-lg font-bold tracking-tight text-[#09090b]">EndoCore</span>
+                  <span className="badge badge-neutral">v1.0</span>
+                </div>
+                <div className="flex items-center space-x-1.5 text-[10px] font-mono text-[#71717a]">
+                  <span className={`h-2 w-2 rounded-full ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}></span>
+                  <span>Workstation Pipeline</span>
+                </div>
+              </motion.div>
+            )}
+          </div>
+        </div>
+
+        {/* Dynamic Guild Selector */}
+        {user && isSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-3.5 border-b border-[#e4e4e7] bg-white/60 shrink-0 whitespace-nowrap overflow-hidden"
+          >
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">
+              Active Focus Guild
+            </label>
+            <select
+              value={user.activeGroup}
+              onChange={(e) => submitProfileSettings({ activeGroup: e.target.value })}
+              className="w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 py-1.5 font-sans text-xs font-medium text-[#09090b] cursor-pointer focus:outline-none"
+            >
+              {groups.map(g => (
+                <option key={g.id} value={g.name} className="bg-white text-[#09090b]">
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </motion.div>
+        )}
+
+        {/* Navigation Item List */}
+        <nav className="p-3 flex-1 select-none overflow-y-auto space-y-4 overflow-x-hidden">
+          {/* HOME Section */}
+          <div className="space-y-1">
+            {isSidebarOpen && (
+              <div className="px-3 mb-1.5 text-[10px] font-extrabold tracking-wider text-black uppercase whitespace-nowrap">
+                Home
+              </div>
+            )}
+
+            {/* My Productivity */}
+            <button
+              onClick={() => { setActiveTab("dashboard"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
+                  ? "text-white font-extrabold"
+                  : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Productivity"
             >
               {activeTab === "dashboard" && !selectedRoomName && !selectedFriendId && (
-                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
                 <Home className="h-4 w-4 shrink-0" />
-                <span>My Productivity</span>
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Productivity
+                  </motion.span>
+                )}
               </span>
             </button>
 
+            {/* My Analytics */}
             <button
-              onClick={() => {
-                setActiveTab("analytics");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "analytics"
-                  ? "text-white font-semibold"
-                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
-                }`}
+              onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "analytics" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Analytics"
             >
               {activeTab === "analytics" && (
-                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
                 <BarChart3 className="h-4 w-4 shrink-0" />
-                <span>My Analytics</span>
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Analytics
+                  </motion.span>
+                )}
               </span>
             </button>
 
+            {/* My Focus */}
             <button
-              onClick={() => {
-                setActiveTab("focus");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "focus"
-                  ? "text-white font-semibold"
-                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
-                }`}
+              onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "focus" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Focus"
             >
               {activeTab === "focus" && (
-                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
-                <Target className="h-4 w-4 shrink-0" />
-                <span>My Focus</span>
+                <Clock className="h-4 w-4 shrink-0" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Focus
+                  </motion.span>
+                )}
               </span>
             </button>
 
+            {/* My Goals */}
             <button
-              onClick={() => {
-                setActiveTab("goals");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "goals"
-                  ? "text-white font-semibold"
-                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
-                }`}
+              onClick={() => { setActiveTab("goals"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "goals" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Goals"
             >
               {activeTab === "goals" && (
-                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
-                <Target className="h-4 w-4 shrink-0" />
-                <span>My Goals</span>
+                <FileText className="h-4 w-4 shrink-0" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Goals
+                  </motion.span>
+                )}
               </span>
             </button>
 
+            {/* My Connections */}
             <button
-              onClick={() => {
-                setActiveTab("connections");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                fetchConnections();
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "connections"
-                  ? "text-white font-semibold"
-                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
-                }`}
+              onClick={() => { setActiveTab("connections"); setSelectedRoomName(null); setSelectedFriendId(null); fetchConnections(); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "connections" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Connections"
             >
               {activeTab === "connections" && (
-                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
                 <Users className="h-4 w-4 shrink-0" />
-                <span>My Connections</span>
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Connections
+                  </motion.span>
+                )}
               </span>
             </button>
           </div>
 
           {/* Rooms Section */}
-          <div className="space-y-1">
-            <div
-              onClick={() => {
-                setActiveTab("groups");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className="px-3 mb-2 text-[9px] font-mono tracking-widest text-zinc-500 uppercase cursor-pointer hover:text-stone-300 flex items-center justify-between"
-            >
-              <span>ROOMS</span>
-              <Plus className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); setActiveTab("groups"); setSelectedRoomName(null); }} />
-            </div>
+          <div className="space-y-1 pt-2 border-t border-slate-200">
+            {isSidebarOpen && (
+              <div
+                onClick={() => { setActiveTab("groups"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+                className="px-3 mb-1 text-[10px] font-extrabold tracking-wider text-black uppercase cursor-pointer hover:text-black flex items-center justify-between whitespace-nowrap"
+              >
+                <span>ROOMS</span>
+                <Plus className="h-3.5 w-3.5 text-black hover:scale-110 transition-transform" onClick={(e) => { e.stopPropagation(); setActiveTab("groups"); setSelectedRoomName(null); }} />
+              </div>
+            )}
 
-            <div className="space-y-2">
-              {groups.map((group) => {
+            <div className="space-y-1">
+              {groups.map((group, index) => {
                 const isSelected = selectedRoomName === group.name;
                 return (
-                  <div key={group.id} className="space-y-1">
-                    <button
-                      onClick={() => {
-                        enterRoomChannel(group.name);
-                        if (isMobileDrawer) setMobileMenuOpen(false);
-                      }}
-                      className={`relative w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-mono transition-colors cursor-pointer ${isSelected
-                          ? "text-white font-semibold"
-                          : "text-stone-500 hover:text-[#09090b] hover:bg-zinc-200/60"
-                        }`}
-                    >
-                      {isSelected && (
-                        <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
-                      )}
-                      <div className="relative z-10 flex items-center space-x-3 text-ellipsis overflow-hidden">
-                        <span className="text-zinc-500 font-mono">#</span>
-                        <span className="truncate">{group.name}</span>
-                      </div>
-                      <span className="relative z-10 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    </button>
-
-                    {/* Indented room sub-navigation */}
+                  <button
+                    key={group.id}
+                    onClick={() => enterRoomChannel(group.name)}
+                    className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+                      isSelected ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                    }`}
+                    title={`Room #${group.name}`}
+                  >
                     {isSelected && (
-                      <div className="pl-3.5 border-l border-[#e4e4e7] space-y-1 ml-3.5 mt-1">
-                        <button
-                          onClick={() => {
-                            setActiveTab("groups");
-                            setRoomTab("overview");
-                            if (isMobileDrawer) setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "overview" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          <LayoutDashboard className="h-3 w-3 opacity-70" />
-                          <span>Overview</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setActiveTab("groups");
-                            setRoomTab("members");
-                            if (isMobileDrawer) setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "members" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          <Users className="h-3 w-3 opacity-70" />
-                          <span>Members</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setActiveTab("groups");
-                            setRoomTab("live");
-                            if (isMobileDrawer) setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "live" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          <Activity className="h-3 w-3 opacity-70" />
-                          <span>Live Activity</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setActiveTab("groups");
-                            setRoomTab("leaderboard");
-                            if (isMobileDrawer) setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "leaderboard" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          <Award className="h-3 w-3 opacity-70" />
-                          <span>Leaderboard</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setActiveTab("groups");
-                            setRoomTab("ai-summary");
-                            if (isMobileDrawer) setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "ai-summary" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          <Sparkles className="h-3 w-3 opacity-70" />
-                          <span>AI Summary</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setActiveTab("groups");
-                            setRoomTab("chat");
-                            if (isMobileDrawer) setMobileMenuOpen(false);
-                          }}
-                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "chat" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
-                            }`}
-                        >
-                          <MessageSquare className="h-3 w-3 opacity-70" />
-                          <span>Chat</span>
-                        </button>
-                      </div>
+                      <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
                     )}
-                  </div>
+                    <span className="relative z-10 flex items-center gap-3 w-full">
+                      {getRoomIcon(group.name, index)}
+                      {isSidebarOpen && (
+                        <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-sans text-xs font-bold">
+                          {group.name}
+                        </motion.span>
+                      )}
+                    </span>
+                  </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Account Section */}
-          <div className="space-y-1">
-            <div className="px-3 mb-1.5 text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
-              Account
-            </div>
+          {/* Account / Settings Section */}
+          <div className="space-y-1 pt-2 border-t border-slate-200">
+            {isSidebarOpen && (
+              <div className="px-3 mb-1.5 text-[10px] font-extrabold tracking-wider text-black uppercase whitespace-nowrap">
+                Account
+              </div>
+            )}
 
             <button
-              onClick={() => {
-                setActiveTab("profile");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "profile"
-                  ? "nav-item-active"
-                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
-                }`}
+              onClick={() => { setActiveTab("profile"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "profile" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="Profile & Settings"
             >
-              <User className="h-4 w-4 shrink-0" />
-              <span>Profile</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setActiveTab("settings");
-                setSelectedRoomName(null);
-                setSelectedFriendId(null);
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "settings"
-                  ? "nav-item-active"
-                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
-                }`}
-            >
-              <Settings className="h-4 w-4 shrink-0" />
-              <span>Settings</span>
+              {activeTab === "profile" && (
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Settings className="h-4 w-4 shrink-0" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    Profile & Settings
+                  </motion.span>
+                )}
+              </span>
             </button>
           </div>
         </nav>
 
-        {/* Bottom Profile Status Card */}
-        {user && (
-          <div className="p-3.5 border-t border-[#e4e4e7] bg-white/40 space-y-3">
-            <div className="flex items-center space-x-3">
-              <img
-                src={user.avatarUrl}
-                alt={user.name}
-                className="h-8 w-8 rounded-full object-cover border border-[#e4e4e7]"
-              />
-              <div className="flex-1 min-w-0">
-                <h4 className="text-xs font-semibold text-[#09090b] truncate">{user.name}</h4>
-                <p className="text-[10px] text-[#71717a] font-mono truncate">{user.email}</p>
-              </div>
-            </div>
+        {/* User Card & Theme Footer */}
+        <div className="p-3 border-t border-slate-200 bg-white/40 shrink-0">
+          {isSidebarOpen ? (
+            <div className="flex items-center justify-between gap-2">
+              {user && (
+                <button
+                  onClick={() => { setActiveTab("profile"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+                  className="flex items-center space-x-2.5 overflow-hidden text-left hover:opacity-80 transition-opacity cursor-pointer min-w-0 flex-1"
+                  title="View Profile & Settings"
+                >
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="h-8 w-8 rounded-full object-cover border border-slate-200 shrink-0"
+                  />
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0 whitespace-nowrap flex-1">
+                    <p className="text-xs font-extrabold text-black truncate">{user.name}</p>
+                    <p className="text-[10px] text-black font-bold truncate">{user.email}</p>
+                  </motion.div>
+                </button>
+              )}
 
-            <div className="flex items-center justify-between text-[10px] font-mono text-[#52525b] bg-[#f4f4f5] px-2.5 py-2 rounded-md border border-[#e4e4e7]">
-              <div className="flex items-center space-x-1.5">
-                <Laptop className="h-3 w-3 opacity-60" />
-                <span className="truncate max-w-[90px]">{user.deviceConnected}</span>
-              </div>
-              <span className={`text-[9px] font-semibold uppercase ${electronTracking ? "text-emerald-600" : "text-[#71717a]"}`}>
-                {electronTracking ? "Active" : "Synced"}
-              </span>
+              <button
+                onClick={() => {
+                  document.documentElement.classList.toggle("dark");
+                  triggerToast("Theme toggled");
+                }}
+                className="p-2 text-black hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer shrink-0"
+                title="Toggle Light/Dark Theme"
+              >
+                <Sun className="h-4 w-4 text-black" />
+              </button>
             </div>
-
-            <button
-              onClick={() => {
-                handleLogout();
-                if (isMobileDrawer) setMobileMenuOpen(false);
-              }}
-              className="w-full text-center py-1.5 border border-rose-200 text-[10px] font-semibold uppercase tracking-wider rounded-md text-rose-600 hover:bg-rose-50 cursor-pointer transition-all"
-            >
-              Sign Out
-            </button>
-          </div>
-        )}
-      </aside>
+          ) : (
+            <div className="flex flex-col items-center justify-center space-y-2 py-1">
+              {user && (
+                <button
+                  onClick={() => { setActiveTab("profile"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+                  className="hover:scale-105 transition-transform cursor-pointer"
+                  title={`${user.name} - View Profile`}
+                >
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name}
+                    className="h-8 w-8 rounded-full object-cover border border-[#e4e4e7] shrink-0"
+                  />
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  document.documentElement.classList.toggle("dark");
+                  triggerToast("Theme toggled");
+                }}
+                className="p-1.5 text-[#71717a] hover:text-[#09090b] rounded-lg hover:bg-stone-200/60 transition-colors cursor-pointer"
+                title="Toggle Light/Dark Theme"
+              >
+                <Sun className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      </motion.aside>
     );
   };
 
@@ -2506,46 +2625,208 @@ export default function App() {
         {/* Sleek Top Gradient Accent Strip */}
         <div className="gradient-bar-primary shrink-0"></div>
 
-        {/* Elegant Top Header with Minimalist Meta Controls */}
-        <header className={`h-16 border-b shrink-0 px-3.5 sm:px-6 md:px-8 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
-          }`}>
-          <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
-            {/* Mobile Hamburger Menu Trigger */}
+        {/* Elegant Top Header with High-Contrast Black Greeting, Blended Components & Minimal Pipeline Dot */}
+        <header className="min-h-16 py-3 border-b border-slate-200/90 shrink-0 px-3.5 sm:px-6 md:px-8 flex flex-col md:flex-row md:items-center justify-between gap-3 sticky top-0 z-40 backdrop-blur-md bg-white/80 text-black">
+          <div className="flex items-center space-x-3 flex-1 min-w-0">
+            {/* Left Hamburger Navigation Menu Trigger (Mobile Only) */}
             <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-2 text-stone-400 hover:text-stone-200 rounded-xl hover:bg-neutral-800/40 cursor-pointer shrink-0"
-              title="Open Navigation"
+              onClick={() => {
+                if (typeof window !== "undefined" && window.innerWidth < 768) {
+                  setMobileMenuOpen(true);
+                } else {
+                  setIsSidebarOpen(!isSidebarOpen);
+                }
+              }}
+              className="md:hidden p-2 text-black hover:text-black rounded-xl hover:bg-slate-100 transition-all cursor-pointer shrink-0"
+              title="Toggle Left Navigation Menu"
             >
-              <Menu className="h-5 w-5" />
+              <Menu className="h-5 w-5 text-black" />
             </button>
 
-            {/* Mobile Brand Tag & Page Title */}
-            <div className="flex items-center space-x-2 min-w-0">
-              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
-              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
-              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">Workspace Status</h1>
-            </div>
+            {/* Mobile Brand Tag */}
+            <span className="font-serif italic text-base font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
+            <span className="h-3.5 w-px bg-neutral-700/40 md:hidden"></span>
 
-            {/* System Status Quick Indicator */}
-            <div className="hidden xs:flex items-center space-x-1.5 bg-[#f5f4ef]/40 dark:bg-stone-900/40 px-2.5 py-1 rounded-full border dark:border-neutral-850 border-stone-250/60 text-[9px] font-mono text-stone-400 shrink-0">
-              <span className={`h-1.5 w-1.5 rounded-full inline-block ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
-                  ? "bg-emerald-500 animate-pulse"
-                  : "bg-red-500 animate-ping"
-                }`}></span>
-              <span className="hidden sm:inline">
-                {socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
-                  ? "Pipeline Healthy"
-                  : "Pipeline Error"}
-              </span>
-            </div>
+            {/* Promoted Greeting Header & Subtitle */}
+            <div className="space-y-0.5 min-w-0">
+              <div className="flex items-center space-x-2">
+                <h1 className="text-lg sm:text-2xl font-display font-black text-black tracking-tight truncate">
+                  {selectedRoomName ? `Room #${selectedRoomName}` : activeTab === "dashboard" ? getGreeting() : activeTab === "analytics" ? "My Analytics" : activeTab === "focus" ? "My Focus" : activeTab === "goals" ? "My Goals" : activeTab === "connections" ? "My Connections" : activeTab === "profile" ? "Profile & Settings" : getGreeting()}
+                </h1>
 
-            <span className="h-3.5 w-px bg-[#e4e4e7] hidden md:block"></span>
-            <p className="text-[11px] font-sans text-[#71717a] hidden md:block">
-              {user ? `Guild: ${user.activeGroup}` : ""}
-            </p>
+                {/* 🟢/🔴 Simple Dot Indicator (NO text pill) */}
+                {(() => {
+                  const isPipelineHealthy = socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected" && aiStatus === "configured" && !insightsError;
+                  const pipelineErrors: string[] = [];
+                  if (apiStatus !== "online") pipelineErrors.push("REST API");
+                  if (socketStatus !== "connected") pipelineErrors.push("WebSockets");
+                  if (dbStatus !== "connected") pipelineErrors.push("Supabase DB");
+                  if (!electronTracking) pipelineErrors.push("Desktop Agent");
+                  if (aiStatus !== "configured" || insightsError) pipelineErrors.push("Gemini AI");
+
+                  return (
+                    <div className="relative group cursor-pointer shrink-0 inline-flex items-center" title={isPipelineHealthy ? "Pipeline Operational" : `Pipeline Error: ${pipelineErrors.join(", ")}`}>
+                      <span className="relative flex h-3 w-3 items-center justify-center p-1">
+                        {!isPipelineHealthy && (
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-500 opacity-75"></span>
+                        )}
+                        <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                          isPipelineHealthy
+                            ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+                            : "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.9)] animate-pulse"
+                        }`}></span>
+                      </span>
+
+                      {/* Hover Popup specifying exact microservice status and errors */}
+                      <div className="absolute left-0 mt-8 w-64 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-200 z-50 space-y-2 text-xs text-black">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                          <span className="font-extrabold text-black font-mono uppercase text-[10px] tracking-wider">Pipeline Health</span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              triggerToast("Running diagnostics health-check...");
+                              await checkHealth();
+                              if (socketRef.current && !socketRef.current.connected) {
+                                socketRef.current.connect();
+                              }
+                            }}
+                            className="text-[9px] font-mono text-indigo-600 hover:underline cursor-pointer font-bold"
+                          >
+                            Re-check ↺
+                          </button>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-black font-bold">REST API</span>
+                            <span className={`font-mono font-extrabold ${apiStatus === "online" ? "text-emerald-600" : "text-rose-600"}`}>
+                              {apiStatus === "online" ? "● ONLINE" : "● OFFLINE"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-black font-bold">WebSockets</span>
+                            <span className={`font-mono font-extrabold ${socketStatus === "connected" ? "text-emerald-600" : "text-rose-600"}`}>
+                              {socketStatus === "connected" ? "● CONNECTED" : "● ERROR"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-black font-bold">Supabase DB</span>
+                            <span className={`font-mono font-extrabold ${dbStatus === "connected" ? "text-emerald-600" : "text-rose-600"}`}>
+                              {dbStatus === "connected" ? "● CONNECTED" : "● ERROR"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-black font-bold">Desktop Agent</span>
+                            <span className={`font-mono font-extrabold ${electronTracking ? "text-emerald-600" : "text-slate-600"}`}>
+                              {electronTracking ? "● SYNCED" : "○ OFFLINE"}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-black font-bold">Gemini AI</span>
+                            <span className={`font-mono font-extrabold ${aiStatus === "configured" && !insightsError ? "text-emerald-600" : "text-rose-600"}`}>
+                              {aiStatus === "configured" && !insightsError ? "● ACTIVE" : "● ERROR"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {!isPipelineHealthy && (
+                          <div className="pt-2 border-t border-slate-200 text-[10px] font-mono text-rose-600 font-extrabold leading-tight">
+                            ⚠️ Issue: {pipelineErrors.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <p className="text-xs text-black font-semibold hidden sm:block truncate">
+                {selectedRoomName ? "Active guild room channel" : activeTab === "dashboard" ? "Here's your real-time workstation overview for today." : activeTab === "analytics" ? "Performance tracking and focus metrics" : activeTab === "focus" ? "Deep work sessions and distraction monitoring" : activeTab === "goals" ? "Milestones, task routines, and objectives" : activeTab === "connections" ? "Co-worker presence and real-time collaboration" : activeTab === "profile" ? "Manage workstation account and preferences" : "Here's your real-time workstation overview for today."}
+              </p>
+            </div>
           </div>
 
-          <div className="flex items-center space-x-4">
+          {/* Quick Segment Controls: Components blend with webpage, Fonts are pure black */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Agent Status Pill Indicator */}
+            <button
+              onClick={() => {
+                if (myActivity?.isPaused) {
+                  setShowSessionModal(true);
+                } else {
+                  updateMyActiveTracker(undefined, undefined, true);
+                }
+              }}
+              disabled={updatingActivity}
+              className="px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-2 bg-white/80 hover:bg-white border border-slate-200/90 shadow-xs transition-all cursor-pointer text-black"
+              title="Click to configure agent monitoring session"
+            >
+              <span className="font-black text-black">Agent</span>
+              {myActivity?.isPaused ? (
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                </span>
+              ) : (
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+              )}
+            </button>
+
+            {/* Privacy Toggle Pills */}
+            <div className="flex items-center gap-1 bg-white/80 border border-slate-200/90 p-1 rounded-xl shadow-xs">
+              <button
+                onClick={() => submitProfileSettings({ privacyMode: "Private" })}
+                className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                  user?.privacyMode === "Private"
+                    ? "bg-[#09090b] text-white shadow-xs font-black"
+                    : "text-black hover:bg-slate-100/80 font-extrabold"
+                }`}
+                title="Private Mode: Activity hidden from co-workers"
+              >
+                <Lock className={`h-3.5 w-3.5 ${user?.privacyMode === "Private" ? "text-amber-400" : "text-amber-600"}`} />
+                <span className="font-extrabold text-current">Private</span>
+              </button>
+
+              <button
+                onClick={() => submitProfileSettings({ privacyMode: "Team" })}
+                className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                  user?.privacyMode === "Team"
+                    ? "bg-[#09090b] text-white shadow-xs font-black"
+                    : "text-black hover:bg-slate-100/80 font-extrabold"
+                }`}
+                title="Team Mode: Activity visible to room members"
+              >
+                <Users className={`h-3.5 w-3.5 ${user?.privacyMode === "Team" ? "text-blue-400" : "text-blue-600"}`} />
+                <span className="font-extrabold text-current">Team</span>
+              </button>
+
+              <button
+                onClick={() => submitProfileSettings({ privacyMode: "Public" })}
+                className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                  user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
+                    ? "bg-[#09090b] text-white shadow-xs font-black"
+                    : "text-black hover:bg-slate-100/80 font-extrabold"
+                }`}
+                title="Public Mode: Live activity broadcasting ON"
+              >
+                <Globe className={`h-3.5 w-3.5 ${user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail") ? "text-emerald-400" : "text-emerald-600"}`} />
+                <span className="font-extrabold text-current">Public</span>
+              </button>
+            </div>
+
+            {/* Connected Devices Quick Hub Trigger */}
+            <button
+              onClick={() => setShowDevicesList(!showDevicesList)}
+              className="px-3 py-1.5 rounded-xl text-xs font-black bg-white/80 hover:bg-white border border-slate-200/90 text-black shadow-xs transition-all cursor-pointer flex items-center gap-2"
+            >
+              <Laptop className="h-4 w-4 text-indigo-600" />
+              <span className="font-black text-black">{connectedDevices.length} Connected Devices</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-black transition-transform ${showDevicesList ? "rotate-180" : ""}`} />
+            </button>
           </div>
         </header>
 
@@ -2631,96 +2912,6 @@ export default function App() {
               {/* 1⃣ MAIN DASHBOARD TAB VIEW */}
               {activeTab === "dashboard" && (
                 <>
-                  {/* STUDIO HERO TITLE BLOCK */}
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 rounded-2xl border border-[#e4e4e7] shadow-xs">
-                    <div className="space-y-1">
-                      <h2 className="text-2xl sm:text-3xl font-display font-bold text-[#09090b] tracking-tight">
-                        {getGreeting()}
-                      </h2>
-                      <p className="text-xs text-[#71717a]">
-                        Here's your real-time workstation overview for today.
-                      </p>
-                    </div>
-
-                    {/* Quick Segment Controls: Privacy Mode, Agent Monitor Status, & Connected Devices */}
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Agent Status Pill Indicator */}
-                      <button
-                        onClick={() => {
-                          if (myActivity?.isPaused) {
-                            setShowSessionModal(true);
-                          } else {
-                            updateMyActiveTracker(undefined, undefined, true);
-                          }
-                        }}
-                        disabled={updatingActivity}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 bg-white border border-[#e4e4e7] hover:bg-[#f4f4f5] transition-all cursor-pointer shadow-xs"
-                        title="Click to configure agent monitoring session"
-                      >
-                        <span className="font-bold text-[#09090b]">Agent</span>
-                        {myActivity?.isPaused ? (
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                          </span>
-                        ) : (
-                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
-                        )}
-                      </button>
-
-                      {/* Privacy Toggle Pills */}
-                      <div className="flex items-center gap-1 bg-[#f4f4f5] border border-[#e4e4e7] p-1 rounded-xl">
-                        <button
-                          onClick={() => submitProfileSettings({ privacyMode: "Private" })}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-                            user?.privacyMode === "Private"
-                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
-                              : "text-[#71717a] hover:text-[#09090b]"
-                          }`}
-                          title="Private Mode: Activity hidden from co-workers"
-                        >
-                          <Lock className="h-3.5 w-3.5 text-amber-600" />
-                          <span>Private</span>
-                        </button>
-
-                        <button
-                          onClick={() => submitProfileSettings({ privacyMode: "Team" })}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-                            user?.privacyMode === "Team"
-                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
-                              : "text-[#71717a] hover:text-[#09090b]"
-                          }`}
-                          title="Team Mode: Activity visible to room members"
-                        >
-                          <Users className="h-3.5 w-3.5 text-blue-600" />
-                          <span>Team</span>
-                        </button>
-
-                        <button
-                          onClick={() => submitProfileSettings({ privacyMode: "Public" })}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
-                            user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
-                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
-                              : "text-[#71717a] hover:text-[#09090b]"
-                          }`}
-                          title="Public Mode: Live activity broadcasting ON"
-                        >
-                          <Globe className="h-3.5 w-3.5 text-emerald-600" />
-                          <span>Public</span>
-                        </button>
-                      </div>
-
-                      {/* Connected Devices Quick Hub Trigger */}
-                      <button
-                        onClick={() => setShowDevicesList(!showDevicesList)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-[#e4e4e7] text-[#09090b] hover:bg-[#f4f4f5] transition-all cursor-pointer flex items-center gap-2 shadow-xs"
-                      >
-                        <Laptop className="h-4 w-4 text-indigo-600" />
-                        <span>{connectedDevices.length} Connected Devices</span>
-                        <ChevronDown className={`h-3.5 w-3.5 text-[#71717a] transition-transform ${showDevicesList ? "rotate-180" : ""}`} />
-                      </button>
-                    </div>
-                  </div>
 
                   {/* CONNECTED DEVICES & DISPLAY MONITOR MATRIX */}
                   <AnimatePresence>
@@ -2800,94 +2991,15 @@ export default function App() {
                     )}
                   </AnimatePresence>
 
-                  {/* WORKSPACE PIPELINE CONNECTIVITY STRIP */}
-                  <div className="studio-card p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <Terminal className="h-4 w-4 text-[#09090b]" />
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                          Pipeline Diagnostics & Microservices
-                        </h3>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          triggerToast("Running diagnostics health-check...");
-                          await checkHealth();
-                          if (socketRef.current) {
-                            if (!socketRef.current.connected) {
-                              socketRef.current.connect();
-                            }
-                          }
-                        }}
-                        className="btn-secondary text-[11px] py-1 px-2.5"
-                      >
-                        Run Health Check
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-                      {/* 1. REST API */}
-                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
-                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">REST API</span>
-                        <div className="flex items-center space-x-2">
-                          <span className={`status-dot ${apiStatus === "online" ? "status-dot-emerald" : "status-dot-rose"}`} />
-                          <span className="text-xs font-semibold text-[#09090b]">{apiStatus === "online" ? "ONLINE" : "OFFLINE"}</span>
-                        </div>
-                      </div>
-
-                      {/* 2. WebSockets */}
-                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
-                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">WebSockets</span>
-                        <div className="flex items-center space-x-2">
-                          <span className={`status-dot ${socketStatus === "connected" ? "status-dot-emerald" : socketStatus === "error" ? "status-dot-rose" : "status-dot-neutral"}`} />
-                          <span className="text-xs font-semibold text-[#09090b]">
-                            {socketStatus === "connected" ? "CONNECTED" : socketStatus === "error" ? "ERROR" : "OFFLINE"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 3. Supabase Database */}
-                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
-                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">Supabase DB</span>
-                        <div className="flex items-center space-x-2">
-                          <span className={`status-dot ${dbStatus === "connected" ? "status-dot-emerald" : "status-dot-rose"}`} />
-                          <span className="text-xs font-semibold text-[#09090b]">
-                            {dbStatus === "connected" ? "CONNECTED" : dbStatus === "checking" ? "CHECKING..." : "ERROR"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 4. Desktop Agent */}
-                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
-                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">Desktop Agent</span>
-                        <div className="flex items-center space-x-2">
-                          <span className={`status-dot ${electronTracking ? "status-dot-emerald" : "status-dot-neutral"}`} />
-                          <span className="text-xs font-semibold text-[#09090b]">{electronTracking ? "SYNCED" : "OFFLINE"}</span>
-                        </div>
-                      </div>
-
-                      {/* 5. Gemini AI Engine */}
-                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
-                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">Gemini AI</span>
-                        <div className="flex items-center space-x-2">
-                          <span className={`status-dot ${aiStatus === "configured" && !insightsError ? "status-dot-emerald" : "status-dot-rose"}`} />
-                          <span className="text-xs font-semibold text-[#09090b]">
-                            {aiStatus === "configured" && !insightsError ? "ACTIVE" : "ERROR"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* CARDS GRID */}
                   <div className="grid grid-cols-12 gap-3 sm:gap-5">
                     {/* Focus Time Card */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Focus Time</span>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Focus Time</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-normal text-[#71717a]">hrs</span></div>
-                          <div className="text-[11px] text-[#71717a] font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
+                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-bold text-black">hrs</span></div>
+                          <div className="text-[11px] text-black font-extrabold font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                         </div>
                       </div>
                     </TiltCard>
@@ -2895,10 +3007,10 @@ export default function App() {
                     {/* Productivity Score */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Productivity Score</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
-                          <div className="text-[11px] text-[#71717a]">Target achieved</div>
+                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
+                          <div className="text-[11px] text-black font-extrabold">Target achieved</div>
                         </div>
                       </div>
                     </TiltCard>
@@ -2906,10 +3018,10 @@ export default function App() {
                     {/* Current Session */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Current Session</span>
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Current Session</span>
                         <div className="space-y-0.5">
-                          <div className="text-base font-semibold text-[#09090b] truncate">{myActivity ? myActivity.app : "Inactive"}</div>
-                          <div className="text-[11px] text-[#71717a] font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                          <div className="text-base font-black text-black truncate">{myActivity ? myActivity.app : "Inactive"}</div>
+                          <div className="text-[11px] text-black font-extrabold font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
                         </div>
                       </div>
                     </TiltCard>
@@ -3002,10 +3114,10 @@ export default function App() {
                         <div className="studio-card p-5 h-full relative overflow-hidden">
                           <div className="flex flex-col justify-between h-full space-y-5">
                             {/* Team & Scrum Telemetry Section */}
-                            <div className="p-4 rounded-lg bg-[#f4f4f5] border border-[#e4e4e7] space-y-3">
+                            <div className="p-4 rounded-xl bg-white/70 backdrop-blur-xs border border-slate-200/90 space-y-3">
                               <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b] flex items-center gap-1.5">
-                                  <Users className="h-4 w-4" />
+                                <h3 className="text-xs font-black uppercase tracking-wider text-black flex items-center gap-1.5">
+                                  <Users className="h-4 w-4 text-black" />
                                   <span>Team & Scrum Telemetry</span>
                                 </h3>
                                 <div className="badge badge-emerald">
@@ -3020,7 +3132,7 @@ export default function App() {
                                   const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : null);
                                   if (!activeGroupName) {
                                     return (
-                                      <p className="text-xs text-[#71717a] italic">No active workspace group selected.</p>
+                                      <p className="text-xs text-black font-extrabold italic">No active workspace group selected.</p>
                                     );
                                   }
 
@@ -3030,13 +3142,13 @@ export default function App() {
 
                                   return (
                                     <div className="space-y-3">
-                                      <div className="flex justify-between items-center text-xs font-medium text-[#71717a] border-b border-[#e4e4e7] pb-1.5">
+                                      <div className="flex justify-between items-center text-xs font-black text-black border-b border-slate-200 pb-1.5">
                                         <span>Guild: #{activeGroupName}</span>
                                         <span>{occupants.length} Co-workers</span>
                                       </div>
 
                                       {occupants.length === 0 ? (
-                                        <p className="text-xs text-[#71717a] italic">No other co-workers in this room currently.</p>
+                                        <p className="text-xs text-black font-extrabold italic">No other co-workers in this room currently.</p>
                                       ) : (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
                                           {occupants.map((occ) => {
@@ -3046,40 +3158,40 @@ export default function App() {
                                             const duration = occ.currentActivity?.durationText || "";
 
                                             return (
-                                              <div key={occ.id} className="p-2.5 bg-white rounded-md border border-[#e4e4e7] flex flex-col justify-between space-y-2">
+                                              <div key={occ.id} className="p-2.5 bg-white/90 rounded-xl border border-slate-200/90 shadow-xs flex flex-col justify-between space-y-2">
                                                 <div className="flex items-center justify-between">
                                                   <div className="flex items-center space-x-2 min-w-0">
                                                     <div className="relative shrink-0">
                                                       <img
                                                         src={occ.avatarUrl}
                                                         alt={occ.name}
-                                                        className="h-6 w-6 rounded-full object-cover border border-[#e4e4e7]"
+                                                        className="h-6 w-6 rounded-full object-cover border border-slate-200"
                                                       />
-                                                      <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white ${occOnline ? "bg-emerald-500" : "bg-zinc-400"
+                                                      <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white ${occOnline ? "bg-emerald-500" : "bg-slate-400"
                                                         }`} />
                                                     </div>
                                                     <div className="min-w-0">
-                                                      <span className="font-sans font-semibold text-xs text-[#09090b] truncate block leading-tight">{occ.name}</span>
-                                                      <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">{occ.role}</span>
+                                                      <span className="font-sans font-black text-xs text-black truncate block leading-tight">{occ.name}</span>
+                                                      <span className="text-[9px] font-black uppercase tracking-wider text-black block">{occ.role}</span>
                                                     </div>
                                                   </div>
-                                                  <span className="text-[10px] font-mono text-[#71717a] shrink-0">{duration}</span>
+                                                  <span className="text-[10px] font-mono font-black text-black shrink-0">{duration}</span>
                                                 </div>
 
                                                 {occOnline ? (
-                                                  <div className="flex items-center justify-between text-[11px] bg-[#f4f4f5] p-1.5 rounded border border-[#e4e4e7]">
-                                                    <span className="text-[#09090b] font-semibold truncate flex items-center space-x-1">
+                                                  <div className="flex items-center justify-between text-[11px] bg-slate-100/80 p-1.5 rounded-lg border border-slate-200">
+                                                    <span className="text-black font-black truncate flex items-center space-x-1">
                                                       <span className="text-emerald-600">⚡</span>
                                                       <span>{activityApp}</span>
                                                     </span>
                                                     {activityProject !== "None" && (
-                                                      <span className="text-[10px] text-[#71717a] max-w-[100px] truncate" title={activityProject}>
+                                                      <span className="text-[10px] text-black font-extrabold max-w-[100px] truncate" title={activityProject}>
                                                         {activityProject}
                                                       </span>
                                                     )}
                                                   </div>
                                                 ) : (
-                                                  <span className="text-[10px] font-medium text-[#71717a] block pl-1">Offline</span>
+                                                  <span className="text-[10px] font-bold text-black block pl-1">Offline</span>
                                                 )}
                                               </div>
                                             );
@@ -3092,16 +3204,16 @@ export default function App() {
                               </div>
 
                               {/* AI Scrum Coordinator Brief */}
-                              <div className="pt-3 border-t border-[#e4e4e7]">
+                              <div className="pt-3 border-t border-slate-200">
                                 <div className="flex items-center justify-between mb-2">
                                   <div className="flex items-center space-x-1.5">
                                     <Sparkles className="h-4 w-4 text-amber-600" />
-                                    <span className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">Scrum Coordinator Brief</span>
+                                    <span className="text-xs font-black uppercase tracking-wider text-black">Scrum Coordinator Brief</span>
                                   </div>
                                   <button
                                     onClick={() => fetchAiBriefing(true)}
                                     disabled={loadingInsights}
-                                    className="p-1 rounded hover:bg-zinc-200/60 text-[#71717a] hover:text-[#09090b] transition-all cursor-pointer disabled:opacity-50"
+                                    className="p-1 rounded hover:bg-slate-200/60 text-black hover:text-black transition-all cursor-pointer disabled:opacity-50"
                                     title="Regenerate Scrum Alignment Brief"
                                   >
                                     <RefreshCw className={`h-3.5 w-3.5 ${loadingInsights ? "animate-spin" : ""}`} />
@@ -3128,7 +3240,7 @@ export default function App() {
                                     "focused": "bg-blue-100 text-blue-700 border-blue-200",
                                     "idle": "bg-amber-100 text-amber-700 border-amber-200",
                                     "distracted": "bg-red-100 text-red-700 border-red-200",
-                                    "offline": "bg-zinc-100 text-zinc-500 border-zinc-200"
+                                    "offline": "bg-slate-100 text-slate-800 border-slate-200"
                                   };
                                   const moodLabels: Record<string, string> = {
                                     "deep_work": "🧠 Deep Work",
@@ -3142,59 +3254,59 @@ export default function App() {
                                     <div className="space-y-3">
                                       {/* Mini Cards Grid */}
                                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
-                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{roomSummary.productivityPercentage}%</span>
-                                          <span className={`text-[8px] font-semibold block mt-0.5 ${roomSummary.productivityPercentage >= 60 ? "text-emerald-600" : roomSummary.productivityPercentage >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
+                                        <div className="p-2.5 bg-white/90 rounded-lg border border-slate-200/90 text-center">
+                                          <span className="text-[9px] font-black uppercase tracking-wider text-black block">Productivity</span>
+                                          <span className="text-xs font-black text-black block mt-0.5">{roomSummary.productivityPercentage}%</span>
+                                          <span className={`text-[8px] font-extrabold block mt-0.5 ${roomSummary.productivityPercentage >= 60 ? "text-emerald-600" : roomSummary.productivityPercentage >= 30 ? "text-amber-600" : "text-black"}`}>
                                             {roomSummary.productivityPercentage >= 60 ? "Strong" : roomSummary.productivityPercentage >= 30 ? "Moderate" : "Low Activity"}
                                           </span>
                                         </div>
-                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
-                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{focusPatterns.deepWorkStreak}m</span>
-                                          <span className={`text-[8px] font-semibold block mt-0.5 ${focusPatterns.flowStateDetected ? "text-emerald-600" : "text-zinc-400"}`}>
+                                        <div className="p-2.5 bg-white/90 rounded-lg border border-slate-200/90 text-center">
+                                          <span className="text-[9px] font-black uppercase tracking-wider text-black block">Deep Work</span>
+                                          <span className="text-xs font-black text-black block mt-0.5">{focusPatterns.deepWorkStreak}m</span>
+                                          <span className={`text-[8px] font-extrabold block mt-0.5 ${focusPatterns.flowStateDetected ? "text-emerald-600" : "text-black"}`}>
                                             {focusPatterns.flowStateDetected ? "Flow Detected ✦" : "No Flow State"}
                                           </span>
                                         </div>
-                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Burnout Risk</span>
-                                          <span className={`text-xs font-bold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>{welfare.burnoutRiskIndex}/100</span>
-                                          <span className={`text-[8px] font-semibold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-500" : welfare.burnoutRiskIndex > 30 ? "text-amber-500" : "text-emerald-500"}`}>
+                                        <div className="p-2.5 bg-white/90 rounded-lg border border-slate-200/90 text-center">
+                                          <span className="text-[9px] font-black uppercase tracking-wider text-black block">Burnout Risk</span>
+                                          <span className={`text-xs font-black block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>{welfare.burnoutRiskIndex}/100</span>
+                                          <span className={`text-[8px] font-extrabold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>
                                             {welfare.burnoutRiskIndex > 60 ? "High Risk ⚠" : welfare.burnoutRiskIndex > 30 ? "Moderate" : "Healthy"}
                                           </span>
                                         </div>
-                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Collaboration</span>
-                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{collaborationScore}/100</span>
-                                          <span className={`text-[8px] font-semibold block mt-0.5 ${collaborationScore >= 60 ? "text-emerald-600" : "text-zinc-400"}`}>
+                                        <div className="p-2.5 bg-white/90 rounded-lg border border-slate-200/90 text-center">
+                                          <span className="text-[9px] font-black uppercase tracking-wider text-black block">Collaboration</span>
+                                          <span className="text-xs font-black text-black block mt-0.5">{collaborationScore}/100</span>
+                                          <span className={`text-[8px] font-extrabold block mt-0.5 ${collaborationScore >= 60 ? "text-emerald-600" : "text-black"}`}>
                                             {collaborationScore >= 70 ? "High Synergy" : collaborationScore >= 40 ? "Moderate" : "Independent"}
                                           </span>
                                         </div>
                                       </div>
 
                                       {/* Scrum Coordinator Panel */}
-                                      <div className="text-xs leading-relaxed font-sans max-h-[520px] overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3.5 border border-[#e4e4e7] space-y-3">
+                                      <div className="text-xs leading-relaxed font-sans max-h-[520px] overflow-y-auto pr-1 text-black bg-white/90 rounded-lg p-3.5 border border-slate-200 space-y-3">
                                         
                                         {/* Room Status */}
-                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                        <div className="space-y-1.5 pb-2.5 border-b border-slate-200">
                                           <div className="flex justify-between items-center text-xs">
-                                            <span className="text-[#09090b] font-semibold flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
-                                              <span className={roomSummary.activeCount > 0 ? "text-emerald-500" : "text-zinc-400"}>
+                                            <span className="text-black font-black flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+                                              <span className={roomSummary.activeCount > 0 ? "text-emerald-500" : "text-black"}>
                                                 {roomSummary.activeCount > 0 ? "🟢" : "🔴"}
                                               </span> Room Summary — {roomSummary.status}
                                             </span>
-                                            <span className="text-[#09090b] font-bold">{roomSummary.productivityPercentage}%</span>
+                                            <span className="text-black font-black">{roomSummary.productivityPercentage}%</span>
                                           </div>
-                                          <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
+                                          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden border border-slate-200">
                                             <div 
-                                              className={`h-full rounded-full transition-all duration-700 ${roomSummary.productivityPercentage >= 60 ? "bg-emerald-500" : roomSummary.productivityPercentage >= 30 ? "bg-amber-500" : "bg-zinc-300"}`}
+                                              className={`h-full rounded-full transition-all duration-700 ${roomSummary.productivityPercentage >= 60 ? "bg-emerald-500" : roomSummary.productivityPercentage >= 30 ? "bg-amber-500" : "bg-slate-400"}`}
                                               style={{ width: `${roomSummary.productivityPercentage}%` }}
                                             />
                                           </div>
-                                          <p className="text-xs text-[#52525b] mt-1 leading-normal">
+                                          <p className="text-xs text-black font-extrabold mt-1 leading-normal">
                                             {roomSummary.description}
                                           </p>
-                                          <div className="flex gap-3 text-[10px] font-mono text-[#71717a] pt-1">
+                                          <div className="flex gap-3 text-[10px] font-mono text-black font-bold pt-1">
                                             <span>• {roomSummary.activeCount} / {roomSummary.totalCount} developers active</span>
                                             <span>• {aiInsights.isFallback ? "Heuristic Engine" : "Gemini AI"}</span>
                                           </div>

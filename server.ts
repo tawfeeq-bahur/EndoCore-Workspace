@@ -89,10 +89,10 @@ async function getUserActiveActivity(userId: string) {
     activity = await prisma.activity.create({
       data: {
         userId,
-        app: "Offline",
-        project: "None",
+        app: "VS Code",
+        project: "EndoCore Workspace",
         durationSeconds: 0,
-        isPaused: true,
+        isPaused: false,
         startedAt: new Date()
       }
     });
@@ -592,22 +592,8 @@ setInterval(async () => {
       const act = JSON.parse(data);
       let changed = false;
 
-      // Check for heartbeat timeout (no activity update in 15 seconds)
-      const now = Date.now();
-      const heartbeatElapsed = now - act.lastHeartbeat;
-
-      if (act.app !== "Offline" && heartbeatElapsed > 15000) {
-        // Mark user offline
-        act.app = "Offline";
-        act.project = "None";
-        act.isPaused = true;
-        changed = true;
-
-        await prisma.user.update({
-          where: { id: userId },
-          data: { status: "offline" }
-        });
-      } else if (!act.isPaused && act.app !== "Offline") {
+      // Agent stays active continuously unless user explicitly pauses tracking or sets app to Offline
+      if (!act.isPaused && act.app && act.app !== "Offline") {
         act.durationSeconds += 5;
         changed = true;
       }
@@ -1609,6 +1595,9 @@ app.post("/api/devices/disconnect", authenticateToken, async (req: any, res) => 
 app.get("/api/my-activity", authenticateToken, async (req: any, res) => {
   try {
     const activity = await getUserActiveActivity(req.user.id);
+    activity.lastHeartbeat = Date.now();
+    await setUserActiveActivity(req.user.id, activity);
+
     const openAppsList = await getUserOpenApps(req.user.id);
     res.json({
       app: activity.app,
