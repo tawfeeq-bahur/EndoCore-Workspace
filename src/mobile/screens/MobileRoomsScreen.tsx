@@ -65,7 +65,7 @@ export const MobileRoomsScreen: React.FC<MobileRoomsScreenProps> = ({
 
   let totalActualHours = 0;
   let totalTargetHours = 0;
-  [user, ...friends].forEach(occ => {
+  [user, ...friends].forEach((occ: any) => {
     if (!occ) return;
     const focusHrs = parseFloat(occ.todayFocusTime?.replace("h", "") || "0");
     const targetHrs = occ.productivityGoal || 6;

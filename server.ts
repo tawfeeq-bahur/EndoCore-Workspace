@@ -124,7 +124,8 @@ async function getUserActiveActivity(userId: string) {
   const cached = await cacheGet(`user:active:${userId}`);
   if (cached) {
     try {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      if (parsed) return parsed;
     } catch (e) {
       console.error("Error parsing user active cache:", e);
     }
@@ -139,21 +140,21 @@ async function getUserActiveActivity(userId: string) {
     activity = await prisma.activity.create({
       data: {
         userId,
-        app: "Offline",
-        project: "None",
+        app: "VS Code",
+        project: "Active Task",
         durationSeconds: 0,
-        isPaused: true,
+        isPaused: false,
         startedAt: new Date()
       }
     });
   }
 
   const result = {
-    app: activity.app,
-    project: activity.project,
-    startedAt: activity.startedAt.getTime(),
-    durationSeconds: activity.durationSeconds,
-    isPaused: activity.isPaused,
+    app: activity.app && activity.app !== "Offline" ? activity.app : "VS Code",
+    project: activity.project && activity.project !== "None" ? activity.project : "Active Task",
+    startedAt: activity.startedAt ? activity.startedAt.getTime() : Date.now(),
+    durationSeconds: activity.durationSeconds || 0,
+    isPaused: activity.isPaused !== undefined ? activity.isPaused : false,
     lastHeartbeat: Date.now()
   };
 
@@ -163,6 +164,34 @@ async function getUserActiveActivity(userId: string) {
 
 async function setUserActiveActivity(userId: string, activity: any) {
   await cacheSet(`user:active:${userId}`, JSON.stringify(activity));
+  try {
+    const count = await prisma.activity.count({ where: { userId } });
+    if (count > 0) {
+      await prisma.activity.updateMany({
+        where: { userId },
+        data: {
+          app: activity.app,
+          project: activity.project,
+          durationSeconds: activity.durationSeconds || 0,
+          isPaused: activity.isPaused !== undefined ? activity.isPaused : false,
+          startedAt: new Date(activity.startedAt || Date.now())
+        }
+      });
+    } else {
+      await prisma.activity.create({
+        data: {
+          userId,
+          app: activity.app,
+          project: activity.project,
+          durationSeconds: activity.durationSeconds || 0,
+          isPaused: activity.isPaused !== undefined ? activity.isPaused : false,
+          startedAt: new Date(activity.startedAt || Date.now())
+        }
+      });
+    }
+  } catch (err) {
+    console.error("Error syncing activity to PostgreSQL DB:", err);
+  }
 }
 
 async function getUserOpenApps(userId: string): Promise<string[]> {
@@ -209,10 +238,10 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(process.cwd(), "public/uploads")));
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: function (req: any, file, cb) {
     cb(null, path.join(process.cwd(), "public/uploads/"));
   },
-  filename: function (req, file, cb) {
+  filename: function (req: any, file, cb) {
     const ext = file.originalname.split('.').pop();
     cb(null, `${req.user?.id}-${Date.now()}.${ext}`);
   }
@@ -630,22 +659,11 @@ setInterval(async () => {
       const act = JSON.parse(data);
       let changed = false;
 
-      // Check for heartbeat timeout (no activity update in 15 seconds)
+      // Maintain active session duration ticker without auto-pausing
       const now = Date.now();
-      const heartbeatElapsed = now - act.lastHeartbeat;
+      act.lastHeartbeat = now;
 
-      if (act.app !== "Offline" && heartbeatElapsed > 15000) {
-        // Mark user offline
-        act.app = "Offline";
-        act.project = "None";
-        act.isPaused = true;
-        changed = true;
-
-        await prisma.user.update({
-          where: { id: userId },
-          data: { status: "offline" }
-        });
-      } else if (!act.isPaused && act.app !== "Offline") {
+      if (!act.isPaused && act.app !== "Offline") {
         act.durationSeconds += 5;
         changed = true;
       }
@@ -1295,11 +1313,11 @@ app.get("/api/user", authenticateToken, async (req: any, res) => {
         { time: "10:35 – 12:00", date: "Today", app: "Terminal & Git", project: "Deployment Pipeline", duration: "85 mins" },
         { time: "13:00 – 14:45", date: "Today", app: "Figma", project: "UI Mockups", duration: "105 mins" }
       ];
-      formatted.productivityGoal = 6;
-      formatted.focusScore = 78;
-      formatted.todayFocusTime = "4h 20m";
-      formatted.activeGroup = "Engineering Team";
-      formatted.deviceConnected = "WS-WORKSTATION-11";
+      (formatted as any).productivityGoal = 6;
+      (formatted as any).focusScore = 78;
+      (formatted as any).todayFocusTime = "4h 20m";
+      (formatted as any).activeGroup = "Engineering Team";
+      (formatted as any).deviceConnected = "WS-WORKSTATION-11";
     }
 
     res.json(formatted);
@@ -1554,7 +1572,7 @@ app.get("/api/my-activity", authenticateToken, async (req: any, res) => {
 // Update your current activity
 app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
   try {
-    const { app: selectedApp, project, isPaused, togglePause, resetTimer, incrementDistraction, resetDistractions, completeFocusSession, openApps } = req.body;
+    const { app: selectedApp, project, isPaused, togglePause, resetTimer, incrementDistraction, resetDistractions, completeFocusSession, openApps, isManual } = req.body;
 
     if (Array.isArray(openApps)) {
       await setUserOpenApps(req.user.id, openApps);
@@ -1616,6 +1634,27 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
     }
 
     const activity = await getUserActiveActivity(req.user.id);
+    const isManualAction = isManual === true;
+
+    // If session is manually configured by user, ignore unrequested background desktop app switches
+    if (activity.isManual && !isManualAction && selectedApp !== undefined) {
+      activity.lastHeartbeat = Date.now();
+      await setUserActiveActivity(req.user.id, activity);
+      return res.json({
+        success: true,
+        activity: {
+          app: activity.app,
+          project: activity.project,
+          startedAt: activity.startedAt,
+          durationSeconds: activity.durationSeconds,
+          isPaused: activity.isPaused
+        }
+      });
+    }
+
+    if (isManualAction) {
+      activity.isManual = true;
+    }
 
     const hasChanged = (selectedApp !== undefined && selectedApp !== activity.app) ||
                        (sanitizedProject !== undefined && sanitizedProject !== activity.project);
@@ -1655,7 +1694,7 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
       activity.project = sanitizedProject !== undefined ? sanitizedProject : activity.project;
       activity.durationSeconds = 0;
       activity.startedAt = Date.now();
-      activity.isPaused = isPaused !== undefined ? isPaused : (togglePause !== undefined ? togglePause : (wasOffline ? false : activity.isPaused));
+      activity.isPaused = togglePause !== undefined ? togglePause : (isPaused !== undefined ? isPaused : false);
       activity.lastHeartbeat = Date.now();
 
       await setUserActiveActivity(req.user.id, activity);
@@ -1683,7 +1722,7 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
       activity.isPaused = togglePause;
     } else if (isPaused !== undefined) {
       activity.isPaused = isPaused;
-    } else if (wasOffline) {
+    } else {
       activity.isPaused = false;
     }
 
@@ -2269,8 +2308,8 @@ app.get("/api/groups/directory", authenticateToken, async (req: any, res) => {
       where: {
         id: { notIn: joinedGroupIds },
         OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { description: { contains: query, mode: "insensitive" } }
+          { name: { contains: query } },
+          { description: { contains: query } }
         ]
       },
       include: {
@@ -2641,9 +2680,9 @@ app.get("/api/connections/search", authenticateToken, async (req: any, res) => {
       where: {
         id: { not: myId },
         OR: [
-          { name: { contains: query, mode: 'insensitive' } },
-          { username: { contains: query, mode: 'insensitive' } },
-          { email: { contains: query, mode: 'insensitive' } }
+          { name: { contains: query } },
+          { username: { contains: query } },
+          { email: { contains: query } }
         ]
       },
       take: 20
