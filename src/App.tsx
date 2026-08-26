@@ -53,7 +53,8 @@ import {
   TrendingUp,
   Pencil,
   Shield,
-  BarChart2
+  BarChart2,
+  LogOut
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -1919,15 +1920,7 @@ export default function App() {
                 <span>My Analytics</span>
               </button>
 
-              <button
-                onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
-                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
-                  activeTab === "focus" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
-                }`}
-              >
-                <Clock className="h-4 w-4 shrink-0" />
-                <span>My Focus</span>
-              </button>
+
 
               <button
                 onClick={() => { setActiveTab("goals"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
@@ -2014,6 +2007,13 @@ export default function App() {
               >
                 <Settings className="h-4 w-4 shrink-0" />
                 <span>Settings</span>
+              </button>
+              <button
+                onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100/70 transition-all cursor-pointer"
+              >
+                <LogOut className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>Sign Out</span>
               </button>
             </div>
           </nav>
@@ -2140,26 +2140,7 @@ export default function App() {
               </span>
             </button>
 
-            {/* My Focus */}
-            <button
-              onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "focus" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
-              }`}
-              title="My Focus"
-            >
-              {activeTab === "focus" && (
-                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
-              )}
-              <span className="relative z-10 flex items-center gap-3 w-full">
-                <Clock className="h-4 w-4 shrink-0" />
-                {isSidebarOpen && (
-                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
-                    My Focus
-                  </motion.span>
-                )}
-              </span>
-            </button>
+
 
             {/* My Goals */}
             <button
@@ -2314,6 +2295,21 @@ export default function App() {
                 )}
               </span>
             </button>
+
+            <button
+              onClick={() => handleLogout()}
+              className="relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100/70 transition-all cursor-pointer"
+              title="Sign Out of Workspace"
+            >
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <LogOut className="h-4 w-4 shrink-0 text-rose-600" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold text-rose-600">
+                    Sign Out
+                  </motion.span>
+                )}
+              </span>
+            </button>
           </div>
         </nav>
 
@@ -2349,6 +2345,14 @@ export default function App() {
               >
                 <Sun className="h-4 w-4 text-black" />
               </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-2 text-rose-600 hover:bg-rose-100/80 rounded-xl transition-colors cursor-pointer shrink-0"
+                title="Sign Out of Workspace"
+              >
+                <LogOut className="h-4 w-4 text-rose-600" />
+              </button>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center space-y-2 py-1">
@@ -2374,6 +2378,13 @@ export default function App() {
                 title="Toggle Light/Dark Theme"
               >
                 <Sun className="h-4 w-4" />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-1.5 text-rose-600 hover:bg-rose-100/80 rounded-lg transition-colors cursor-pointer"
+                title="Sign Out of Workspace"
+              >
+                <LogOut className="h-4 w-4 text-rose-600" />
               </button>
             </div>
           )}
@@ -2720,28 +2731,16 @@ export default function App() {
               <Menu className="h-5 w-5 text-black" />
             </button>
 
-            {/* Mobile Brand Tag & Page Title */}
-            <div className="flex items-center space-x-2 min-w-0">
-              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
-              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
-              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">
-                {activeTab === "dashboard" ? "Workspace Status" :
-                 activeTab === "analytics" ? "Analytics Dashboard" :
-                 activeTab === "focus" ? "Focus Station" :
-                 activeTab === "connections" ? "Connections Hub" :
-                 activeTab === "integrations" ? "My Integrations" :
-                 activeTab === "timesheets" ? "My Timesheets" :
-                 activeTab === "groups" ? "Squad Rooms" :
-                 activeTab === "profile" ? "Profile Parameters" :
-                 activeTab === "settings" ? "Settings Panel" : "EndoCore"}
-              </h1>
+            {/* Mobile Brand Tag */}
+            <div className="flex items-center space-x-2 min-w-0 md:hidden">
+              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0">EndoCore.</span>
             </div>
 
             {/* Promoted Greeting Header & Subtitle */}
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center space-x-2">
                 <h1 className="text-lg sm:text-2xl font-display font-black text-black tracking-tight truncate">
-                  {selectedRoomName ? `Room #${selectedRoomName}` : activeTab === "dashboard" ? getGreeting() : activeTab === "analytics" ? "My Analytics" : activeTab === "focus" ? "My Focus" : activeTab === "goals" ? "My Goals" : activeTab === "connections" ? "My Connections" : activeTab === "profile" ? "Profile & Settings" : getGreeting()}
+                  {selectedRoomName ? `Room #${selectedRoomName}` : activeTab === "dashboard" ? getGreeting() : activeTab === "analytics" ? "My Analytics" : activeTab === "goals" ? "My Goals" : activeTab === "connections" ? "My Connections" : activeTab === "integrations" ? "My Integrations" : activeTab === "timesheets" ? "My Timesheets" : activeTab === "groups" ? "Squad Rooms" : activeTab === "profile" ? "Profile & Settings" : activeTab === "settings" ? "Profile & Settings" : getGreeting()}
                 </h1>
 
                 {/* 🟢/🔴 Simple Dot Indicator (NO text pill) */}
@@ -2835,7 +2834,7 @@ export default function App() {
               </div>
 
               <p className="text-xs text-black font-semibold hidden sm:block truncate">
-                {selectedRoomName ? "Active guild room channel" : activeTab === "dashboard" ? "Here's your real-time workstation overview for today." : activeTab === "analytics" ? "Performance tracking and focus metrics" : activeTab === "focus" ? "Deep work sessions and distraction monitoring" : activeTab === "goals" ? "Milestones, task routines, and objectives" : activeTab === "connections" ? "Co-worker presence and real-time collaboration" : activeTab === "profile" ? "Manage workstation account and preferences" : "Here's your real-time workstation overview for today."}
+                {selectedRoomName ? "Active guild room channel" : activeTab === "dashboard" ? "Here's your real-time workstation overview for today." : activeTab === "analytics" ? "Performance tracking and focus metrics" : activeTab === "focus" ? "Deep work sessions and distraction monitoring" : activeTab === "goals" ? "Milestones, task routines, and objectives" : activeTab === "connections" ? "Co-worker presence and real-time collaboration" : activeTab === "integrations" ? "Connect the tools that power your EndoCore workspace." : activeTab === "timesheets" ? "Track your billable hours and workstation activity logs." : activeTab === "groups" ? "Collaborating workspace and focus channel." : activeTab === "profile" ? "Manage workstation account and preferences" : "Here's your real-time workstation overview for today."}
               </p>
             </div>
           </div>
@@ -3934,308 +3933,7 @@ export default function App() {
                 </div>
               )}
 
-              {/* 🎯 MY FOCUS TAB VIEWPORT */}
-              {activeTab === "focus" && (
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold tracking-tight text-[#09090b]">My Focus Cockpit</h2>
-                    <p className="text-xs text-[#71717a]">
-                      Run Pomodoro cycles, track distraction levels, and monitor your focus streak.
-                    </p>
-                  </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                    {/* Left: Pomodoro Timer circular card */}
-                    <div className="lg:col-span-2 studio-card p-6 flex flex-col items-center justify-center space-y-6 relative overflow-hidden">
-                      <div className="text-center space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">
-                          {pomodoroMode === "focus" ? "Deep Focus Session" : "Short Break Time"}
-                        </span>
-                        <h3 className="text-sm font-semibold text-[#09090b]">
-                          {myActivity?.project ? `Active Task: ${myActivity.project}` : "No Active Task"}
-                        </h3>
-                      </div>
-
-                      {/* Visual Circular Timer */}
-                      <div className="relative w-64 h-64 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="128" cy="128" r="90" fill="none" stroke="#e4e4e7" strokeWidth="6" />
-                          <circle
-                            cx="128"
-                            cy="128"
-                            r="90"
-                            fill="none"
-                            stroke={pomodoroMode === "focus" ? "#10b981" : "#2563eb"}
-                            strokeWidth="8"
-                            strokeDasharray="565.48"
-                            strokeDashoffset={(1 - ((pomodoroMinutesLeft * 60 + pomodoroSecondsLeft) / Math.max(1, ((pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes) * 60)))) * 565.48}
-                            strokeLinecap="round"
-                            className="transition-all duration-1000 ease-linear"
-                          />
-                        </svg>
-
-                        <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
-                          <div className="text-4xl font-mono font-bold tracking-tight text-[#09090b]">
-                            {String(pomodoroMinutesLeft).padStart(2, '0')}:{String(pomodoroSecondsLeft).padStart(2, '0')}
-                          </div>
-                          <span className={pomodoroMode === "focus" ? "badge badge-emerald" : "badge badge-indigo"}>
-                            {pomodoroMode === "focus" ? `Focusing (${customFocusMinutes}m)` : `Resting (${customBreakMinutes}m)`}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Controls Button Group & Quick Time Adjusters */}
-                      <div className="flex flex-wrap items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            const newMins = Math.max(1, pomodoroMinutesLeft - 5);
-                            setPomodoroMinutesLeft(newMins);
-                            if (pomodoroMode === "focus") setCustomFocusMinutes(newMins);
-                            else setCustomBreakMinutes(newMins);
-                            triggerToast(`Timer adjusted to ${newMins}m`);
-                          }}
-                          className="btn-secondary px-3 py-2 text-xs font-mono font-bold shadow-xs cursor-pointer"
-                          title="Reduce 5 Minutes"
-                        >
-                          -5m
-                        </button>
-
-                        <button
-                          onClick={() => setPomodoroActive(!pomodoroActive)}
-                          className={pomodoroActive ? "btn-secondary px-6 py-2.5 font-bold cursor-pointer" : "btn-primary px-8 py-2.5 font-bold cursor-pointer"}
-                        >
-                          {pomodoroActive ? "Pause Session" : "Start Focus"}
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setPomodoroActive(false);
-                            setPomodoroMinutesLeft(pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes);
-                            setPomodoroSecondsLeft(0);
-                            triggerToast("Pomodoro timer reset successfully");
-                          }}
-                          className="btn-secondary p-2.5 cursor-pointer"
-                          title="Reset Timer"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setPomodoroActive(false);
-                            setPomodoroSecondsLeft(0);
-                            if (pomodoroMode === "focus") {
-                              setPomodoroMode("break");
-                              setPomodoroMinutesLeft(customBreakMinutes);
-                              triggerToast("Skipped focus. Time for a short break.");
-                            } else {
-                              setPomodoroMode("focus");
-                              setPomodoroMinutesLeft(customFocusMinutes);
-                              triggerToast("Skipped break. Ready to focus?");
-                            }
-                          }}
-                          className="btn-secondary px-4 py-2.5 text-xs font-semibold cursor-pointer"
-                        >
-                          Skip
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            const newMins = pomodoroMinutesLeft + 5;
-                            setPomodoroMinutesLeft(newMins);
-                            if (pomodoroMode === "focus") setCustomFocusMinutes(newMins);
-                            else setCustomBreakMinutes(newMins);
-                            triggerToast(`Timer adjusted to ${newMins}m`);
-                          }}
-                          className="btn-secondary px-3 py-2 text-xs font-mono font-bold shadow-xs cursor-pointer"
-                          title="Add 5 Minutes"
-                        >
-                          +5m
-                        </button>
-                      </div>
-
-                      {/* Session Mode Selector & Duration Presets */}
-                      <div className="w-full max-w-md bg-[#fafafa] p-4 rounded-2xl border border-[#e4e4e7] space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#09090b] uppercase tracking-wider">Session Mode</span>
-                          <div className="flex items-center bg-[#f4f4f5] p-1 rounded-lg border border-[#e4e4e7]">
-                            <button
-                              onClick={() => {
-                                setPomodoroActive(false);
-                                setPomodoroMode("focus");
-                                setPomodoroMinutesLeft(customFocusMinutes);
-                                setPomodoroSecondsLeft(0);
-                              }}
-                              className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${pomodoroMode === "focus"
-                                  ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                                  : "text-[#71717a] hover:text-[#09090b]"
-                                }`}
-                            >
-                              Focus ({customFocusMinutes}m)
-                            </button>
-                            <button
-                              onClick={() => {
-                                setPomodoroActive(false);
-                                setPomodoroMode("break");
-                                setPomodoroMinutesLeft(customBreakMinutes);
-                                setPomodoroSecondsLeft(0);
-                              }}
-                              className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${pomodoroMode === "break"
-                                  ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                                  : "text-[#71717a] hover:text-[#09090b]"
-                                }`}
-                            >
-                              Break ({customBreakMinutes}m)
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Preset Duration Chips */}
-                        <div className="space-y-1.5 pt-1">
-                          <label className="text-[11px] font-semibold text-[#71717a] block">
-                            Quick Duration Presets ({pomodoroMode === "focus" ? "Focus" : "Break"}):
-                          </label>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {(pomodoroMode === "focus" ? [15, 25, 35, 45, 60, 90] : [5, 10, 15, 20]).map((mins) => {
-                              const isCurrent = (pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes) === mins;
-                              return (
-                                <button
-                                  key={mins}
-                                  onClick={() => {
-                                    setPomodoroActive(false);
-                                    if (pomodoroMode === "focus") setCustomFocusMinutes(mins);
-                                    else setCustomBreakMinutes(mins);
-                                    setPomodoroMinutesLeft(mins);
-                                    setPomodoroSecondsLeft(0);
-                                    triggerToast(`Duration set to ${mins} minutes`);
-                                  }}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition cursor-pointer border ${isCurrent
-                                      ? "bg-[#09090b] text-white border-[#09090b] shadow-xs"
-                                      : "bg-white text-[#09090b] border-[#e4e4e7] hover:bg-zinc-100"
-                                    }`}
-                                >
-                                  {mins}m
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Custom Duration Input */}
-                        <div className="pt-2 border-t border-[#e4e4e7] flex items-center justify-between gap-2">
-                          <label className="text-[11px] font-semibold text-[#71717a] shrink-0">Custom Minutes:</label>
-                          <div className="flex items-center gap-1.5 w-full max-w-[200px]">
-                            <input
-                              type="number"
-                              min={1}
-                              max={240}
-                              value={pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes}
-                              onChange={(e) => {
-                                const val = Math.max(1, Math.min(240, Number(e.target.value) || 1));
-                                setPomodoroActive(false);
-                                if (pomodoroMode === "focus") setCustomFocusMinutes(val);
-                                else setCustomBreakMinutes(val);
-                                setPomodoroMinutesLeft(val);
-                                setPomodoroSecondsLeft(0);
-                              }}
-                              className="w-full px-3 py-1 bg-white border border-[#e4e4e7] rounded-lg text-xs font-mono text-[#09090b] font-bold shadow-xs focus:outline-none focus:border-[#09090b]"
-                            />
-                            <span className="text-xs font-mono text-[#71717a] shrink-0">mins</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Task config sync inside cockpit */}
-                      <div className="w-full max-w-md border-t border-[#e4e4e7] pt-5 space-y-2.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block text-center">Sync Active Task Name</label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            value={projectInput}
-                            onChange={(e) => setProjectInput(e.target.value)}
-                            className="input-field"
-                            placeholder="Type active task name..."
-                          />
-                          <button
-                            onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                            className="btn-primary shrink-0"
-                          >
-                            Sync Task
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Side: Focus Stats */}
-                    <div className="space-y-6">
-                      {/* Streak Card */}
-                      <div className="studio-card studio-card-amber p-5 space-y-4 relative overflow-hidden">
-                        <div className="flex items-center space-x-2 text-amber-700">
-                          <Flame className="h-5 w-5 fill-amber-500" />
-                          <h4 className="text-xs font-semibold uppercase tracking-wider">Focus Streak</h4>
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="text-3xl font-bold text-[#09090b]">
-                            {user?.focusStreak || 0} Day Streak
-                          </div>
-                          <p className="text-xs text-[#52525b] leading-normal">
-                            Maintain your streak by meeting your daily goal of {user?.productivityGoal || 6} hours.
-                          </p>
-                        </div>
-
-                        <div className="h-2 bg-amber-200/60 rounded-full overflow-hidden border border-amber-300/60">
-                          <div
-                            className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                            style={{ width: `${Math.min(100, ((user?.focusStreak || 0) / 7) * 100)}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-[10px] font-mono text-[#71717a] block">// {7 - ((user?.focusStreak || 0) % 7)} days remaining for weekly reward</span>
-                      </div>
-
-                      {/* Distraction Log Card */}
-                      <div className="studio-card p-5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2 text-[#09090b]">
-                            <Activity className="h-4 w-4" />
-                            <h4 className="text-xs font-semibold uppercase tracking-wider">Distraction Log</h4>
-                          </div>
-                          <span className={(user?.distractionsCount || 0) === 0 ? "badge badge-emerald" : (user?.distractionsCount || 0) <= 3 ? "badge badge-amber" : "badge badge-rose"}>
-                            {(user?.distractionsCount || 0) === 0 ? "Zen State" : (user?.distractionsCount || 0) <= 3 ? "Low Noise" : "High Noise"}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-[#f4f4f5] p-3 rounded-md border border-[#e4e4e7] text-center">
-                            <span className="text-[10px] font-semibold text-[#71717a] uppercase block">Agent Flags</span>
-                            <span className="text-2xl font-bold text-[#09090b] block mt-0.5">{user?.distractionsCount || 0}</span>
-                          </div>
-                          <div className="bg-[#f4f4f5] p-3 rounded-md border border-[#e4e4e7] text-center">
-                            <span className="text-[10px] font-semibold text-[#71717a] uppercase block">Manual Log</span>
-                            <span className="text-2xl font-bold text-[#09090b] block mt-0.5">{distractionsManualCount}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-2 pt-1">
-                          <button
-                            onClick={handleIncrementDistraction}
-                            className="btn-secondary flex-1 text-xs"
-                          >
-                            Log Distraction
-                          </button>
-                          <button
-                            onClick={handleResetDistractions}
-                            className="btn-danger text-xs"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* 3️⃣ ROOMS TAB VIEWPORT */}
               {activeTab === "groups" && (
@@ -5805,6 +5503,33 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* FOCUS STREAK CARD */}
+                    <div className="p-5 rounded-2xl bg-[#fffbeb] border border-amber-200 space-y-3">
+                      <div className="flex items-center space-x-2 text-amber-800">
+                        <Flame className="h-5 w-5 fill-amber-500 text-amber-500" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider">FOCUS STREAK</h4>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-slate-900">
+                          {user?.focusStreak || 3} Day Streak
+                        </div>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          Maintain your streak by meeting your daily goal of {user?.productivityGoal || 6} hours.
+                        </p>
+                      </div>
+
+                      <div className="h-2 bg-amber-200/80 rounded-full overflow-hidden border border-amber-300/80">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                          style={{ width: `${Math.min(100, (((user?.focusStreak || 3)) / 7) * 100)}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-[10px] font-mono text-amber-700/80 block font-semibold">
+                        // {7 - (((user?.focusStreak || 3)) % 7)} days remaining for weekly reward
+                      </span>
+                    </div>
+
                     <button
                       onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); }}
                       className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
@@ -5819,11 +5544,21 @@ export default function App() {
 
                     {/* CARD 1: PROFILE INFORMATION */}
                     <div className="studio-card p-6 space-y-5">
-                      <div className="flex items-center space-x-2">
-                        <User className="h-4 w-4 text-slate-700" />
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                          PROFILE INFORMATION
-                        </h4>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-slate-700" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                            PROFILE INFORMATION
+                          </h4>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="Sign Out of Workspace"
+                        >
+                          <LogOut className="h-3.5 w-3.5" />
+                          <span>Sign Out</span>
+                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
