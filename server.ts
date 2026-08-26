@@ -16,18 +16,70 @@ import { requireRoomRole, requireRoomPermission } from "./src/middleware/roomAut
 
 dotenv.config();
 
-// Connect to Redis Cache
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
-redis.on("connect", () => {
-  console.log("🚀 Connected to Redis successfully");
-});
-redis.on("error", (err) => {
-  console.error("❌ Redis Connection Error:", err);
+// -------------------------------------------------------------
+// Safe Redis Client with In-Memory Cache Fallback
+// -------------------------------------------------------------
+const memoryCache = new Map<string, string>();
+let isRedisConnected = false;
+let redisWarnLogged = false;
+
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+  maxRetriesPerRequest: null,
+  retryStrategy(times) {
+    return Math.min(times * 2000, 10000);
+  },
+  showFriendlyErrorStack: false
 });
 
-// Redis Caching Helpers
+redis.on("ready", () => {
+  isRedisConnected = true;
+  redisWarnLogged = false;
+  console.log("🚀 Connected to Redis successfully");
+});
+
+redis.on("error", () => {
+  isRedisConnected = false;
+  if (!redisWarnLogged) {
+    console.log("⚠️ Redis connection unavailable. Operating with in-memory fallback cache.");
+    redisWarnLogged = true;
+  }
+});
+
+async function cacheGet(key: string): Promise<string | null> {
+  if (isRedisConnected && redis.status === "ready") {
+    try {
+      return await redis.get(key);
+    } catch (e) {}
+  }
+  return memoryCache.get(key) || null;
+}
+
+async function cacheSet(key: string, value: string, mode?: string, duration?: number): Promise<void> {
+  memoryCache.set(key, value);
+  if (isRedisConnected && redis.status === "ready") {
+    try {
+      if (mode && duration) {
+        await redis.set(key, value, mode as any, duration);
+      } else {
+        await redis.set(key, value);
+      }
+    } catch (e) {}
+  }
+}
+
+async function cacheKeys(pattern: string): Promise<string[]> {
+  if (isRedisConnected && redis.status === "ready") {
+    try {
+      return await redis.keys(pattern);
+    } catch (e) {}
+  }
+  const prefix = pattern.replace("*", "");
+  return Array.from(memoryCache.keys()).filter(k => k.startsWith(prefix));
+}
+
+// Redis / In-Memory Caching Helpers
 async function getPresence(userId: string): Promise<any> {
-  const cached = await redis.get(`presence:user:${userId}`);
+  const cached = await cacheGet(`presence:user:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -38,7 +90,7 @@ async function getPresence(userId: string): Promise<any> {
 
 async function setPresence(userId: string, data: any) {
   // Save with 60s expiration (TTL)
-  await redis.set(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
+  await cacheSet(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
 }
 
 async function syncPresenceToRedis(userId: string, activity: any, userStatus: string, activeGroup: string) {
@@ -67,7 +119,7 @@ async function syncPresenceToRedis(userId: string, activity: any, userStatus: st
 }
 
 async function getUserActiveActivity(userId: string) {
-  const cached = await redis.get(`user:active:${userId}`);
+  const cached = await cacheGet(`user:active:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -76,7 +128,7 @@ async function getUserActiveActivity(userId: string) {
     }
   }
 
-  // Cache miss - query Postgres
+  // Cache miss - query Database
   let activity = await prisma.activity.findFirst({
     where: { userId }
   });
@@ -103,16 +155,16 @@ async function getUserActiveActivity(userId: string) {
     lastHeartbeat: Date.now()
   };
 
-  await redis.set(`user:active:${userId}`, JSON.stringify(result));
+  await cacheSet(`user:active:${userId}`, JSON.stringify(result));
   return result;
 }
 
 async function setUserActiveActivity(userId: string, activity: any) {
-  await redis.set(`user:active:${userId}`, JSON.stringify(activity));
+  await cacheSet(`user:active:${userId}`, JSON.stringify(activity));
 }
 
 async function getUserOpenApps(userId: string): Promise<string[]> {
-  const cached = await redis.get(`user:openapps:${userId}`);
+  const cached = await cacheGet(`user:openapps:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -122,7 +174,7 @@ async function getUserOpenApps(userId: string): Promise<string[]> {
 }
 
 async function setUserOpenApps(userId: string, openApps: string[]) {
-  await redis.set(`user:openapps:${userId}`, JSON.stringify(openApps));
+  await cacheSet(`user:openapps:${userId}`, JSON.stringify(openApps));
 }
 
 const app = express();
@@ -550,15 +602,15 @@ async function broadcastActivityUpdate(userId: string) {
 // Background Redis caching tickers and sync daemon
 // -------------------------------------------------------------
 
-// 1. Ticker for Redis active activities (runs every 5 seconds)
+// 1. Ticker for active activities (runs every 5 seconds)
 setInterval(async () => {
   try {
-    const keys = await redis.keys("user:active:*");
+    const keys = await cacheKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
       if (!userId) continue;
 
-      const data = await redis.get(key);
+      const data = await cacheGet(key);
       if (!data) continue;
 
       const act = JSON.parse(data);
@@ -585,24 +637,24 @@ setInterval(async () => {
       }
 
       if (changed) {
-        await redis.set(key, JSON.stringify(act));
+        await cacheSet(key, JSON.stringify(act));
         broadcastActivityUpdate(userId);
       }
     }
   } catch (error) {
-    console.error("Redis background ticker error:", error);
+    console.error("Background ticker error:", error);
   }
 }, 5000);
 
-// 2. Periodic sync of Redis active sessions to PostgreSQL (runs every 60 seconds)
+// 2. Periodic sync of active sessions to Database (runs every 60 seconds)
 setInterval(async () => {
   try {
-    const keys = await redis.keys("user:active:*");
+    const keys = await cacheKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
       if (!userId) continue;
 
-      const data = await redis.get(key);
+      const data = await cacheGet(key);
       if (!data) continue;
 
       const act = JSON.parse(data);
