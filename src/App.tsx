@@ -4193,48 +4193,72 @@ export default function App() {
                       <div className="space-y-6">
                         <button
                           onClick={() => setSelectedRoomName(null)}
-                          className="flex items-center space-x-2 text-xs font-mono text-stone-500 hover:text-stone-300 transition-colors cursor-pointer"
+                          className="flex items-center space-x-2 text-xs font-mono text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer"
                         >
                           <ArrowLeft className="h-4 w-4" />
                           <span>Back to Rooms Directory</span>
                         </button>
 
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        {/* Room Title Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
                           <div className="space-y-1">
-                            <h2 className="text-4xl font-serif italic tracking-tight font-medium">🏢 {selectedRoomName}</h2>
-                            <p className={`text-xs ${textSub}`}>
-                              {groups.find(g => g.name === selectedRoomName)?.description || "Collaborating workspace and focus channel."}
+                            <div className="flex items-center space-x-2">
+                              <h2 className="text-2xl sm:text-3xl font-display font-black text-[#09090b] tracking-tight">
+                                #{selectedRoomName}
+                              </h2>
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] shrink-0"></span>
+                            </div>
+                            <p className="text-xs text-[#71717a] font-medium max-w-2xl">
+                              {groups.find(g => g.name === selectedRoomName)?.description || "Development operations, API integrations, and scaling core infrastructure."}
                             </p>
-                          </div>
-
-                          <div className="flex items-center space-x-4 bg-[#f5f4ef]/50 dark:bg-stone-900/40 px-4 py-2.5 rounded-xl border dark:border-neutral-850 border-stone-250/60 text-xs font-mono text-stone-400">
-                            <span>Occupants: {groups.find(g => g.name === selectedRoomName)?.members.length || 0}</span>
-                            <span className="h-3 w-px bg-zinc-700"></span>
-                            <span className="flex items-center">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                              {friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0)} Live
-                            </span>
                           </div>
                         </div>
 
-                        {/* Room Workspace Tabs */}
-                        <div className="flex border-b dark:border-neutral-850 border-stone-200/50 space-x-6 text-[10px] font-mono mb-6 pb-2 overflow-x-auto select-none">
-                          {["overview", "members", "live", "leaderboard", "ai-summary", "chat"].map((tab) => (
-                            <button
-                              key={tab}
-                              onClick={() => setRoomTab(tab as any)}
-                              className={`pb-2 transition-all uppercase tracking-widest cursor-pointer ${roomTab === tab
-                                  ? "border-b-2 border-stone-550 dark:border-stone-300 text-black dark:text-white font-semibold"
-                                  : "text-stone-500 hover:text-stone-300"
+                        {/* Room Workspace Sub-Header: Tabs & Export Buttons */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e4e4e7] gap-3 pb-0 select-none">
+                          <div className="flex space-x-6 text-xs font-semibold overflow-x-auto">
+                            {[
+                              { id: "overview", label: "Overview" },
+                              { id: "members", label: "Members" },
+                              { id: "live", label: "Live" },
+                              { id: "leaderboard", label: "Leaderboard" },
+                              { id: "ai-summary", label: "AI Summary" },
+                              { id: "chat", label: "Chat" }
+                            ].map((tab) => (
+                              <button
+                                key={tab.id}
+                                onClick={() => setRoomTab(tab.id as any)}
+                                className={`pb-3 transition-all cursor-pointer ${
+                                  roomTab === tab.id
+                                    ? "border-b-2 border-[#09090b] text-[#09090b] font-bold"
+                                    : "text-[#71717a] hover:text-[#09090b]"
                                 }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center space-x-2 pb-2 sm:pb-3 shrink-0">
+                            <button
+                              onClick={() => triggerToast("Room activity exported as CSV")}
+                              className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-[#09090b] text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
                             >
-                              {tab.replace("-", " ")}
+                              <FileText className="h-3.5 w-3.5 text-[#71717a]" />
+                              <span>Export CSV</span>
                             </button>
-                          ))}
+                            <button
+                              onClick={() => triggerToast("Room activity report generated as PDF")}
+                              className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-[#09090b] text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-[#71717a]" />
+                              <span>Export PDF</span>
+                            </button>
+                          </div>
                         </div>
 
                         {/* Room Tab Panels */}
-                        <div className="space-y-6">
+                        <div className="space-y-6 pt-2">
 
                           {/* OVERVIEW PANEL */}
                           {roomTab === "overview" && (
@@ -4242,66 +4266,17 @@ export default function App() {
                               <OwnerRoomDashboard
                                 roomName={selectedRoomName}
                                 roomDetails={groups.find(g => g.name === selectedRoomName)}
-                                occupants={friends}
+                                occupants={(selectedRoomName && roomsOccupants[selectedRoomName] && roomsOccupants[selectedRoomName].length > 0) ? roomsOccupants[selectedRoomName] : friends}
                                 userRole="OWNER"
                                 roomStatus={(groups.find(g => g.name === selectedRoomName) as any)?.status || "active"}
                                 onRefreshAi={() => fetchAiBriefing(true)}
                                 onNudgeMember={(name, id) => triggerPeerNudge(name, id)}
                                 onToggleRoomStatus={(newStatus) => handleToggleRoomStatus(newStatus)}
+                                onExportCsv={() => triggerToast("Room activity exported as CSV")}
+                                onExportPdf={() => triggerToast("Room activity report generated as PDF")}
+                                onAskAi={() => triggerToast("Opening AI Room Briefing assistant...")}
+                                onSelectTab={(t) => setRoomTab(t as any)}
                               />
-
-                              {/* Quick AI co-working briefing */}
-                              <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} relative overflow-hidden`}>
-                                <div className="flex items-center justify-between mb-4.5">
-                                  <div className="flex items-center space-x-3">
-                                    <Sparkles className="h-5 w-5 text-zinc-500 dark:text-[#a09070]" />
-                                    <h3 className="text-sm font-semibold font-mono tracking-widest uppercase text-stone-300">
-                                      AI CO-WORKING BRIEFING
-                                    </h3>
-                                  </div>
-                                  <button
-                                    onClick={() => fetchAiBriefing(true)}
-                                    disabled={loadingInsights}
-                                    className="bg-transparent hover:bg-neutral-500/5 text-stone-500 hover:text-stone-300 border dark:border-[#222227] border-stone-250 p-2 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                                  >
-                                    <RefreshCw className={`h-4.5 w-4.5 ${loadingInsights ? "animate-spin" : ""}`} />
-                                  </button>
-                                </div>
-
-                                {loadingInsights ? (
-                                  <div className="py-2">
-                                    <SkeletonLoader lines={3} />
-                                    <span className="text-[10px] font-mono text-stone-500 mt-4 block">Retrieving intelligence briefs...</span>
-                                  </div>
-                                ) : (
-                                  <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
-                                    {aiInsights && aiInsights.text ? (
-                                      aiInsights.text.split("\n").map((line: string, idx: number) => {
-                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
-                                          return (
-                                            <h4 key={idx} className="text-zinc-800 dark:text-[#c4b69d] font-serif italic text-sm font-bold mt-4 mb-2">
-                                              {line.replace(/[\*#]/g, "").trim()}
-                                            </h4>
-                                          );
-                                        }
-                                        if (!line.trim()) return null;
-                                        return (
-                                          <p key={idx} className={`pl-1 leading-relaxed ${textSub}`}>
-                                            {line.startsWith("-") || line.startsWith("*") || line.startsWith("•") ? (
-                                              <span className="flex items-start">
-                                                <span className="text-neutral-400 dark:text-[#a5957b] mr-2">•</span>
-                                                <span>{line.replace(/^[-*•]\s*/, "").trim()}</span>
-                                              </span>
-                                            ) : line}
-                                          </p>
-                                        );
-                                      })
-                                    ) : (
-                                      <p className="text-stone-500 text-xs italic">No co-working briefing stored. Click reload icon above to fetch.</p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
                             </div>
                           )}
 
