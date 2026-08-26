@@ -176,6 +176,7 @@ export interface FocusChallengeItem {
   completedAt?: string;
   creator: PublicUserProfile;
   invited: PublicUserProfile;
+  winnerId?: string;
 }
 
 declare global {

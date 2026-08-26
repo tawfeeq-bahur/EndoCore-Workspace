@@ -10,11 +10,14 @@ coverage/
 /src/generated/prisma
 assets/vedio recordings/
 
+.playwright-mcp/
 .idea/
 .gradle/
 android/.gradle/
 android/.idea/
 android/local.properties
 mobile/.expo/
+mobile/node_modules/
 dev.db
 dev.db-journal
+screenshots/

@@ -81,11 +81,11 @@ export const MobileConnectionsScreen: React.FC<MobileConnectionsScreenProps> = (
         <div className="space-y-3">
           {filteredFriends.length > 0 ? (
             filteredFriends.map((friend: any) => {
-              const name = friend.name || friend.profile?.name || "Co-worker";
+              const name = friend.name || friend.profile?.name || "Unknown User";
               const id = friend.id || friend.profile?.id;
-              const status = friend.status || "online";
+              const status = friend.status || "offline";
               const avatar = friend.avatarUrl || friend.profile?.avatarUrl;
-              const app = friend.currentActivity?.app || "VS Code";
+              const app = friend.currentActivity?.app || "Offline";
               const isOnline = status !== "offline";
 
               return (

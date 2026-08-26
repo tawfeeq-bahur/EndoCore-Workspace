@@ -34,7 +34,20 @@ import {
   MessageSquare,
   Menu,
   Send,
-  VolumeX
+  VolumeX,
+  Bell,
+  Pill,
+  Stethoscope,
+  ShieldCheck,
+  Calendar,
+  Zap,
+  Check,
+  Upload,
+  Smartphone,
+  Tablet,
+  Monitor,
+  Cpu,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -51,13 +64,26 @@ import {
 } from "./types";
 import { RoomCreationWizard } from "./components/RoomCreationWizard";
 import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
-import { MobileCompanionShell } from "./mobile/MobileCompanionShell";
-import { usePlatformMode } from "./mobile/hooks/usePlatformMode";
+import { NumberTicker } from "./components/NumberTicker";
+import { TiltCard } from "./components/TiltCard";
+import { CommandPalette } from "./components/CommandPalette";
+import { SkeletonLoader } from "./components/SkeletonLoader";
 
 export default function App() {
-  const platformMode = usePlatformMode();
+  const [cmdKOpen, setCmdKOpen] = useState(false);
+
   const [isMobile, setIsMobile] = useState<boolean>(false);
-  const [mobileTab, setMobileTab] = useState<"control" | "room" | "me">("control");
+  const [mobileTab, setMobileTab] = useState<"home" | "focus" | "routines" | "experts" | "profile" | "control" | "room" | "me">("home");
+  const [mobileRoutines, setMobileRoutines] = useState([
+    { id: "r1", title: "Morning Code Review & PR Triage", detail: "VS Code & GitHub • Post Coffee • 08:00 AM", done: true, icon: "code" },
+    { id: "r2", title: "Standup Sync & Task Planning", detail: "Jira & Slack • 08:30 AM", done: true, icon: "clock" },
+    { id: "r3", title: "90-Min Deep Focus Block", detail: "VS Code • Code Implementation • 09:30 AM", done: false, icon: "clock" },
+    { id: "r4", title: "Mid-day Eye Rest & Posture Reset", detail: "Pomodoro Pause • 01:00 PM", done: false, icon: "activity" },
+    { id: "r5", title: "End-of-day Git Commit & Logging", detail: "Terminal & Dashboard • 05:30 PM", done: false, icon: "terminal" },
+    { id: "r6", title: "AI Workstation Briefing Sync", detail: "Gemini AI • 06:00 PM", done: false, icon: "ai" }
+  ]);
+  const [mobileSearchQuery, setMobileSearchQuery] = useState("");
+  const [mobileExpertCategory, setMobileExpertCategory] = useState("All");
 
   useEffect(() => {
     const checkDevice = () => {
@@ -68,6 +94,17 @@ export default function App() {
     checkDevice();
     window.addEventListener("resize", checkDevice);
     return () => window.removeEventListener("resize", checkDevice);
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdKOpen(open => !open);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   // Navigation & Workspace Panel states
@@ -99,7 +136,7 @@ export default function App() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [aiInsights, setAiInsights] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<any | null>(null);
   const [roomsOccupants, setRoomsOccupants] = useState<Record<string, Friend[]>>({});
   const [roomsLastMessage, setRoomsLastMessage] = useState<Record<string, ChatMessage | null>>({});
   const [hubTab, setHubTab] = useState<"timeline" | "rooms">("timeline");
@@ -112,12 +149,18 @@ export default function App() {
   const [creatingGroup, setCreatingGroup] = useState<boolean>(false);
 
   // Interactive Controls Input Buffers
-  const [appInput, setAppInput] = useState<string>("VS Code");
-  const [projectInput, setProjectInput] = useState<string>("EndoCore Workspace");
+  const [appInput, setAppInput] = useState<string>("");
+  const [projectInput, setProjectInput] = useState<string>("");
   const [statusInput, setStatusInput] = useState<string>("");
   const [newGroupName, setNewGroupName] = useState<string>("");
   const [newGroupDesc, setNewGroupDesc] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  // Public Directory State
+  const [directoryGroups, setDirectoryGroups] = useState<any[]>([]);
+  const [directoryQuery, setDirectoryQuery] = useState<string>("");
+  const [isSearchingDirectory, setIsSearchingDirectory] = useState<boolean>(false);
+
   const [profileNameInput, setProfileNameInput] = useState<string>("");
   const [profileAvatarInput, setProfileAvatarInput] = useState<string>("");
   const [profileDeviceInput, setProfileDeviceInput] = useState<string>("");
@@ -175,6 +218,17 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [isRoomWizardOpen, setIsRoomWizardOpen] = useState<boolean>(false);
 
+  // Connected Devices Matrix State
+  const [showDevicesList, setShowDevicesList] = useState<boolean>(true);
+  const [connectedDevices, setConnectedDevices] = useState<Array<{
+    id: string;
+    name: string;
+    type: "desktop" | "laptop" | "mobile" | "tablet" | "monitor";
+    os: string;
+    status: "active" | "online" | "idle" | "display_active";
+    lastSync: string;
+  }>>([]);
+
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
@@ -198,6 +252,79 @@ export default function App() {
     }
     return res;
   }
+
+  const fetchDevices = async () => {
+    try {
+      const res = await apiFetch("/api/devices");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.devices && Array.isArray(data.devices)) {
+          setConnectedDevices(data.devices);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching devices:", err);
+    }
+  };
+
+  const registerCurrentDevice = async () => {
+    try {
+      const userAgent = navigator.userAgent.toLowerCase();
+      let deviceName = "Chrome (Web Workstation)";
+      let platform = "WEB";
+
+      if (userAgent.includes("android")) {
+        deviceName = "Mobile Chrome (Android Phone)";
+        platform = "ANDROID";
+      } else if (userAgent.includes("iphone")) {
+        deviceName = "Mobile Safari (iPhone)";
+        platform = "IOS";
+      } else if (userAgent.includes("ipad")) {
+        deviceName = "iPad (Tablet Browser)";
+        platform = "IOS";
+      } else if (userAgent.includes("macintosh") || userAgent.includes("mac os")) {
+        deviceName = "MacBook Pro (macOS Browser)";
+        platform = "MACOS";
+      } else if (userAgent.includes("windows")) {
+        deviceName = "Windows PC (Browser)";
+        platform = "WINDOWS";
+      }
+
+      await apiFetch("/api/devices/register", {
+        method: "POST",
+        body: JSON.stringify({
+          deviceName,
+          platform,
+          pushToken: `browser_token_${token ? token.slice(-8) : "guest"}`
+        })
+      });
+      fetchDevices();
+    } catch (err) {
+      console.error("Error registering current device:", err);
+    }
+  };
+
+  const disconnectDevice = async (deviceId: string, deviceName: string) => {
+    setConfirmModal({
+      title: "Disconnect Remote Device",
+      message: `Are you sure you want to revoke remote session access for ${deviceName}?`,
+      onConfirm: async () => {
+        setConfirmModal(null);
+        try {
+          const res = await apiFetch("/api/devices/disconnect", {
+            method: "POST",
+            body: JSON.stringify({ deviceId })
+          });
+          if (res.ok) {
+            triggerToast(`Device access revoked for ${deviceName}`);
+            setConnectedDevices(prev => prev.filter(d => d.id !== deviceId));
+          }
+        } catch (err) {
+          triggerToast(`Failed to disconnect ${deviceName}`);
+        }
+      }
+    });
+  };
 
   const socketRef = useRef<any>(null);
   const chatEndRef = useRef<any>(null);
@@ -232,6 +359,7 @@ export default function App() {
     fetchAiBriefing();
     checkHealth();
     fetchConnections();
+    registerCurrentDevice();
 
     const updateTime = () => {
       const now = new Date();
@@ -415,6 +543,11 @@ export default function App() {
       }
     });
 
+    socket.on("challenge:completed", (data: any) => {
+      triggerToast(`🎉 Challenge completed! Winner: ${data.winnerId === user?.id ? "You" : "Your partner"}!`);
+      setActiveChallenge(null);
+    });
+
     return () => {
       clearInterval(clockInterval);
       clearInterval(healthInterval);
@@ -488,9 +621,8 @@ export default function App() {
       const end = new Date(activeChallenge.endAt).getTime();
       const left = Math.max(0, Math.round((end - Date.now()) / 1000));
       setChallengeSecondsLeft(left);
-      if (left === 0) {
-        triggerToast("🏆 Focus challenge completed!");
-        setActiveChallenge(null);
+      if (left === 0 && activeChallenge) {
+        completeFocusChallenge(activeChallenge.challengeId);
       }
     };
     updateChallengeTimer();
@@ -619,6 +751,42 @@ export default function App() {
       console.error("API Fetch Error (Groups):", e);
     }
   };
+  const searchDirectory = async (q: string = "") => {
+    setIsSearchingDirectory(true);
+    try {
+      const res = await apiFetch(`/api/groups/directory?q=${encodeURIComponent(q)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDirectoryGroups(data);
+      }
+    } catch (e) {
+      console.error("Error searching directory", e);
+    } finally {
+      setIsSearchingDirectory(false);
+    }
+  };
+
+  const joinRoom = async (groupId: string) => {
+    try {
+      const res = await apiFetch(`/api/groups/${groupId}/join`, { method: "POST" });
+      if (res.ok) {
+        showToast("Successfully requested/joined room!");
+        await fetchGroups(); // refresh sidebar/groups
+        await searchDirectory(directoryQuery); // refresh directory list
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to join room");
+      }
+    } catch (e) {
+      showToast("Error joining room.");
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "groups") {
+      searchDirectory(directoryQuery);
+    }
+  }, [activeTab]);
 
   const fetchAllRoomsDetails = async (rooms: Group[]) => {
     try {
@@ -866,6 +1034,20 @@ export default function App() {
     }
   };
 
+  const completeFocusChallenge = async (challengeId: string) => {
+    try {
+      const res = await apiFetch(`/api/focus-challenges/${challengeId}/complete`, {
+        method: "POST"
+      });
+      if (res.ok) {
+        triggerToast("🎉 Challenge complete! You finished first!");
+        setActiveChallenge(null);
+      }
+    } catch (e) {
+      console.error("Error completing focus challenge:", e);
+    }
+  };
+
   const getAppColor = (app: string) => {
     const colors: Record<string, string> = {
       "VS Code": "bg-blue-500",
@@ -1000,12 +1182,14 @@ export default function App() {
     try {
       const res = await apiFetch(`/api/ai-insights${force ? "?force=true" : ""}`);
       const data = await res.json();
-      setAiInsights(data.text);
       if (data.error) {
         setInsightsError(true);
+        setAiInsights(data);
+      } else {
+        setAiInsights(data);
       }
       if (force) {
-        triggerToast("Compiled a fresh co-working briefing with Gemini AI");
+        triggerToast(data.isFallback ? "Generated briefing via heuristic engine" : "Compiled a fresh co-working briefing with Gemini AI");
       }
     } catch (e) {
       console.error("API Fetch Error (AI Insights):", e);
@@ -1220,6 +1404,35 @@ export default function App() {
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    try {
+      setUpdatingActivity(true);
+      const res = await fetch("/api/user/avatar", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        },
+        body: formData
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUser(data.user);
+        setProfileAvatarInput(data.user.avatarUrl || "");
+        triggerToast("Profile picture updated successfully");
+      }
+    } catch (err) {
+      console.error("Avatar upload failed:", err);
+    } finally {
+      setUpdatingActivity(false);
+    }
+  };
+
   const executeCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName) return;
@@ -1266,6 +1479,33 @@ export default function App() {
       // Calling it here causes a race condition: token state is still null,
       // so the request has no auth header, gets 401, and immediately logs out.
       triggerToast("Logged in successfully! Welcome to EndoCore.");
+    } catch (err: any) {
+      setAuthError(err.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const executeShowcaseLogin = async () => {
+    setAuthEmail("showcase");
+    setAuthPassword("123");
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "showcase", password: "123" })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Showcase login failed");
+
+      localStorage.setItem("token", data.token);
+      if (data.user) {
+        setUser(data.user);
+      }
+      setToken(data.token);
+      triggerToast("🏆 Connected to Judge Demo Showcase World!");
     } catch (err: any) {
       setAuthError(err.message);
     } finally {
@@ -1382,7 +1622,7 @@ export default function App() {
 
   const getGreeting = () => {
     const hours = new Date().getHours();
-    const name = user ? user.name.split(" ")[0] : "Developer";
+    const name = user ? user.name.split(" ")[0] : "";
     if (hours < 12) return `Good Morning, ${name}`;
     if (hours < 17) return `Good Afternoon, ${name}`;
     return `Good Evening, ${name}`;
@@ -1514,6 +1754,17 @@ export default function App() {
   const borderRule = "border-[#e4e4e7]";
   const formInput  = "input-field";
 
+  // ── Ambient Theming Helper ──
+  const getAmbientBackground = () => {
+    switch (activeTab) {
+      case "dashboard": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-blue-50/40";
+      case "rooms": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-indigo-50/40";
+      case "analytics": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-emerald-50/40";
+      case "connections": return "bg-gradient-to-br from-[#fafafa] via-[#fafafa] to-rose-50/40";
+      default: return "bg-[#fafafa]";
+    }
+  };
+
   // Reusable Sidebar Render Helper (closed over App states)
   const renderSidebar = (isMobileDrawer: boolean = false) => {
     return (
@@ -1585,14 +1836,19 @@ export default function App() {
                 setSelectedFriendId(null);
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                   activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
-                    ? "nav-item-active"
+                    ? "text-white font-semibold"
                     : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <Home className="h-4 w-4 shrink-0" />
-              <span>My Productivity</span>
+              {activeTab === "dashboard" && !selectedRoomName && !selectedFriendId && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Home className="h-4 w-4 shrink-0" />
+                <span>My Productivity</span>
+              </span>
             </button>
 
             <button
@@ -1602,13 +1858,18 @@ export default function App() {
                 setSelectedFriendId(null);
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "analytics"
-                  ? "nav-item-active"
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "analytics"
+                  ? "text-white font-semibold"
                   : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <BarChart3 className="h-4 w-4 shrink-0" />
-              <span>My Analytics</span>
+              {activeTab === "analytics" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <span>My Analytics</span>
+              </span>
             </button>
 
             <button
@@ -1618,13 +1879,18 @@ export default function App() {
                 setSelectedFriendId(null);
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "focus"
-                  ? "nav-item-active"
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "focus"
+                  ? "text-white font-semibold"
                   : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <Target className="h-4 w-4 shrink-0" />
-              <span>My Goals</span>
+              {activeTab === "focus" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Target className="h-4 w-4 shrink-0" />
+                <span>My Goals</span>
+              </span>
             </button>
 
             <button
@@ -1635,13 +1901,18 @@ export default function App() {
                 fetchConnections();
                 if (isMobileDrawer) setMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "connections"
-                  ? "nav-item-active"
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "connections"
+                  ? "text-white font-semibold"
                   : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
                 }`}
             >
-              <Users className="h-4 w-4 shrink-0" />
-              <span>My Connections</span>
+              {activeTab === "connections" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Users className="h-4 w-4 shrink-0" />
+                <span>My Connections</span>
+              </span>
             </button>
           </div>
 
@@ -1670,16 +1941,19 @@ export default function App() {
                         enterRoomChannel(group.name);
                         if (isMobileDrawer) setMobileMenuOpen(false);
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-all duration-150 cursor-pointer ${isSelected
-                          ? (themeMode === 'dark' ? "bg-[#1c1c22] text-white font-medium" : "bg-[#f3f2eb] text-black font-semibold")
-                          : "text-stone-500 hover:text-stone-300"
+                      className={`relative w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-mono transition-colors cursor-pointer ${isSelected
+                          ? "text-white font-semibold"
+                          : "text-stone-500 hover:text-[#09090b] hover:bg-zinc-200/60"
                         }`}
                     >
-                      <div className="flex items-center space-x-3 text-ellipsis overflow-hidden">
-                        <span className="text-zinc-650 font-mono">#</span>
+                      {isSelected && (
+                        <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                      )}
+                      <div className="relative z-10 flex items-center space-x-3 text-ellipsis overflow-hidden">
+                        <span className="text-zinc-500 font-mono">#</span>
                         <span className="truncate">{group.name}</span>
                       </div>
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span className="relative z-10 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     </button>
 
                     {/* Indented room sub-navigation */}
@@ -1895,15 +2169,31 @@ export default function App() {
 
           {authView === "login" ? (
             <form onSubmit={handleLogin} className="space-y-5">
+              {/* 🏆 ONE-CLICK JUDGE SHOWCASE DEMO BUTTON */}
+              <button
+                type="button"
+                onClick={executeShowcaseLogin}
+                disabled={authLoading}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-indigo-600 to-emerald-500 text-white font-bold text-xs tracking-wider uppercase shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer border border-amber-400/30"
+              >
+                <span>🏆 Launch Judge Demo Showcase Mode</span>
+              </button>
+
+              <div className="relative flex py-1 items-center">
+                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
+                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono tracking-widest text-zinc-400">or sign in manually</span>
+                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
+              </div>
+
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
+                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email / Username</label>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={authEmail}
                   onChange={(e) => setAuthEmail(e.target.value)}
                   className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="name@email.com"
+                  placeholder="showcase or name@email.com"
                 />
               </div>
 
@@ -1938,10 +2228,10 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1 bg-[#fafafa]/50 dark:bg-[#151518]/20">
-                <p className="font-semibold text-stone-400">Demo workstation credentials:</p>
-                <p>Email: <span className="dark:text-stone-300 select-all">tawfeeqbahur@gmail.com</span></p>
-                <p>Password: <span className="dark:text-stone-300 select-all">password123</span></p>
+              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1.5 bg-[#fafafa]/50 dark:bg-[#151518]/20">
+                <p className="font-bold text-amber-500 uppercase tracking-wider">🏆 Judge Competition Demo Credentials:</p>
+                <p>Username: <span className="dark:text-emerald-400 font-bold select-all">showcase</span> (or showcase@endocore.io)</p>
+                <p>Password: <span className="dark:text-emerald-400 font-bold select-all">123</span></p>
               </div>
             </form>
           ) : (
@@ -2007,485 +2297,6 @@ export default function App() {
     );
   }
 
-  // --- START OF MOBILE COMPANION VIEW ---
-  const renderMobileView = () => {
-    const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : "");
-    const occupants = roomsOccupants[activeGroupName] || [];
-    const todayFocusHours = myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0";
-    const productivityScore = myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0;
-
-    return (
-      <div className={`min-h-screen flex flex-col transition-colors duration-350 ease-out font-sans ${bgMain} pb-16`}>
-
-        {/* ⚡ PREMIUM HIGH-CONTRAST TOAST ALERT (TOP-RIGHT CORNER NON-BLOCKING) */}
-        <AnimatePresence>
-          {toastMessage && (
-            <motion.div
-              initial={{ opacity: 0, y: -20, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -20, scale: 0.95 }}
-              className="fixed top-16 right-6 z-[9999] max-w-sm px-4 py-3 rounded-xl bg-[#09090b] text-white border border-[#27272a] shadow-2xl flex items-center space-x-3 text-xs font-semibold select-none"
-            >
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
-              <span className="text-white font-medium text-xs flex-1">{toastMessage}</span>
-              <button
-                onClick={() => setToastMessage(null)}
-                className="text-zinc-400 hover:text-white text-xs p-1 rounded-md hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Studio Mobile Header */}
-        <header className="h-14 border-b border-[#e4e4e7] bg-white shrink-0 px-4 flex items-center justify-between sticky top-0 z-40 shadow-xs">
-          <div className="flex items-center space-x-2">
-            <span className="font-bold text-sm text-[#09090b] tracking-tight">EndoCore.</span>
-            <span className="font-mono text-[8px] uppercase tracking-widest px-2 py-0.5 border border-[#e4e4e7] bg-zinc-50 rounded-md text-[#71717a] font-semibold">mobile</span>
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* Quick status dot for PC tracking agent connection state */}
-            <div className="flex items-center space-x-1.5 bg-[#f4f4f5] border border-[#e4e4e7] px-2.5 py-1 rounded-full text-[10px] font-mono text-[#09090b]">
-              <span className={`h-2 w-2 rounded-full ${electronTracking ? "bg-emerald-500 animate-pulse" : "bg-zinc-400"}`}></span>
-              <span className="font-semibold">{electronTracking ? "PC CONNECTED" : "PC IDLE"}</span>
-            </div>
-          </div>
-        </header>
-
-        {/* Main scrollable body viewport */}
-        <main className="flex-grow overflow-y-auto px-4 py-4 space-y-4 pb-28 bg-[#fafafa]">
-
-          {/* TAB 1: WORKSPACE CONTROL SCREEN */}
-          {mobileTab === "control" && myActivity && (
-            <div className="space-y-4">
-
-              {/* Circular productivity summary card */}
-              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between bg-gradient-to-br from-[#121215] to-[#181820]/30`}>
-                <div className="space-y-1 flex-1">
-                  <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block">Workstation Focus Dashboard</span>
-                  <h3 className="text-base font-serif italic font-semibold text-white mt-1">Hello, {user ? user.name.split(" ")[0] : "Developer"}</h3>
-
-                  <div className="flex items-baseline space-x-1 pt-2">
-                    <span className="text-3xl font-mono font-bold tracking-tight text-white">{todayFocusHours}</span>
-                    <span className="text-xs text-stone-500 font-mono">hrs focus today</span>
-                  </div>
-                  <span className="text-[10px] text-zinc-550 dark:text-zinc-500 font-mono block">Workstation: {user?.deviceConnected || "Default PC"}</span>
-                </div>
-
-                {/* Score percentage circle display */}
-                <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle cx="40" cy="40" r="30" fill="none" stroke={themeMode === "dark" ? "#1a1a20" : "#f1f0ea"} strokeWidth="4" />
-                    <circle cx="40" cy="40" r="30" fill="none" stroke="#D4AF37" strokeWidth="4.5"
-                      strokeDasharray="188.4" strokeDashoffset={188.4 - (productivityScore / 100) * 188.4}
-                      strokeLinecap="round" className="transition-all duration-700" />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-                    <span className="text-sm font-mono font-bold text-white">{productivityScore}%</span>
-                    <span className="text-[7px] text-stone-500 uppercase tracking-wider mt-0.5">Score</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Large Controller Action Trigger */}
-              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-4 text-center`}>
-                <div className="space-y-1">
-                  <span className="text-[9px] font-mono text-[#a1a1aa] bg-stone-100 dark:bg-zinc-800/60 border dark:border-neutral-800 px-2 py-0.5 rounded-full inline-block">
-                    Telemetry Action Controller
-                  </span>
-                  <div className="text-xs text-stone-400 mt-1">
-                    Current Running App: <span className="font-semibold text-white font-mono">{myActivity.app}</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity?.isPaused)}
-                  disabled={updatingActivity}
-                  className={`w-full py-4 rounded-xl font-mono text-xs font-bold tracking-widest uppercase border transition-all duration-300 shadow-md cursor-pointer ${myActivity.isPaused
-                      ? "bg-red-950/20 text-red-400 border-red-900/30 hover:bg-red-900/10"
-                      : "bg-emerald-950/20 text-emerald-400 border-emerald-900/30 hover:bg-emerald-900/10"
-                    }`}
-                >
-                  {myActivity.isPaused ? "▶️ Resume PC Tracking" : "⏸️ Pause PC Tracking"}
-                </button>
-              </div>
-
-              {/* Workstation Quick Switcher parameters */}
-              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-4`}>
-                <h4 className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block border-b border-zinc-850 pb-2">
-                  Update PC Tracking Details
-                </h4>
-
-                {/* Switch App Focus Dropdown */}
-                <div className="space-y-1.5">
-                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Select Active Application</label>
-                  <select
-                    value={myActivity.app}
-                    onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
-                    className={`w-full rounded-xl px-3 py-2 text-xs font-mono ${formInput} transition-all cursor-pointer`}
-                  >
-                    {myActivity.openApps && myActivity.openApps.length > 0 ? (
-                      <>
-                        <optgroup label="Open Apps on PC" className="text-[9px] font-mono text-zinc-550 bg-[#121215]">
-                          {!myActivity.openApps.includes(myActivity.app) && myActivity.app !== "Offline" && myActivity.app !== "Inactive" && (
-                            <option value={myActivity.app}>{myActivity.app}</option>
-                          )}
-                          {myActivity.openApps.map(app => (
-                            <option key={app} value={app}>{app}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Default Presets" className="text-[9px] font-mono text-zinc-550 bg-[#121215]">
-                          <option value="VS Code">VS Code</option>
-                          <option value="Chrome">Chrome Browser</option>
-                          <option value="Figma">Figma Design</option>
-                          <option value="Terminal">Terminal / Shell</option>
-                          <option value="Spotify">Spotify Music</option>
-                        </optgroup>
-                      </>
-                    ) : (
-                      <>
-                        <option value="VS Code">VS Code</option>
-                        <option value="Chrome">Chrome Browser</option>
-                        <option value="Figma">Figma Design</option>
-                        <option value="Terminal">Terminal / Shell</option>
-                        <option value="Spotify">Spotify Music</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* Edit Project Title Details */}
-                <div className="space-y-1.5">
-                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Active Project / Task Name</label>
-                  <div className="flex items-center space-x-1.5">
-                    <input
-                      type="text"
-                      value={projectInput}
-                      onChange={(e) => setProjectInput(e.target.value)}
-                      className={`w-full rounded-xl px-3 py-2 text-xs ${formInput} transition-all`}
-                      placeholder="e.g. EndoCore Workspace"
-                      onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
-                    />
-                    <button
-                      onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                      className="btn-primary shrink-0"
-                    >
-                      Sync
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB 2: ROOM STATUS BOARD & CHAT SCREEN */}
-          {mobileTab === "room" && (
-            <div className="space-y-4 pb-4">
-
-              {/* Guild Room selector parameters */}
-              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-2`}>
-                <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-mono uppercase tracking-widest text-zinc-500 block">
-                    Focus Guild channel
-                  </label>
-                  <span className="text-[8px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.2 rounded-full font-mono font-semibold animate-pulse">
-                    Live
-                  </span>
-                </div>
-                <select
-                  value={activeGroupName}
-                  onChange={(e) => {
-                    enterRoomChannel(e.target.value);
-                  }}
-                  className={`w-full rounded-xl px-3 py-2.5 text-xs font-mono ${formInput} transition-all cursor-pointer`}
-                >
-                  {groups.map(g => (
-                    <option key={g.id} value={g.name} className={themeMode === 'dark' ? 'bg-[#121215]' : 'bg-white'}>
-                      #{g.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Members horizontal carousel lists */}
-              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-3`}>
-                <div className="flex justify-between items-center text-[9px] font-mono text-stone-500 uppercase tracking-widest border-b border-zinc-850 pb-2">
-                  <span>Room occupants ({occupants.length})</span>
-                  <span>Co-workers online</span>
-                </div>
-
-                {occupants.length === 0 ? (
-                  <p className="text-[10px] text-stone-500 font-mono italic py-2">No other co-workers in this room currently.</p>
-                ) : (
-                  <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
-                    {occupants.map((occ) => {
-                      const isOnline = occ.status !== "offline";
-                      const styleMeta = getStatusNodeMeta(occ.status as any);
-
-                      return (
-                        <div key={occ.id} className="p-2.5 bg-black/10 dark:bg-black/35 rounded-xl border dark:border-neutral-850 border-stone-200/30 flex items-center justify-between text-[11px] font-mono">
-                          <div className="flex items-center space-x-2 min-w-0">
-                            <div className="relative shrink-0">
-                              <img
-                                src={occ.avatarUrl}
-                                alt={occ.name}
-                                className="h-6.5 w-6.5 rounded-full object-cover border dark:border-neutral-800 border-neutral-200"
-                              />
-                              <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-black ${styleMeta.color}`} />
-                            </div>
-                            <div className="min-w-0">
-                              <span className="font-sans font-semibold text-xs text-stone-200 truncate block leading-tight">{occ.name}</span>
-                              <span className="text-[8px] text-stone-500 uppercase tracking-wider block">{occ.role}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2 shrink-0">
-                            <span className="bg-zinc-850 text-zinc-300 px-1.5 py-0.5 rounded text-[8px] font-medium border border-zinc-800 max-w-[65px] truncate">
-                              {occ.currentActivity?.app || "Offline"}
-                            </span>
-                            <button
-                              onClick={() => triggerPeerNudge(occ.name, occ.id)}
-                              disabled={nudgedFriendIds[occ.id]}
-                              className={`px-2 py-1 rounded border text-[8px] font-mono uppercase tracking-wider transition-all ${nudgedFriendIds[occ.id]
-                                  ? "bg-stone-300 text-black border-stone-300"
-                                  : "text-stone-500 hover:text-stone-300 dark:border-neutral-800 border-stone-250"
-                                }`}
-                            >
-                              {nudgedFriendIds[occ.id] ? "Waved!" : "Wave"}
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Simplified Room chat viewport */}
-              <div className={`p-4 rounded-2xl border ${bgCard} ${borderRule} space-y-3`}>
-                <div className="flex justify-between items-center text-[9px] font-mono text-stone-500 uppercase tracking-widest border-b border-zinc-850 pb-2">
-                  <span>Room conversation board</span>
-                  <span>#{activeGroupName} Chat</span>
-                </div>
-
-                {/* Chat items scroll box */}
-                <div className="h-56 bg-black/10 dark:bg-black/20 rounded-xl p-3 border dark:border-neutral-850 border-stone-200/50 overflow-y-auto space-y-3">
-                  {roomChatMessages.length > 0 ? (
-                    roomChatMessages.map((msg) => {
-                      const isMe = msg.userId === user?.id;
-                      return (
-                        <div key={msg.id} className={`flex items-start gap-2 max-w-[90%] ${isMe ? "ml-auto flex-row-reverse" : ""}`}>
-                          <img src={msg.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"} className="h-6 w-6 rounded-full object-cover shrink-0 mt-0.5 border border-zinc-800" />
-                          <div className="space-y-0.5">
-                            <div className={`flex items-center gap-1.5 text-[8px] font-mono text-stone-500 ${isMe ? "justify-end" : ""}`}>
-                              <span className="font-semibold text-stone-400">{msg.userName.split(" ")[0]}</span>
-                              <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                            <div className={`px-3 py-2 rounded-xl text-[11px] leading-relaxed ${isMe
-                                ? "bg-stone-800 text-white dark:bg-stone-300 dark:text-black rounded-tr-none"
-                                : `bg-zinc-800/40 dark:bg-[#151518] text-stone-300 border ${borderRule} rounded-tl-none`
-                              }`}>
-                              {msg.message}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-12 text-[10px] font-mono text-stone-500 italic">
-                      No chat logs. Write a message to connect!
-                    </div>
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
-
-                {/* Message input elements */}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={roomChatInput}
-                    onChange={(e) => setRoomChatInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && sendRoomChatMessage()}
-                    className={`flex-grow rounded-xl px-3 py-2 text-xs tracking-wide ${formInput}`}
-                    placeholder="Type message to room..."
-                  />
-                  <button
-                    onClick={sendRoomChatMessage}
-                    className="btn-primary shrink-0"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB 3: USER PERSONAL IDENTITY & SETTINGS SCREEN */}
-          {mobileTab === "me" && user && (
-            <div className="space-y-4">
-
-              {/* Profile summary details */}
-              <div className={`p-6 rounded-2xl border ${bgCard} ${borderRule} flex flex-col items-center justify-center text-center space-y-3 bg-[#121215]`}>
-                <img
-                  src={user.avatarUrl}
-                  alt="Avatar profile"
-                  className="h-16 w-16 rounded-full object-cover border dark:border-[#D4AF37] border-zinc-300 shadow-md animate-pulse"
-                />
-                <div className="space-y-0.5">
-                  <h3 className="text-base font-serif italic font-bold text-white">{user.name}</h3>
-                  <span className="text-[10px] font-mono text-stone-500 lowercase block">{user.email}</span>
-                </div>
-              </div>
-
-              {/* Settings configuration form */}
-              <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-4`}>
-                <h4 className="text-[10px] font-mono text-stone-500 uppercase tracking-widest block border-b border-zinc-850 pb-2">
-                  Personal Settings & Goals
-                </h4>
-
-                {/* Update custom status text */}
-                <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Custom Status Message</label>
-                  <input
-                    type="text"
-                    value={statusInput}
-                    onChange={(e) => setStatusInput(e.target.value)}
-                    onBlur={() => submitProfileSettings({ customStatus: statusInput })}
-                    onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ customStatus: statusInput })}
-                    className={`w-full rounded-xl px-3 py-2.5 text-xs ${formInput} transition-all`}
-                    placeholder="Set what you are doing..."
-                  />
-                </div>
-
-                {/* Focus Target Hours selector */}
-                <div className="space-y-1">
-                  <label className="text-[9px] uppercase font-mono tracking-widest text-stone-500 block leading-none">Daily Focus Goal Hour Line</label>
-                  <select
-                    value={user.productivityGoal}
-                    onChange={(e) => submitProfileSettings({ productivityGoal: parseInt(e.target.value) })}
-                    className={`w-full rounded-xl px-3 py-2 text-xs font-mono lowercase ${formInput} transition-all cursor-pointer`}
-                  >
-                    <option value="4">4 hours target</option>
-                    <option value="6">6 hours target</option>
-                    <option value="8">8 hours target</option>
-                    <option value="10">10 hours target</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Sign Out Trigger action */}
-              <div className="pt-2">
-                <button
-                  onClick={handleLogout}
-                  className="w-full py-3.5 border dark:border-red-950 border-red-200 dark:hover:bg-red-950/20 hover:bg-red-50 text-xs font-mono uppercase tracking-wider rounded-xl text-red-500 cursor-pointer transition-all text-center"
-                >
-                  Sign Out Workspace
-                </button>
-              </div>
-
-            </div>
-          )}
-
-        </main>
-
-        {/* Sticky Studio Bottom Navigation Bar */}
-        <nav className="fixed bottom-0 left-0 right-0 h-16 border-t border-[#e4e4e7] bg-white flex items-center justify-around z-50 px-2 shadow-lg">
-          {/* Tab Button: Control */}
-          <button
-            onClick={() => setMobileTab("control")}
-            className={`flex flex-col items-center justify-center space-y-1 px-4 py-1.5 rounded-xl cursor-pointer transition-all ${
-              mobileTab === "control"
-                ? "bg-[#09090b] text-white font-semibold shadow-xs"
-                : "text-[#71717a] hover:text-[#09090b]"
-            }`}
-          >
-            <Laptop className="h-4.5 w-4.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Control</span>
-          </button>
-
-          {/* Tab Button: Room */}
-          <button
-            onClick={() => setMobileTab("room")}
-            className={`flex flex-col items-center justify-center space-y-1 px-4 py-1.5 rounded-xl cursor-pointer transition-all ${
-              mobileTab === "room"
-                ? "bg-[#09090b] text-white font-semibold shadow-xs"
-                : "text-[#71717a] hover:text-[#09090b]"
-            }`}
-          >
-            <Users className="h-4.5 w-4.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Room</span>
-          </button>
-
-          {/* Tab Button: Me */}
-          <button
-            onClick={() => setMobileTab("me")}
-            className={`flex flex-col items-center justify-center space-y-1 px-4 py-1.5 rounded-xl cursor-pointer transition-all ${
-              mobileTab === "me"
-                ? "bg-[#09090b] text-white font-semibold shadow-xs"
-                : "text-[#71717a] hover:text-[#09090b]"
-            }`}
-          >
-            <User className="h-4.5 w-4.5" />
-            <span className="text-[10px] font-mono uppercase tracking-wider font-semibold">Me</span>
-          </button>
-        </nav>
-
-      </div>
-    );
-  };
-
-  // Mobile layout branch check – use the inline mobile view connected to real app state
-  if (platformMode === "mobile-companion" || platformMode === "responsive-web") {
-    // Show loading splash while profile data is being fetched
-    if (!user) {
-      return (
-        <div className={`min-h-screen flex items-center justify-center transition-colors duration-350 ease-out font-sans ${bgMain}`}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center space-y-6"
-          >
-            <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
-            <div className="flex items-center space-x-2">
-              <span className="h-2 w-2 rounded-full bg-[#D4AF37] animate-ping"></span>
-              <span className="text-[10px] font-mono uppercase tracking-widest text-stone-500">
-                Loading workspace…
-              </span>
-            </div>
-          </motion.div>
-        </div>
-      );
-    }
-    return (
-      <MobileCompanionShell
-        user={user}
-        myActivity={myActivity}
-        friends={friends}
-        groups={groups}
-        analytics={analytics}
-        aiInsights={aiInsights}
-        connectionsData={connectionsData}
-        themeMode={themeMode}
-        electronTracking={electronTracking}
-        onToggleTheme={handleManualThemeChange}
-        onSignOut={handleLogout}
-        onUpdateActivity={updateMyActiveTracker}
-        onSubmitSettings={submitProfileSettings}
-        onTriggerNudge={triggerPeerNudge}
-        nudgedFriendIds={nudgedFriendIds}
-        onEnterRoom={enterRoomChannel}
-        onRespondConnectionRequest={respondConnectionRequest}
-        recentWaves={recentWaves}
-      />
-    );
-  }
-  // --- END OF MOBILE COMPANION VIEW ---
-
-  // Loading splash – shown after login while profile data is being fetched
   if (!user) {
     return (
       <div className={`min-h-screen flex items-center justify-center transition-colors duration-350 ease-out font-sans ${bgMain}`}>
@@ -2505,6 +2316,8 @@ export default function App() {
       </div>
     );
   }
+
+  // Render the responsive Web Workstation Dashboard for all viewports (mobile browser & desktop)
 
 
   return (
@@ -2627,28 +2440,41 @@ export default function App() {
       </AnimatePresence>
 
       {/* 🚀 CENTRAL VIEW CONTAINER */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto relative bg-[#fafafa]">
+      <main className={`flex-1 flex flex-col min-w-0 overflow-y-auto relative transition-colors duration-500 ${getAmbientBackground()}`}>
         {/* Sleek Top Gradient Accent Strip */}
         <div className="gradient-bar-primary shrink-0"></div>
 
-        {/* Studio Top Header Bar */}
-        <header className="h-14 border-b border-[#e4e4e7] bg-white shrink-0 px-6 flex items-center justify-between sticky top-0 z-40 shadow-xs">
-          <div className="flex items-center space-x-3 flex-1">
+        {/* Elegant Top Header with Minimalist Meta Controls */}
+        <header className={`h-16 border-b shrink-0 px-3.5 sm:px-6 md:px-8 flex items-center justify-between sticky top-0 z-40 backdrop-blur-md ${borderRule} ${themeMode === "dark" ? "bg-[#09090b]/80" : "bg-[#fbfbfa]/80"
+          }`}>
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-1 min-w-0">
             {/* Mobile Hamburger Menu Trigger */}
             <button
               onClick={() => setMobileMenuOpen(true)}
-              className="md:hidden p-1.5 text-[#71717a] hover:text-[#09090b] rounded-md hover:bg-zinc-100 cursor-pointer"
+              className="md:hidden p-2 text-stone-400 hover:text-stone-200 rounded-xl hover:bg-neutral-800/40 cursor-pointer shrink-0"
               title="Open Navigation"
             >
               <Menu className="h-5 w-5" />
             </button>
 
-            <h1 className="text-sm font-semibold text-[#09090b] tracking-tight">Workspace Dashboard</h1>
+            {/* Mobile Brand Tag & Page Title */}
+            <div className="flex items-center space-x-2 min-w-0">
+              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
+              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
+              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">Workspace Status</h1>
+            </div>
 
             {/* System Status Quick Indicator */}
-            <div className="badge badge-emerald hidden sm:inline-flex items-center gap-1.5">
-              <span className="live-pulse-emerald h-2 w-2 rounded-full bg-emerald-500 inline-block"></span>
-              <span>Pipeline Healthy</span>
+            <div className="hidden xs:flex items-center space-x-1.5 bg-[#f5f4ef]/40 dark:bg-stone-900/40 px-2.5 py-1 rounded-full border dark:border-neutral-850 border-stone-250/60 text-[9px] font-mono text-stone-400 shrink-0">
+              <span className={`h-1.5 w-1.5 rounded-full inline-block ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "bg-emerald-500 animate-pulse"
+                  : "bg-red-500 animate-ping"
+                }`}></span>
+              <span className="hidden sm:inline">
+                {socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "Pipeline Healthy"
+                  : "Pipeline Error"}
+              </span>
             </div>
 
             <span className="h-3.5 w-px bg-[#e4e4e7] hidden md:block"></span>
@@ -2658,10 +2484,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* Live Clock with UTC stamp */}
-            <div className="text-[11px] font-mono text-[#71717a] font-medium tracking-wide hidden md:inline-block">
-              {currentTimeText} UTC
-            </div>
           </div>
         </header>
 
@@ -2736,7 +2558,7 @@ export default function App() {
           {/* VIEWPORT CONTROLLER CHANNELS */}
           <AnimatePresence mode="wait">
             <motion.div
-              key={activeTab}
+              key={activeTab + (selectedRoomName || "")}
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
@@ -2748,9 +2570,9 @@ export default function App() {
               {activeTab === "dashboard" && (
                 <>
                   {/* STUDIO HERO TITLE BLOCK */}
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 rounded-2xl border border-[#e4e4e7] shadow-xs">
                     <div className="space-y-1">
-                      <h2 className="text-3xl font-display font-bold text-[#09090b] tracking-tight">
+                      <h2 className="text-2xl sm:text-3xl font-display font-bold text-[#09090b] tracking-tight">
                         {getGreeting()}
                       </h2>
                       <p className="text-xs text-[#71717a]">
@@ -2758,60 +2580,154 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* Quick Segment Controls */}
-                    <div className="flex flex-wrap items-center gap-1.5 bg-[#f4f4f5] border border-[#e4e4e7] p-1 rounded-md w-fit">
-                      {/* Agent Active/Paused Toggle */}
+                    {/* Quick Segment Controls: Privacy Mode, Agent Monitor Status, & Connected Devices */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Agent Active/Paused Monitor Toggle */}
                       <button
                         onClick={() => updateMyActiveTracker(undefined, undefined, !myActivity?.isPaused)}
                         disabled={updatingActivity}
-                        className={`px-3 py-1 rounded-md text-[11px] font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${myActivity?.isPaused
-                            ? "bg-rose-100 text-rose-700 border border-rose-200"
-                            : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          }`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+                          myActivity?.isPaused
+                            ? "bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100"
+                            : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                        }`}
+                        title="Click to toggle monitoring agent ON/OFF"
                       >
                         <span className={`status-dot ${myActivity?.isPaused ? "status-dot-rose" : "status-dot-emerald"}`} />
-                        <span>{myActivity?.isPaused ? "Agent Paused" : "Agent Active"}</span>
+                        <span>{myActivity?.isPaused ? "Agent Monitoring: PAUSED" : "Agent Monitoring: ACTIVE"}</span>
                       </button>
 
-                      <span className="h-4 w-px bg-[#e4e4e7] hidden sm:block"></span>
-
-                      {/* Private Status Toggle */}
-                      <button
-                        onClick={() => submitProfileSettings({ privacyMode: "Private" })}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${user?.privacyMode === "Private"
-                            ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                            : "text-[#71717a] hover:text-[#09090b]"
+                      {/* Privacy Toggle Pills */}
+                      <div className="flex items-center gap-1 bg-[#f4f4f5] border border-[#e4e4e7] p-1 rounded-xl">
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Private" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Private"
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
                           }`}
-                      >
-                        <Lock className="h-3 w-3" />
-                        <span>Private</span>
-                      </button>
+                          title="Private Mode: Activity hidden from co-workers"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Private</span>
+                        </button>
 
-                      {/* Team Status Toggle */}
-                      <button
-                        onClick={() => submitProfileSettings({ privacyMode: "Team" })}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${user?.privacyMode === "Team"
-                            ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                            : "text-[#71717a] hover:text-[#09090b]"
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Team" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Team"
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
                           }`}
-                      >
-                        <Users className="h-3 w-3" />
-                        <span>Team</span>
-                      </button>
+                          title="Team Mode: Activity visible to room members"
+                        >
+                          <Users className="h-3.5 w-3.5 text-blue-600" />
+                          <span>Team</span>
+                        </button>
 
-                      {/* Public Status Toggle */}
-                      <button
-                        onClick={() => submitProfileSettings({ privacyMode: "Public" })}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all cursor-pointer ${user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
-                            ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                            : "text-[#71717a] hover:text-[#09090b]"
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Public" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
                           }`}
+                          title="Public Mode: Live activity broadcasting ON"
+                        >
+                          <Globe className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Public</span>
+                        </button>
+                      </div>
+
+                      {/* Connected Devices Quick Hub Trigger */}
+                      <button
+                        onClick={() => setShowDevicesList(!showDevicesList)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-[#e4e4e7] text-[#09090b] hover:bg-[#f4f4f5] transition-all cursor-pointer flex items-center gap-2 shadow-xs"
                       >
-                        <Globe className="h-3 w-3" />
-                        <span>Public</span>
+                        <Laptop className="h-4 w-4 text-indigo-600" />
+                        <span>{connectedDevices.length} Connected Devices</span>
+                        <ChevronDown className={`h-3.5 w-3.5 text-[#71717a] transition-transform ${showDevicesList ? "rotate-180" : ""}`} />
                       </button>
                     </div>
                   </div>
+
+                  {/* CONNECTED DEVICES & DISPLAY MONITOR MATRIX */}
+                  <AnimatePresence>
+                    {showDevicesList && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="studio-card p-4 space-y-3 bg-gradient-to-r from-slate-50 via-white to-indigo-50/30 border border-[#e4e4e7] rounded-2xl"
+                      >
+                        <div className="flex items-center justify-between border-b border-[#e4e4e7] pb-2.5">
+                          <div className="flex items-center space-x-2">
+                            <Laptop className="h-4 w-4 text-indigo-600" />
+                            <h3 className="text-xs font-bold uppercase tracking-wider text-[#09090b]">
+                              Connected Workstation Devices & Display Monitor Matrix
+                            </h3>
+                          </div>
+                          <span className="badge badge-emerald">
+                            <span className="status-dot status-dot-emerald"></span>
+                            <span>{connectedDevices.filter(d => d.status !== "idle").length} Active Devices / Monitors</span>
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                          {connectedDevices.map((device) => {
+                            let icon = <Laptop className="h-4 w-4 text-blue-600" />;
+                            if (device.type === "mobile") icon = <Smartphone className="h-4 w-4 text-purple-600" />;
+                            if (device.type === "tablet") icon = <Tablet className="h-4 w-4 text-teal-600" />;
+                            if (device.type === "monitor") icon = <Monitor className="h-4 w-4 text-amber-600" />;
+                            if (device.type === "desktop") icon = <Cpu className="h-4 w-4 text-emerald-600" />;
+
+                            return (
+                              <div key={device.id} className="p-3 bg-white rounded-xl border border-[#e4e4e7] shadow-xs flex flex-col justify-between space-y-2.5 hover:border-indigo-300 transition-colors">
+                                <div className="flex items-start justify-between space-x-3">
+                                  <div className="flex items-start space-x-3 min-w-0">
+                                    <div className="p-2 bg-[#f4f4f5] rounded-lg shrink-0">
+                                      {icon}
+                                    </div>
+                                    <div className="min-w-0 space-y-0.5">
+                                      <h4 className="text-xs font-bold text-[#09090b] truncate">{device.name}</h4>
+                                      <p className="text-[10px] font-mono text-[#71717a]">{device.os}</p>
+                                      <p className="text-[10px] text-[#71717a] font-medium">{device.lastSync}</p>
+                                    </div>
+                                  </div>
+                                  <span className={`status-dot shrink-0 mt-1 ${
+                                    device.status === "active" || device.status === "display_active"
+                                      ? "status-dot-emerald"
+                                      : device.status === "online"
+                                      ? "status-dot-indigo"
+                                      : "status-dot-amber"
+                                  }`} title={device.status} />
+                                </div>
+
+                                <div className="flex items-center justify-between border-t border-[#f4f4f5] pt-2">
+                                  <span className="text-[9px] font-mono text-emerald-700 font-semibold uppercase">
+                                    {device.status === "active" ? "Primary Workstation" : device.status === "display_active" ? "Display Connected" : "Paired Session"}
+                                  </span>
+                                  {device.status === "active" ? (
+                                    <span className="text-[10px] font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200" title="This machine is your current active workstation session">
+                                      This Machine (Active) ✓
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => disconnectDevice(device.id, device.name)}
+                                      className="text-[10px] font-mono font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                                      title="Disconnect and revoke remote device session"
+                                    >
+                                      Disconnect ✕
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   {/* WORKSPACE PIPELINE CONNECTIVITY STRIP */}
                   <div className="studio-card p-4 space-y-3">
@@ -2895,31 +2811,37 @@ export default function App() {
                   {/* CARDS GRID */}
                   <div className="grid grid-cols-12 gap-3 sm:gap-5">
                     {/* Focus Time Card */}
-                    <div className="col-span-12 sm:col-span-6 lg:col-span-2 studio-card flex flex-col justify-between p-4 h-28 sm:h-32">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Focus Time</span>
-                      <div className="space-y-1">
-                        <div className="text-2xl font-display font-bold text-[#09090b]">{myActivity ? (myActivity.durationSeconds / 3600).toFixed(1) : "0.0"} <span className="text-xs font-normal text-[#71717a]">hrs</span></div>
-                        <div className="text-[11px] text-[#71717a] font-mono">Goal: {user?.productivityGoal || 6} hrs</div>
+                    <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Focus Time</span>
+                        <div className="space-y-1">
+                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-normal text-[#71717a]">hrs</span></div>
+                          <div className="text-[11px] text-[#71717a] font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
+                        </div>
                       </div>
-                    </div>
+                    </TiltCard>
 
                     {/* Productivity Score */}
-                    <div className="col-span-12 sm:col-span-6 lg:col-span-2 studio-card flex flex-col justify-between p-4 h-28 sm:h-32">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
-                      <div className="space-y-1">
-                        <div className="text-2xl font-display font-bold text-[#09090b]">{myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0}%</div>
-                        <div className="text-[11px] text-[#71717a]">Target achieved</div>
+                    <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
+                        <div className="space-y-1">
+                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
+                          <div className="text-[11px] text-[#71717a]">Target achieved</div>
+                        </div>
                       </div>
-                    </div>
+                    </TiltCard>
 
                     {/* Current Session */}
-                    <div className="col-span-12 sm:col-span-6 lg:col-span-2 studio-card flex flex-col justify-between p-4 h-28 sm:h-32">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Current Session</span>
-                      <div className="space-y-0.5">
-                        <div className="text-base font-semibold text-[#09090b] truncate">{myActivity ? myActivity.app : "Inactive"}</div>
-                        <div className="text-[11px] text-[#71717a] font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                    <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Current Session</span>
+                        <div className="space-y-0.5">
+                          <div className="text-base font-semibold text-[#09090b] truncate">{myActivity ? myActivity.app : "Inactive"}</div>
+                          <div className="text-[11px] text-[#71717a] font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                        </div>
                       </div>
-                    </div>
+                    </TiltCard>
 
                     {/* Today's Progress / Activity Tracker Controls */}
                     {myActivity && (
@@ -3118,250 +3040,294 @@ export default function App() {
                                 </div>
 
                                 {loadingInsights ? (
-                                  <div className="space-y-2 py-1">
-                                    <div className="h-2 bg-zinc-200 rounded w-1/3 animate-pulse"></div>
-                                    <div className="h-2 bg-zinc-200 rounded w-full animate-pulse"></div>
-                                    <div className="h-2 bg-zinc-200 rounded w-5/6 animate-pulse"></div>
-                                  </div>
-                                ) : aiInsights ? (() => {
-                                  let parsedBrief: any = null;
-                                  try {
-                                    parsedBrief = JSON.parse(aiInsights);
-                                  } catch (e) {
-                                    // Fallback if not JSON
-                                  }
+                                  <SkeletonLoader lines={3} className="py-1" />
+                                ) : aiInsights && aiInsights.success ? (() => {
+                                  const roomSummary = aiInsights.roomSummary || { status: "Active Room", productivityPercentage: 50, description: "Compiling room data...", activeCount: 0, totalCount: 1 };
+                                  const topPerformer = aiInsights.topPerformer || { name: "None", focusTime: "0m", apps: [], score: 0, reason: "" };
+                                  const needsAttention = aiInsights.needsAttention || { name: "None", idleTime: "0m", reason: "" };
+                                  const scrum = aiInsights.agents?.scrumCoordinator || { status: "Optimal Alignment", recommendation: "", pairSuggestions: [] };
+                                  const welfare = aiInsights.agents?.welfareCoach || { burnoutRiskIndex: 0, ergonomicNudge: "" };
+                                  const recommendations = Array.isArray(aiInsights.recommendations) ? aiInsights.recommendations : [];
+                                  const prediction = aiInsights.prediction || { completionPercentage: 50, description: "" };
+                                  const memberInsights = Array.isArray(aiInsights.memberInsights) ? aiInsights.memberInsights : [];
+                                  const focusPatterns = aiInsights.focusPatterns || { deepWorkStreak: 0, contextSwitchCount: 0, peakProductivityWindow: "--", averageSessionLength: "0m", flowStateDetected: false };
+                                  const collaborationScore = aiInsights.collaborationScore ?? 50;
+                                  const summary = aiInsights.summary || "";
 
-                                  if (parsedBrief && parsedBrief.roomSummary) {
-                                    const summaryObj = parsedBrief.roomSummary;
-                                    const roomSummary = {
-                                      status: typeof summaryObj.status === "string" ? summaryObj.status : "Active Room",
-                                      productivityPercentage: typeof summaryObj.productivityPercentage === "number" ? summaryObj.productivityPercentage : 50,
-                                      description: typeof summaryObj.description === "string" ? summaryObj.description : "No description available.",
-                                      activeCount: typeof summaryObj.activeCount === "number" ? summaryObj.activeCount : 0,
-                                      totalCount: typeof summaryObj.totalCount === "number" ? summaryObj.totalCount : 1
-                                    };
+                                  const moodColors: Record<string, string> = {
+                                    "deep_work": "bg-emerald-100 text-emerald-700 border-emerald-200",
+                                    "focused": "bg-blue-100 text-blue-700 border-blue-200",
+                                    "idle": "bg-amber-100 text-amber-700 border-amber-200",
+                                    "distracted": "bg-red-100 text-red-700 border-red-200",
+                                    "offline": "bg-zinc-100 text-zinc-500 border-zinc-200"
+                                  };
+                                  const moodLabels: Record<string, string> = {
+                                    "deep_work": "🧠 Deep Work",
+                                    "focused": "🎯 Focused",
+                                    "idle": "💤 Idle",
+                                    "distracted": "⚡ Distracted",
+                                    "offline": "⭘ Offline"
+                                  };
 
-                                    const performerObj = parsedBrief.topPerformer || {};
-                                    const topPerformer = {
-                                      name: typeof performerObj.name === "string" ? performerObj.name : "None",
-                                      focusTime: typeof performerObj.focusTime === "string" ? performerObj.focusTime : "0h",
-                                      apps: Array.isArray(performerObj.apps) ? performerObj.apps : ["VS Code"],
-                                      score: typeof performerObj.score === "number" ? performerObj.score : 0,
-                                      reason: typeof performerObj.reason === "string" ? performerObj.reason : ""
-                                    };
+                                  return (
+                                    <div className="space-y-3">
+                                      {/* Mini Cards Grid */}
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{roomSummary.productivityPercentage}%</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${roomSummary.productivityPercentage >= 60 ? "text-emerald-600" : roomSummary.productivityPercentage >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
+                                            {roomSummary.productivityPercentage >= 60 ? "Strong" : roomSummary.productivityPercentage >= 30 ? "Moderate" : "Low Activity"}
+                                          </span>
+                                        </div>
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{focusPatterns.deepWorkStreak}m</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${focusPatterns.flowStateDetected ? "text-emerald-600" : "text-zinc-400"}`}>
+                                            {focusPatterns.flowStateDetected ? "Flow Detected ✦" : "No Flow State"}
+                                          </span>
+                                        </div>
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Burnout Risk</span>
+                                          <span className={`text-xs font-bold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>{welfare.burnoutRiskIndex}/100</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-500" : welfare.burnoutRiskIndex > 30 ? "text-amber-500" : "text-emerald-500"}`}>
+                                            {welfare.burnoutRiskIndex > 60 ? "High Risk ⚠" : welfare.burnoutRiskIndex > 30 ? "Moderate" : "Healthy"}
+                                          </span>
+                                        </div>
+                                        <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Collaboration</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{collaborationScore}/100</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${collaborationScore >= 60 ? "text-emerald-600" : "text-zinc-400"}`}>
+                                            {collaborationScore >= 70 ? "High Synergy" : collaborationScore >= 40 ? "Moderate" : "Independent"}
+                                          </span>
+                                        </div>
+                                      </div>
 
-                                    const attentionObj = parsedBrief.needsAttention || {};
-                                    const needsAttention = {
-                                      name: typeof attentionObj.name === "string" ? attentionObj.name : "None",
-                                      idleTime: typeof attentionObj.idleTime === "string" ? attentionObj.idleTime : "0m",
-                                      reason: typeof attentionObj.reason === "string" ? attentionObj.reason : ""
-                                    };
-
-                                    const recommendations = Array.isArray(parsedBrief.recommendations) ? parsedBrief.recommendations : [];
-                                    
-                                    const predictionObj = parsedBrief.prediction || {};
-                                    const prediction = {
-                                      completionPercentage: typeof predictionObj.completionPercentage === "number" ? predictionObj.completionPercentage : 50,
-                                      description: typeof predictionObj.description === "string" ? predictionObj.description : ""
-                                    };
-
-                                    const summary = typeof parsedBrief.summary === "string" ? parsedBrief.summary : "";
-
-                                    const telemetryRoomName = selectedRoomName || user?.activeGroup || (groups.length > 0 ? groups[0].name : null) || "";
-                                    const cycledOccupants = (telemetryRoomName === user?.activeGroup && friends && friends.length > 0
-                                      ? friends
-                                      : (Array.isArray(roomsOccupants[telemetryRoomName]) ? roomsOccupants[telemetryRoomName] : [])).filter(o => o && o.id);
-
-                                    const myHours = myActivity ? (myActivity.durationSeconds / 3600) : 0;
-                                    const myScore = Math.min(100, Math.round((myHours / (user?.productivityGoal || 6)) * 100)) || 0;
-                                    
-                                    const safeFloat = (val: any) => {
-                                      const parsed = parseFloat(val);
-                                      return isNaN(parsed) ? 0 : parsed;
-                                    };
-
-                                    const friendsScores = (cycledOccupants || []).map(o => {
-                                      const hours = safeFloat(o.todayFocusTime);
-                                      return Math.min(100, Math.round((hours / 6) * 100));
-                                    });
-                                    const avgProductivity = Math.round((myScore + friendsScores.reduce((a,b)=>a+b, 0)) / (friendsScores.length + 1)) || 0;
-
-                                    const maxHoursVal = Math.max(
-                                      myHours,
-                                      ...(cycledOccupants || []).map(o => safeFloat(o.todayFocusTime))
-                                    );
-                                    const maxHoursStr = isNaN(maxHoursVal) 
-                                      ? "0h 0m" 
-                                      : `${Math.floor(maxHoursVal)}h ${Math.round((maxHoursVal % 1) * 60)}m`;
-
-                                    const switchesCount = user?.timeline ? user.timeline.filter(t => t.app !== "Offline").length : 12;
-
-                                    const totalMembers = cycledOccupants.length + 1;
-                                    const onlineMembers = cycledOccupants.filter(o => o.status !== "offline").length + (myActivity && myActivity.app !== "Offline" ? 1 : 0);
-                                    const teamEnergyPct = Math.round((onlineMembers / totalMembers) * 100) || 50;
-
-                                    return (
-                                      <div className="space-y-3">
-                                        {/* Mini Cards Grid */}
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{avgProductivity}%</span>
-                                            <span className="text-[8px] font-semibold text-emerald-600 block mt-0.5">{avgProductivity >= 75 ? "Above Avg" : "On Track"}</span>
+                                      {/* Scrum Coordinator Panel */}
+                                      <div className="text-xs leading-relaxed font-sans max-h-[520px] overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3.5 border border-[#e4e4e7] space-y-3">
+                                        
+                                        {/* Room Status */}
+                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                          <div className="flex justify-between items-center text-xs">
+                                            <span className="text-[#09090b] font-semibold flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
+                                              <span className={roomSummary.activeCount > 0 ? "text-emerald-500" : "text-zinc-400"}>
+                                                {roomSummary.activeCount > 0 ? "🟢" : "🔴"}
+                                              </span> Room Summary — {roomSummary.status}
+                                            </span>
+                                            <span className="text-[#09090b] font-bold">{roomSummary.productivityPercentage}%</span>
                                           </div>
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{maxHoursStr}</span>
-                                            <span className="text-[8px] font-semibold text-emerald-600 block mt-0.5">Highest today</span>
+                                          <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
+                                            <div 
+                                              className={`h-full rounded-full transition-all duration-700 ${roomSummary.productivityPercentage >= 60 ? "bg-emerald-500" : roomSummary.productivityPercentage >= 30 ? "bg-amber-500" : "bg-zinc-300"}`}
+                                              style={{ width: `${roomSummary.productivityPercentage}%` }}
+                                            />
                                           </div>
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Switches</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{switchesCount}</span>
-                                            <span className="text-[8px] font-semibold text-amber-600 block mt-0.5">{switchesCount > 15 ? "High switching" : "Low switching"}</span>
-                                          </div>
-                                          <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                            <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Team Energy</span>
-                                            <span className="text-xs font-bold text-[#09090b] block mt-0.5">{teamEnergyPct}%</span>
-                                            <span className="text-[8px] font-semibold text-emerald-600 block mt-0.5">{teamEnergyPct >= 70 ? "Excellent" : "Quiet"}</span>
+                                          <p className="text-xs text-[#52525b] mt-1 leading-normal">
+                                            {roomSummary.description}
+                                          </p>
+                                          <div className="flex gap-3 text-[10px] font-mono text-[#71717a] pt-1">
+                                            <span>• {roomSummary.activeCount} / {roomSummary.totalCount} developers active</span>
+                                            <span>• {aiInsights.isFallback ? "Heuristic Engine" : "Gemini AI"}</span>
                                           </div>
                                         </div>
 
-                                        {/* Scrum Coordinator Panel */}
-                                        <div className="text-xs leading-relaxed font-sans max-h-[380px] overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3.5 border border-[#e4e4e7] space-y-3">
-                                          
-                                          {/* Room Status */}
+                                        {/* Scrum Coordinator Status */}
+                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#09090b]">🕵️ Scrum Coordinator</span>
+                                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${scrum.status === "Optimal Alignment" ? "bg-emerald-100 text-emerald-700" : scrum.status === "Critical Blockage" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                                              {scrum.status}
+                                            </span>
+                                          </div>
+                                          <p className="text-[11px] text-[#52525b] leading-normal">
+                                            {scrum.recommendation}
+                                          </p>
+                                          {scrum.pairSuggestions && scrum.pairSuggestions.length > 0 && (
+                                            <div className="space-y-1 mt-1">
+                                              <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-600">Pair Suggestions:</span>
+                                              {scrum.pairSuggestions.map((p: any, idx: number) => (
+                                                <div key={idx} className="text-[10px] bg-indigo-50 rounded p-1.5 border border-indigo-100">
+                                                  <span className="font-semibold">{p.stuckUser}</span> ↔ <span className="font-semibold">{p.suggestedPeer}</span>
+                                                  <span className="text-indigo-600 block mt-0.5">{p.reason}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        {/* Member Insights Grid */}
+                                        {memberInsights.length > 0 && (
                                           <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
-                                            <div className="flex justify-between items-center text-xs">
-                                              <span className="text-[#09090b] font-semibold flex items-center gap-1.5 uppercase tracking-wider text-[10px]">
-                                                <span className="text-emerald-500">🟢</span> Room Summary
-                                              </span>
-                                              <span className="text-[#09090b] font-bold">{roomSummary.productivityPercentage}%</span>
-                                            </div>
-                                            <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
-                                              <div 
-                                                className="bg-emerald-500 h-full rounded-full transition-all duration-700" 
-                                                style={{ width: `${roomSummary.productivityPercentage}%` }}
-                                              />
-                                            </div>
-                                            <p className="text-xs text-[#52525b] mt-1 leading-normal">
-                                              {roomSummary.description}
-                                            </p>
-                                            <div className="flex gap-3 text-[10px] font-mono text-[#71717a] pt-1">
-                                              <span>• {roomSummary.activeCount} / {roomSummary.totalCount} developers active</span>
-                                              <span>• State synced</span>
+                                            <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
+                                              👥 Individual Member Analysis
+                                            </span>
+                                            <div className="space-y-1.5">
+                                              {memberInsights.map((mi: any, idx: number) => (
+                                                <div key={idx} className="flex items-center justify-between gap-2 p-2 bg-[#fafafa] rounded border border-[#e4e4e7]">
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-[11px] font-semibold text-[#09090b] truncate">{mi.name}</span>
+                                                      <span className={`text-[8px] px-1 py-0.5 rounded border font-semibold ${moodColors[mi.moodIndicator] || moodColors["offline"]}`}>
+                                                        {moodLabels[mi.moodIndicator] || "⭘ Offline"}
+                                                      </span>
+                                                    </div>
+                                                    <span className="text-[10px] text-[#71717a] block truncate">{mi.currentFocus}</span>
+                                                    <span className="text-[9px] text-[#a1a1aa] italic block mt-0.5">{mi.suggestion}</span>
+                                                  </div>
+                                                  <div className="text-right shrink-0">
+                                                    {mi.productivityScore >= 0 && (
+                                                      <>
+                                                        <span className={`text-xs font-bold block ${mi.productivityScore >= 60 ? "text-emerald-600" : mi.productivityScore >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
+                                                          {mi.productivityScore}%
+                                                        </span>
+                                                        <span className="text-[9px] text-[#a1a1aa] block">{mi.focusDuration}</span>
+                                                      </>
+                                                    )}
+                                                    {mi.productivityScore < 0 && (
+                                                      <span className="text-[9px] text-[#a1a1aa] italic">Private</span>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ))}
                                             </div>
                                           </div>
+                                        )}
 
-                                          {/* Top Performer */}
-                                          {topPerformer && topPerformer.name !== "None" && (
-                                            <div className="p-3 bg-amber-50/80 rounded-md border border-amber-200 space-y-1.5">
-                                              <div className="flex items-center justify-between">
-                                                <span className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
-                                                  🏆 Top Performer
-                                                </span>
-                                                <span className="text-[9px] bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
-                                                  Score: {topPerformer.score}%
-                                                </span>
-                                              </div>
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="font-semibold text-[#09090b]">{topPerformer.name}</span>
-                                                <span className="text-[#71717a] font-mono text-[10px]">Focus: {topPerformer.focusTime}</span>
-                                              </div>
+                                        {/* Top Performer */}
+                                        {topPerformer && topPerformer.name !== "None" && (
+                                          <div className="p-3 bg-amber-50/80 rounded-md border border-amber-200 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-[10px] font-semibold text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                                                🏆 Top Performer
+                                              </span>
+                                              <span className="text-[9px] bg-amber-200/60 text-amber-900 px-1.5 py-0.5 rounded font-semibold">
+                                                Score: {topPerformer.score}%
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="font-semibold text-[#09090b]">{topPerformer.name}</span>
+                                              <span className="text-[#71717a] font-mono text-[10px]">Focus: {topPerformer.focusTime}</span>
+                                            </div>
+                                            {topPerformer.apps && topPerformer.apps.length > 0 && (
                                               <div className="text-[10px] text-[#52525b]">
                                                 <span className="font-semibold text-[#09090b]">Apps: </span>
                                                 {topPerformer.apps.join(" • ")}
                                               </div>
-                                              <p className="text-[10px] italic text-amber-900 border-t border-amber-200/60 pt-1">
-                                                {topPerformer.reason}
-                                              </p>
+                                            )}
+                                            <p className="text-[10px] italic text-amber-900 border-t border-amber-200/60 pt-1">
+                                              {topPerformer.reason}
+                                            </p>
+                                          </div>
+                                        )}
+
+                                        {/* Needs Attention */}
+                                        {needsAttention && needsAttention.name !== "None" && (
+                                          <div className="p-3 bg-rose-50/80 rounded-md border border-rose-200 space-y-1">
+                                            <span className="text-[10px] font-semibold text-rose-800 uppercase tracking-wider block">
+                                              ⚠️ Needs Attention
+                                            </span>
+                                            <div className="flex items-center justify-between text-xs">
+                                              <span className="font-semibold text-[#09090b]">{needsAttention.name}</span>
+                                              <span className="text-rose-700 font-mono text-[10px]">{needsAttention.idleTime}</span>
+                                            </div>
+                                            <p className="text-[10px] text-rose-900 leading-normal">
+                                              {needsAttention.reason}
+                                            </p>
+                                          </div>
+                                        )}
+
+                                        {/* Welfare Coach */}
+                                        <div className="p-2.5 bg-sky-50/60 rounded-md border border-sky-200 space-y-1">
+                                          <span className="text-[10px] font-semibold text-sky-800 uppercase tracking-wider block">
+                                            🩺 Welfare & Productivity Coach
+                                          </span>
+                                          <p className="text-[10px] text-sky-900 leading-normal">
+                                            {welfare.ergonomicNudge}
+                                          </p>
+                                          {welfare.targetUsers && welfare.targetUsers.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                              {welfare.targetUsers.map((u: string, i: number) => (
+                                                <span key={i} className="text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded font-medium">{u}</span>
+                                              ))}
                                             </div>
                                           )}
+                                        </div>
 
-                                          {/* Needs Attention */}
-                                          {needsAttention && needsAttention.name !== "None" && (
-                                            <div className="p-3 bg-rose-50/80 rounded-md border border-rose-200 space-y-1">
-                                              <span className="text-[10px] font-semibold text-rose-800 uppercase tracking-wider block">
-                                                ⚠️ Needs Attention
+                                        {/* Focus Patterns */}
+                                        <div className="space-y-1.5 pb-2.5 border-b border-[#e4e4e7]">
+                                          <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
+                                            📊 Focus Patterns
+                                          </span>
+                                          <div className="grid grid-cols-2 gap-1.5">
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Deep Work Streak</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.deepWorkStreak}m</span>
+                                            </div>
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Context Switches</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.contextSwitchCount}</span>
+                                            </div>
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Peak Window</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.peakProductivityWindow}</span>
+                                            </div>
+                                            <div className="text-[10px] bg-[#fafafa] rounded p-1.5 border border-[#e4e4e7]">
+                                              <span className="text-[#71717a] block">Avg Session</span>
+                                              <span className="font-semibold text-[#09090b]">{focusPatterns.averageSessionLength}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        {/* Recommendations */}
+                                        {recommendations && recommendations.length > 0 && (
+                                          <div className="space-y-1">
+                                            <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
+                                              🤖 AI Recommendations
+                                            </span>
+                                            <ul className="space-y-1 pl-1">
+                                              {recommendations.map((rec: string, idx: number) => (
+                                                <li key={idx} className="flex items-start text-[11px] text-[#09090b]">
+                                                  <span className="text-blue-600 mr-1.5">•</span>
+                                                  <span>{rec}</span>
+                                                </li>
+                                              ))}
+                                            </ul>
+                                          </div>
+                                        )}
+
+                                        {/* Prediction */}
+                                        {prediction && (
+                                          <div className="space-y-1 pt-2 border-t border-[#e4e4e7]">
+                                            <div className="flex justify-between items-center text-xs">
+                                              <span className="text-[#09090b] font-semibold uppercase tracking-wider text-[10px]">
+                                                🔮 Daily Goal Prediction
                                               </span>
-                                              <div className="flex items-center justify-between text-xs">
-                                                <span className="font-semibold text-[#09090b]">{needsAttention.name}</span>
-                                                <span className="text-rose-700 font-mono text-[10px]">Idle: {needsAttention.idleTime}</span>
-                                              </div>
-                                              <p className="text-[10px] text-rose-900 leading-normal">
-                                                {needsAttention.reason}
-                                              </p>
+                                              <span className="text-[#09090b] font-bold">{prediction.completionPercentage}%</span>
                                             </div>
-                                          )}
-
-                                          {/* Recommendations */}
-                                          {recommendations && recommendations.length > 0 && (
-                                            <div className="space-y-1">
-                                              <span className="text-[10px] font-semibold text-[#09090b] uppercase tracking-wider block">
-                                                🤖 AI Recommendations
-                                              </span>
-                                              <ul className="space-y-1 pl-1">
-                                                {recommendations.map((rec: string, idx: number) => (
-                                                  <li key={idx} className="flex items-start text-[11px] text-[#09090b]">
-                                                    <span className="text-blue-600 mr-1.5">•</span>
-                                                    <span>{rec}</span>
-                                                  </li>
-                                                ))}
-                                              </ul>
+                                            <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
+                                              <div 
+                                                className="bg-indigo-600 h-full rounded-full transition-all duration-700" 
+                                                style={{ width: `${prediction.completionPercentage}%` }}
+                                              />
                                             </div>
-                                          )}
+                                            <p className="text-[10px] text-[#71717a] italic">
+                                              {prediction.description}
+                                            </p>
+                                          </div>
+                                        )}
 
-                                          {/* Prediction */}
-                                          {prediction && (
-                                            <div className="space-y-1 pt-2 border-t border-[#e4e4e7]">
-                                              <div className="flex justify-between items-center text-xs">
-                                                <span className="text-[#09090b] font-semibold uppercase tracking-wider text-[10px]">
-                                                  🔮 Estimated Room Completion
-                                                </span>
-                                                <span className="text-[#09090b] font-bold">{prediction.completionPercentage}%</span>
-                                              </div>
-                                              <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
-                                                <div 
-                                                  className="bg-indigo-600 h-full rounded-full transition-all duration-700" 
-                                                  style={{ width: `${prediction.completionPercentage}%` }}
-                                                />
-                                              </div>
-                                              <p className="text-[10px] text-[#71717a] italic">
-                                                {prediction.description}
-                                              </p>
-                                            </div>
-                                          )}
-
-                                          {/* Summary */}
-                                          <div className="pt-2 border-t border-[#e4e4e7] text-[11px] text-[#52525b] italic font-sans leading-normal">
+                                        {/* Summary Footer */}
+                                        <div className="pt-2 border-t border-[#e4e4e7]">
+                                          <p className="text-[11px] text-[#52525b] italic font-sans leading-normal">
                                             {summary}
+                                          </p>
+                                          <div className="flex items-center gap-2 mt-1.5">
+                                            <span className="text-[8px] font-mono text-[#a1a1aa]">
+                                              {aiInsights.isFallback ? "⚙ Heuristic Engine" : "✦ Gemini AI"} • {new Date(aiInsights.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
                                           </div>
                                         </div>
                                       </div>
-                                    );
-                                  }
-
-                                  // Fallback to original text rendering if JSON parse failed
-                                  return (
-                                    <div className="text-xs leading-relaxed font-sans max-h-36 overflow-y-auto pr-1 text-[#09090b] bg-white rounded-md p-3 border border-[#e4e4e7]">
-                                      {aiInsights.split("\n").slice(0, 8).map((line, idx) => {
-                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
-                                          return (
-                                            <h5 key={idx} className="text-[#09090b] font-bold text-xs mt-2 mb-1">
-                                              {line.replace(/[\*#]/g, "").trim()}
-                                            </h5>
-                                          );
-                                        }
-                                        return (
-                                          <p key={idx} className="mb-1 text-[#52525b]">
-                                            {line.startsWith("-") || line.startsWith("*") ? (
-                                              <span className="flex items-start">
-                                                <span className="text-amber-600 mr-1.5">•</span>
-                                                <span>{line.substring(2).trim()}</span>
-                                              </span>
-                                            ) : line}
-                                          </p>
-                                        );
-                                      })}
                                     </div>
                                   );
                                 })() : (
@@ -3700,17 +3666,17 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="studio-card studio-card-indigo p-5">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Average Daily Focus</span>
-                      <div className="text-3xl font-bold text-[#09090b]">{analytics.averageDailyFocus} hrs</div>
+                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.averageDailyFocus} decimals={1} /> hrs</div>
                       <p className="text-[10px] text-[#71717a] font-mono mt-1">Calculated on active window durations</p>
                     </div>
                     <div className="studio-card studio-card-emerald p-5">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Daily Focus Goal</span>
-                      <div className="text-3xl font-bold text-[#09090b]">{user?.productivityGoal || 6} hrs</div>
+                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                       <p className="text-[10px] text-[#71717a] font-mono mt-1">Configured target parameters</p>
                     </div>
                     <div className="studio-card studio-card-amber p-5">
                       <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Weekly Goal Achievement</span>
-                      <div className="text-3xl font-bold text-[#09090b]">{analytics.weeklyProdGoalAchieved}%</div>
+                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.weeklyProdGoalAchieved} />%</div>
                       <p className="text-[10px] text-[#71717a] font-mono mt-1">Goal compliance indicator</p>
                     </div>
                   </div>
@@ -3777,13 +3743,20 @@ export default function App() {
                             const colors = ["#2563eb", "#10b981", "#d97706", "#8b5cf6", "#ec4899", "#64748b", "#06b6d4", "#f97316"];
                             const color = item.color || colors[id % colors.length];
                             return (
-                              <div key={id} className="flex justify-between items-center text-xs p-1.5 rounded hover:bg-[#f4f4f5] transition-colors">
+                              <motion.div 
+                                key={id} 
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: id * 0.05, type: "spring", stiffness: 300 }}
+                                whileHover={{ scale: 1.02, x: 5, backgroundColor: "#f4f4f5" }}
+                                className="flex justify-between items-center text-xs p-1.5 rounded transition-colors cursor-default"
+                              >
                                 <div className="flex items-center space-x-2">
                                   <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
                                   <span className="font-semibold text-[#09090b]">{item.name}</span>
                                 </div>
-                                <span className="font-mono text-xs font-bold text-[#09090b]">{item.value}%</span>
-                              </div>
+                                <span className="font-mono text-xs font-bold text-[#09090b]"><NumberTicker value={item.value} />%</span>
+                              </motion.div>
                             );
                           })}
                         </div>
@@ -3801,23 +3774,31 @@ export default function App() {
 
                       <div className="space-y-3.5 pt-1">
                         {analytics.focusScoreHistory.map((item, id) => (
-                          <div key={id} className="space-y-1">
+                          <motion.div 
+                            key={id} 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: id * 0.1, type: "spring", stiffness: 200 }}
+                            className="space-y-1"
+                          >
                             <div className="flex justify-between items-center text-xs">
                               <span className="font-semibold text-[#09090b]">{item.day}</span>
-                              <span className="font-mono text-[11px] text-[#71717a]">score: <strong className="text-[#09090b]">{item.score}%</strong> / ideal {item.ideal}%</span>
+                              <span className="font-mono text-[11px] text-[#71717a]">score: <strong className="text-[#09090b]"><NumberTicker value={item.score} />%</strong> / ideal {item.ideal}%</span>
                             </div>
                             <div className="h-2.5 w-full bg-[#f4f4f5] rounded-full border border-[#e4e4e7] overflow-hidden relative">
-                              <div
-                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-500"
-                                style={{ width: `${item.score}%` }}
-                              ></div>
+                              <motion.div
+                                initial={{ width: 0 }}
+                                animate={{ width: `${item.score}%` }}
+                                transition={{ duration: 1, delay: 0.2 + (id * 0.1), ease: "easeOut" }}
+                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"
+                              ></motion.div>
                               <div
                                 className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10"
                                 style={{ left: `${item.ideal}%` }}
                                 title="Goal baseline margin"
                               ></div>
                             </div>
-                          </div>
+                          </motion.div>
                         ))}
                       </div>
                     </div>
@@ -4214,6 +4195,69 @@ export default function App() {
                           );
                         })}
                       </div>
+
+                      {/* Public Rooms Directory Search */}
+                      <div className="mt-12 space-y-6 pt-8 border-t border-[#e4e4e7]">
+                        <div className="space-y-1">
+                          <h3 className="text-xl font-bold text-[#09090b] tracking-tight">Discover Public Rooms</h3>
+                          <p className="text-xs text-[#71717a]">
+                            Search for open guilds and teams to join across the EndoCore workspace.
+                          </p>
+                        </div>
+                        
+                        <div className="flex space-x-3">
+                          <input
+                            type="text"
+                            placeholder="Search by room name or description..."
+                            value={directoryQuery}
+                            onChange={(e) => {
+                              setDirectoryQuery(e.target.value);
+                              searchDirectory(e.target.value);
+                            }}
+                            className={`flex-1 rounded-xl px-4 py-3 text-sm font-sans ${formInput} transition-all`}
+                          />
+                          <button
+                            onClick={() => searchDirectory(directoryQuery)}
+                            className="px-6 py-3 bg-[#09090b] hover:bg-[#27272a] text-white font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center"
+                          >
+                            {isSearchingDirectory ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+                          {directoryGroups.length === 0 && !isSearchingDirectory ? (
+                            <div className="col-span-1 md:col-span-2 p-8 text-center text-sm font-mono text-[#71717a] bg-zinc-50 rounded-xl border border-dashed border-[#e4e4e7]">
+                              No public rooms available to join right now.
+                            </div>
+                          ) : (
+                            directoryGroups.map(group => (
+                              <div
+                                key={group.id}
+                                className="p-6 bg-white border border-[#e4e4e7] rounded-2xl flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
+                              >
+                                <div className="space-y-2">
+                                  <div className="flex items-start justify-between">
+                                    <h4 className="text-md font-bold text-[#09090b] tracking-tight">{group.name}</h4>
+                                    <span className="text-[10px] font-mono font-semibold tracking-wider uppercase px-2 py-1 rounded bg-zinc-100 text-zinc-600">
+                                      {group.accessType === "REQUIRE_APPROVAL" ? "Approval Req." : "Public"}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-[#71717a] font-mono leading-relaxed line-clamp-2">{group.description}</p>
+                                </div>
+                                <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
+                                  <span className="text-xs font-mono text-zinc-500">{group.memberCount} members</span>
+                                  <button
+                                    onClick={() => joinRoom(group.id)}
+                                    className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 font-bold text-[10px] rounded-lg shadow-sm font-mono uppercase tracking-wider transition-all cursor-pointer"
+                                  >
+                                    Join Room
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -4295,16 +4339,14 @@ export default function App() {
                                 </div>
 
                                 {loadingInsights ? (
-                                  <div className="space-y-4 py-2">
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-1/4 animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-full animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-5/6 animate-pulse"></div>
-                                    <span className="text-[10px] font-mono text-stone-500">Retrieving intelligence briefs...</span>
+                                  <div className="py-2">
+                                    <SkeletonLoader lines={3} />
+                                    <span className="text-[10px] font-mono text-stone-500 mt-4 block">Retrieving intelligence briefs...</span>
                                   </div>
                                 ) : (
                                   <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
-                                    {aiInsights ? (
-                                      aiInsights.split("\n").map((line, idx) => {
+                                    {aiInsights && aiInsights.text ? (
+                                      aiInsights.text.split("\n").map((line: string, idx: number) => {
                                         if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
                                           return (
                                             <h4 key={idx} className="text-zinc-800 dark:text-[#c4b69d] font-serif italic text-sm font-bold mt-4 mb-2">
@@ -4312,12 +4354,13 @@ export default function App() {
                                             </h4>
                                           );
                                         }
+                                        if (!line.trim()) return null;
                                         return (
                                           <p key={idx} className={`pl-1 leading-relaxed ${textSub}`}>
-                                            {line.startsWith("-") || line.startsWith("*") ? (
+                                            {line.startsWith("-") || line.startsWith("*") || line.startsWith("•") ? (
                                               <span className="flex items-start">
                                                 <span className="text-neutral-400 dark:text-[#a5957b] mr-2">•</span>
-                                                <span>{line.substring(2).trim()}</span>
+                                                <span>{line.replace(/^[-*•]\s*/, "").trim()}</span>
                                               </span>
                                             ) : line}
                                           </p>
@@ -4461,7 +4504,7 @@ export default function App() {
                                 <p className={`text-xs ${textSub}`}>Real-time focus and system app state transitions streamed from room workstations.</p>
                               </div>
 
-                              <div className="terminal-window p-0 max-h-96 overflow-hidden">
+                              <div className="bg-[#09090b] rounded-2xl shadow-lg border border-[#27272a] p-0 max-h-96 overflow-hidden">
                                 {/* macOS-style window header */}
                                 <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
                                   <span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" />
@@ -4470,24 +4513,33 @@ export default function App() {
                                   <span className="ml-3 text-[10px] text-white/30 font-mono tracking-widest">// rtime-pipeline · live stream</span>
                                 </div>
                                 <div className="p-5 font-mono text-xs space-y-2.5 max-h-80 overflow-y-auto">
-                                  {friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name }))).length > 0 ? (
-                                    friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name })))
-                                      .sort((a, b) => b.time.localeCompare(a.time))
-                                      .map((evt, idx) => (
-                                        <div key={idx} className="flex justify-between items-center py-1.5 border-b border-white/[0.04]">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="text-white/30">[{evt.time}]</span>
-                                            <span className="text-violet-400 font-semibold">{evt.name}</span>
-                                            <span className="text-white/40">active:</span>
-                                            <span className="text-emerald-400 font-bold">{evt.app}</span>
-                                            <span className="text-white/30">— {evt.project}</span>
-                                          </div>
-                                          <span className="text-white/25 shrink-0 ml-3">{evt.duration}</span>
-                                        </div>
-                                      ))
-                                  ) : (
-                                    <div className="text-white/30 italic py-4 text-center">No workspace event streams compiled.</div>
-                                  )}
+                                  <AnimatePresence initial={false}>
+                                    {friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name }))).length > 0 ? (
+                                      friends.flatMap(f => f.timeline.map(t => ({ ...t, name: f.name })))
+                                        .sort((a, b) => b.time.localeCompare(a.time))
+                                        .map((evt, idx) => (
+                                          <motion.div 
+                                            key={`${evt.name}-${evt.time}-${idx}`}
+                                            layout
+                                            initial={{ opacity: 0, x: -20, backgroundColor: "rgba(16, 185, 129, 0.2)" }}
+                                            animate={{ opacity: 1, x: 0, backgroundColor: "rgba(0, 0, 0, 0)" }}
+                                            transition={{ duration: 0.4 }}
+                                            className="flex justify-between items-center py-1.5 border-b border-white/[0.04]"
+                                          >
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="text-white/30">[{evt.time}]</span>
+                                              <span className="text-violet-400 font-semibold">{evt.name}</span>
+                                              <span className="text-white/40">active:</span>
+                                              <span className="text-emerald-400 font-bold">{evt.app}</span>
+                                              <span className="text-white/30">— {evt.project}</span>
+                                            </div>
+                                            <span className="text-white/25 shrink-0 ml-3">{evt.duration}</span>
+                                          </motion.div>
+                                        ))
+                                    ) : (
+                                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-white/30 italic py-4 text-center">No workspace event streams compiled.</motion.div>
+                                    )}
+                                  </AnimatePresence>
                                 </div>
                               </div>
                             </div>
@@ -4512,41 +4564,56 @@ export default function App() {
                                   <div className="flex items-end justify-center pt-8 pb-4 max-w-md mx-auto">
                                     {/* 2nd Place */}
                                     {roomLeaderboard[1] && (
-                                      <div className="flex flex-col items-center space-y-2 flex-1">
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 50 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
+                                        className="flex flex-col items-center space-y-2 flex-1"
+                                      >
                                         <img src={roomLeaderboard[1].avatarUrl} className="h-10 w-10 rounded-full border border-neutral-700 object-cover" />
-                                        <span className="text-xs font-semibold truncate max-w-[80px]">{roomLeaderboard[1].name}</span>
+                                        <span className="text-xs font-semibold truncate max-w-[80px] text-stone-900 dark:text-white">{roomLeaderboard[1].name}</span>
                                         <div className={`w-full h-24 ${themeMode === 'dark' ? 'bg-zinc-800/60' : 'bg-neutral-200'} rounded-t-xl flex flex-col items-center justify-center border-t border-x dark:border-neutral-700`}>
                                           <span className="text-xl font-bold font-serif italic text-stone-400">2nd</span>
-                                          <span className="text-[10px] font-mono text-stone-500">{roomLeaderboard[1].hours}h</span>
+                                          <span className="text-[10px] font-mono text-stone-500"><NumberTicker value={roomLeaderboard[1].hours} decimals={1} />h</span>
                                         </div>
-                                      </div>
+                                      </motion.div>
                                     )}
 
                                     {/* 1st Place */}
                                     {roomLeaderboard[0] && (
-                                      <div className="flex flex-col items-center space-y-2 flex-1">
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 80 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.5, type: "spring", stiffness: 200 }}
+                                        className="flex flex-col items-center space-y-2 flex-1"
+                                      >
                                         <div className="relative">
                                           <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-lg">👑</span>
                                           <img src={roomLeaderboard[0].avatarUrl} className="h-12 w-12 rounded-full border-2 border-amber-400 object-cover" />
                                         </div>
-                                        <span className="text-xs font-semibold truncate max-w-[80px]">{roomLeaderboard[0].name}</span>
+                                        <span className="text-xs font-semibold truncate max-w-[80px] text-stone-900 dark:text-white">{roomLeaderboard[0].name}</span>
                                         <div className={`w-full h-32 ${themeMode === 'dark' ? 'bg-zinc-850' : 'bg-neutral-350'} rounded-t-xl flex flex-col items-center justify-center border-t border-x dark:border-amber-400/50`}>
                                           <span className="text-2xl font-bold font-serif italic text-amber-500">1st</span>
-                                          <span className="text-[10px] font-mono text-stone-500">{roomLeaderboard[0].hours}h</span>
+                                          <span className="text-[10px] font-mono text-stone-500"><NumberTicker value={roomLeaderboard[0].hours} decimals={1} />h</span>
                                         </div>
-                                      </div>
+                                      </motion.div>
                                     )}
 
                                     {/* 3rd Place */}
                                     {roomLeaderboard[2] && (
-                                      <div className="flex flex-col items-center space-y-2 flex-1">
+                                      <motion.div 
+                                        initial={{ opacity: 0, y: 30 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                                        className="flex flex-col items-center space-y-2 flex-1"
+                                      >
                                         <img src={roomLeaderboard[2].avatarUrl} className="h-10 w-10 rounded-full border border-neutral-700 object-cover" />
-                                        <span className="text-xs font-semibold truncate max-w-[80px]">{roomLeaderboard[2].name}</span>
+                                        <span className="text-xs font-semibold truncate max-w-[80px] text-stone-900 dark:text-white">{roomLeaderboard[2].name}</span>
                                         <div className={`w-full h-18 ${themeMode === 'dark' ? 'bg-zinc-800/40' : 'bg-neutral-100'} rounded-t-xl flex flex-col items-center justify-center border-t border-x dark:border-neutral-800`}>
                                           <span className="text-base font-bold font-serif italic text-amber-700">3rd</span>
-                                          <span className="text-[10px] font-mono text-stone-500">{roomLeaderboard[2].hours}h</span>
+                                          <span className="text-[10px] font-mono text-stone-500"><NumberTicker value={roomLeaderboard[2].hours} decimals={1} />h</span>
                                         </div>
-                                      </div>
+                                      </motion.div>
                                     )}
                                   </div>
 
@@ -4555,14 +4622,20 @@ export default function App() {
                                     <h4 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">Rankings Overview</h4>
                                     <div className="space-y-3 font-mono text-xs">
                                       {roomLeaderboard.map((peer, idx) => (
-                                        <div key={idx} className="flex justify-between items-center py-2.5 border-b dark:border-neutral-850 border-stone-200/50">
+                                        <motion.div 
+                                          key={idx} 
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          transition={{ delay: 0.6 + (idx * 0.05), type: "spring", stiffness: 300 }}
+                                          className="flex justify-between items-center py-2.5 border-b dark:border-neutral-850 border-stone-200/50"
+                                        >
                                           <div className="flex items-center space-x-3">
                                             <span className="text-stone-500">0{idx + 1}.</span>
                                             <img src={peer.avatarUrl} className="h-6 w-6 rounded-full object-cover" />
-                                            <span className="font-semibold text-stone-300 dark:text-white leading-none">{peer.name}</span>
+                                            <span className="font-semibold text-stone-900 dark:text-white leading-none">{peer.name}</span>
                                           </div>
-                                          <span className="text-stone-500">hours: {peer.hours}h</span>
-                                        </div>
+                                          <span className="text-stone-500">hours: <NumberTicker value={peer.hours} decimals={1} />h</span>
+                                        </motion.div>
                                       ))}
                                     </div>
                                   </div>
@@ -4594,38 +4667,154 @@ export default function App() {
 
                               <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} relative overflow-hidden`}>
                                 {loadingInsights ? (
-                                  <div className="space-y-4 py-2">
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-1/4 animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-full animate-pulse"></div>
-                                    <div className="h-3 bg-stone-300/10 dark:bg-zinc-800/50 rounded w-5/6 animate-pulse"></div>
-                                    <span className="text-[10px] font-mono text-stone-500">Retrieving intelligence briefs...</span>
+                                  <div className="py-2">
+                                    <SkeletonLoader lines={3} />
+                                    <span className="text-[10px] font-mono text-stone-500 mt-4 block">Retrieving intelligence briefs...</span>
+                                  </div>
+                                ) : aiInsights && aiInsights.success ? (
+                                  <div className="text-xs space-y-5 leading-relaxed font-sans mt-2">
+                                    {/* Summary */}
+                                    <div className="space-y-2">
+                                      <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Executive Summary</h4>
+                                      <p className={`leading-relaxed ${textSub}`}>{aiInsights.summary}</p>
+                                    </div>
+
+                                    {/* Room Status */}
+                                    {aiInsights.roomSummary && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Room Analysis — {aiInsights.roomSummary.status}</h4>
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex-1">
+                                            <div className={`w-full rounded-full h-2 overflow-hidden ${themeMode === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                              <div className={`h-full rounded-full transition-all duration-700 ${aiInsights.roomSummary.productivityPercentage >= 60 ? 'bg-emerald-500' : aiInsights.roomSummary.productivityPercentage >= 30 ? 'bg-amber-500' : 'bg-zinc-400'}`} style={{ width: `${aiInsights.roomSummary.productivityPercentage}%` }} />
+                                            </div>
+                                          </div>
+                                          <span className="text-sm font-bold">{aiInsights.roomSummary.productivityPercentage}%</span>
+                                        </div>
+                                        <p className={textSub}>{aiInsights.roomSummary.description}</p>
+                                        <span className={`text-[10px] font-mono ${textSub}`}>{aiInsights.roomSummary.activeCount} / {aiInsights.roomSummary.totalCount} developers active</span>
+                                      </div>
+                                    )}
+
+                                    {/* Member Insights */}
+                                    {aiInsights.memberInsights && aiInsights.memberInsights.length > 0 && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Individual Member Analysis</h4>
+                                        <div className="space-y-2">
+                                          {aiInsights.memberInsights.map((mi: any, idx: number) => (
+                                            <div key={idx} className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${themeMode === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                                              <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                  <span className="font-semibold truncate">{mi.name}</span>
+                                                  <span className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold ${
+                                                    mi.moodIndicator === 'deep_work' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' :
+                                                    mi.moodIndicator === 'focused' ? 'bg-blue-100 text-blue-700 border-blue-200' :
+                                                    mi.moodIndicator === 'idle' ? 'bg-amber-100 text-amber-700 border-amber-200' :
+                                                    'bg-zinc-100 text-zinc-500 border-zinc-200'
+                                                  }`}>
+                                                    {mi.moodIndicator === 'deep_work' ? '🧠 Deep Work' : mi.moodIndicator === 'focused' ? '🎯 Focused' : mi.moodIndicator === 'idle' ? '💤 Idle' : '⭘ Offline'}
+                                                  </span>
+                                                </div>
+                                                <span className={`text-[10px] block mt-0.5 ${textSub}`}>{mi.currentFocus}</span>
+                                                <span className={`text-[10px] italic block mt-0.5 ${textSub}`}>{mi.suggestion}</span>
+                                              </div>
+                                              <div className="text-right shrink-0">
+                                                <span className={`text-sm font-bold ${mi.productivityScore >= 60 ? 'text-emerald-500' : mi.productivityScore >= 30 ? 'text-amber-500' : 'text-zinc-400'}`}>{mi.productivityScore >= 0 ? `${mi.productivityScore}%` : 'Private'}</span>
+                                                <span className={`text-[9px] block ${textSub}`}>{mi.focusDuration}</span>
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Scrum Coordinator */}
+                                    {aiInsights.agents?.scrumCoordinator && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Scrum Coordinator Agent</h4>
+                                        <div className="flex items-center gap-2">
+                                          <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${aiInsights.agents.scrumCoordinator.status === 'Optimal Alignment' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{aiInsights.agents.scrumCoordinator.status}</span>
+                                        </div>
+                                        <p className={textSub}>{aiInsights.agents.scrumCoordinator.recommendation}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Welfare Coach */}
+                                    {aiInsights.agents?.welfareCoach && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Welfare & Productivity Coach</h4>
+                                        <div className="flex items-center gap-3">
+                                          <span className={textSub}>Burnout Risk:</span>
+                                          <span className={`font-bold ${aiInsights.agents.welfareCoach.burnoutRiskIndex > 60 ? 'text-red-500' : aiInsights.agents.welfareCoach.burnoutRiskIndex > 30 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiInsights.agents.welfareCoach.burnoutRiskIndex}/100</span>
+                                        </div>
+                                        <p className={textSub}>{aiInsights.agents.welfareCoach.ergonomicNudge}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Recommendations */}
+                                    {aiInsights.recommendations && aiInsights.recommendations.length > 0 && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>AI Recommendations</h4>
+                                        <ul className="space-y-1.5">
+                                          {aiInsights.recommendations.map((rec: string, idx: number) => (
+                                            <li key={idx} className={`flex items-start ${textSub}`}>
+                                              <span className="text-blue-500 mr-2">•</span>
+                                              <span>{rec}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                    {/* Focus Patterns */}
+                                    {aiInsights.focusPatterns && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Focus Pattern Analysis</h4>
+                                        <div className="grid grid-cols-2 gap-2">
+                                          {[
+                                            { label: 'Deep Work Streak', value: `${aiInsights.focusPatterns.deepWorkStreak}m` },
+                                            { label: 'Context Switches', value: aiInsights.focusPatterns.contextSwitchCount },
+                                            { label: 'Peak Window', value: aiInsights.focusPatterns.peakProductivityWindow },
+                                            { label: 'Avg Session', value: aiInsights.focusPatterns.averageSessionLength },
+                                          ].map((item, idx) => (
+                                            <div key={idx} className={`p-2.5 rounded-lg border ${themeMode === 'dark' ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                                              <span className={`text-[9px] uppercase tracking-wider block ${textSub}`}>{item.label}</span>
+                                              <span className="text-sm font-semibold block mt-0.5">{item.value}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <p className={textSub}>Flow State: {aiInsights.focusPatterns.flowStateDetected ? '✅ Detected in current session' : '❌ Not detected yet'}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Prediction */}
+                                    {aiInsights.prediction && (
+                                      <div className="space-y-2">
+                                        <h4 className={`font-serif italic text-sm font-bold ${themeMode === 'dark' ? 'text-[#c4b69d]' : 'text-zinc-800'}`}>Daily Completion Prediction</h4>
+                                        <div className="flex items-center gap-3">
+                                          <div className="flex-1">
+                                            <div className={`w-full rounded-full h-2 overflow-hidden ${themeMode === 'dark' ? 'bg-zinc-800' : 'bg-zinc-200'}`}>
+                                              <div className="bg-indigo-500 h-full rounded-full transition-all duration-700" style={{ width: `${aiInsights.prediction.completionPercentage}%` }} />
+                                            </div>
+                                          </div>
+                                          <span className="text-sm font-bold">{aiInsights.prediction.completionPercentage}%</span>
+                                        </div>
+                                        <p className={`italic ${textSub}`}>{aiInsights.prediction.description}</p>
+                                      </div>
+                                    )}
+
+                                    {/* Footer */}
+                                    <div className={`pt-3 border-t ${themeMode === 'dark' ? 'border-zinc-800' : 'border-zinc-200'} flex items-center justify-between`}>
+                                      <span className={`text-[9px] font-mono ${textSub}`}>
+                                        {aiInsights.isFallback ? '⚙ Heuristic Engine' : '✦ Gemini AI'} • Collaboration: {aiInsights.collaborationScore}/100
+                                      </span>
+                                      <span className={`text-[9px] font-mono ${textSub}`}>
+                                        {new Date(aiInsights.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
                                   </div>
                                 ) : (
-                                  <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
-                                    {aiInsights ? (
-                                      aiInsights.split("\n").map((line, idx) => {
-                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
-                                          return (
-                                            <h4 key={idx} className="text-zinc-800 dark:text-[#c4b69d] font-serif italic text-sm font-bold mt-4 mb-2">
-                                              {line.replace(/[\*#]/g, "").trim()}
-                                            </h4>
-                                          );
-                                        }
-                                        return (
-                                          <p key={idx} className={`pl-1 leading-relaxed ${textSub}`}>
-                                            {line.startsWith("-") || line.startsWith("*") ? (
-                                              <span className="flex items-start">
-                                                <span className="text-neutral-400 dark:text-[#a5957b] mr-2">•</span>
-                                                <span>{line.substring(2).trim()}</span>
-                                              </span>
-                                            ) : line}
-                                          </p>
-                                        );
-                                      })
-                                    ) : (
-                                      <p className="text-stone-500 text-xs italic">No co-working briefing stored. Click reload icon above to fetch.</p>
-                                    )}
-                                  </div>
+                                  <p className="text-stone-500 text-xs italic">No co-working briefing stored. Click reload icon above to fetch.</p>
                                 )}
                               </div>
                             </div>
@@ -4801,9 +4990,9 @@ export default function App() {
                                   className="h-10 w-10 rounded-full object-cover shrink-0"
                                 />
                                 <div className="min-w-0">
-                                  <h4 className="text-xs font-semibold text-white truncate">{userItem.name}</h4>
-                                  <p className="text-[10px] font-mono text-amber-400/90 truncate">{userItem.email}</p>
-                                  <p className="text-[10px] font-mono text-stone-500 truncate">@{userItem.username}</p>
+                                  <h4 className="text-xs font-semibold text-stone-900 dark:text-white truncate">{userItem.name}</h4>
+                                  <p className="text-[10px] font-mono text-stone-500 dark:text-amber-400/90 truncate">{userItem.email}</p>
+                                  <p className="text-[10px] font-mono text-stone-400 dark:text-stone-500 truncate">@{userItem.username}</p>
                                 </div>
                               </div>
 
@@ -4864,41 +5053,51 @@ export default function App() {
                   {/* Incoming Challenge Invites Bar */}
                   {incomingChallenges.length > 0 && (
                     <div className="space-y-4">
-                      {incomingChallenges.map((chal) => (
-                        <div key={chal.challengeId} className="p-6 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="space-y-1">
-                            <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 block font-bold">// Incoming 1v1 Challenge Invite</span>
-                            <h4 className="text-sm font-semibold text-white">
-                              {chal.creator.name} has challenged you to a {chal.durationMinutes}m {chal.challengeMode.replace("_", " ")} session!
-                            </h4>
-                            <p className="text-xs text-stone-400 italic">Objective: "{chal.creatorObjective || "Co-focus Pomodoro Sprints"}"</p>
-                          </div>
-
-                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                            <input
-                              type="text"
-                              placeholder="Your objective..."
-                              value={challengeObjectiveInput}
-                              onChange={(e) => setChallengeObjectiveInput(e.target.value)}
-                              className={`rounded-xl px-4 py-2.5 text-xs ${formInput}`}
-                            />
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => respondFocusChallenge(chal.challengeId, "accept", challengeObjectiveInput)}
-                                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-mono uppercase font-semibold cursor-pointer transition-all"
-                              >
-                                Accept
-                              </button>
-                              <button
-                                onClick={() => respondFocusChallenge(chal.challengeId, "decline", "")}
-                                className="px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-xl text-xs font-mono uppercase cursor-pointer transition-all border border-stone-700"
-                              >
-                                Decline
-                              </button>
+                      <AnimatePresence>
+                        {incomingChallenges.map((chal) => (
+                          <motion.div 
+                            key={chal.challengeId} 
+                            layout
+                            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            className="p-6 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4 origin-top"
+                          >
+                            <div className="space-y-1">
+                              <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 block font-bold">// Incoming 1v1 Challenge Invite</span>
+                              <h4 className="text-sm font-semibold text-stone-900 dark:text-white">
+                                {chal.creator.name} has challenged you to a {chal.durationMinutes}m {chal.challengeMode.replace("_", " ")} session!
+                              </h4>
+                              <p className="text-xs text-stone-400 italic">Objective: "{chal.creatorObjective || "Co-focus Pomodoro Sprints"}"</p>
                             </div>
-                          </div>
-                        </div>
-                      ))}
+
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                              <input
+                                type="text"
+                                placeholder="Your objective..."
+                                value={challengeObjectiveInput}
+                                onChange={(e) => setChallengeObjectiveInput(e.target.value)}
+                                className={`rounded-xl px-4 py-2.5 text-xs ${formInput}`}
+                              />
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => respondFocusChallenge(chal.challengeId, "accept", challengeObjectiveInput)}
+                                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-mono uppercase font-semibold cursor-pointer transition-all"
+                                >
+                                  Accept
+                                </button>
+                                <button
+                                  onClick={() => respondFocusChallenge(chal.challengeId, "decline", "")}
+                                  className="px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-xl text-xs font-mono uppercase cursor-pointer transition-all border border-stone-700"
+                                >
+                                  Decline
+                                </button>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   )}
 
@@ -4917,12 +5116,20 @@ export default function App() {
                           </h3>
                         </div>
 
-                        <button
-                          onClick={() => cancelFocusChallenge(activeChallenge.challengeId)}
-                          className="px-4 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
-                        >
-                          Terminate Challenge
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => completeFocusChallenge(activeChallenge.challengeId)}
+                            className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
+                          >
+                            Finish Objective First 🏆
+                          </button>
+                          <button
+                            onClick={() => cancelFocusChallenge(activeChallenge.challengeId)}
+                            className="px-4 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
+                          >
+                            Terminate
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
@@ -5002,7 +5209,7 @@ export default function App() {
                                       <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${themeMode === 'dark' ? 'border-[#121215]' : 'border-white'} ${statusColor}`}></span>
                                     </div>
                                     <div className="min-w-0">
-                                      <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
+                                      <h4 className="text-sm font-semibold truncate text-stone-900 dark:text-stone-300">
                                         {friend.profile.name}
                                       </h4>
                                       <p className="text-[10px] font-mono text-[#D4AF37] block truncate max-w-[170px]">
@@ -5032,7 +5239,7 @@ export default function App() {
                                   <div className={`p-3.5 rounded-xl border dark:border-[#1e1e23] border-stone-200/50 flex items-center justify-between ${bgInternal}`}>
                                     <div className="min-w-0">
                                       <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block leading-none">Activity telemetry</span>
-                                      <span className="text-xs font-semibold text-stone-300 dark:text-white truncate block mt-1 leading-none">
+                                      <span className="text-xs font-semibold text-stone-900 dark:text-white truncate block mt-1 leading-none">
                                         {presence.appName || presence.appCategory}
                                       </span>
                                       {presence.appCategory && presence.appName && (
@@ -5412,15 +5619,29 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Avatar Image Link</label>
-                          <input
-                            type="text"
-                            value={profileAvatarInput}
-                            onChange={(e) => setProfileAvatarInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                            className="input-field font-mono"
-                          />
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Avatar Image</label>
+                          <div className="flex gap-2 h-9">
+                            <input
+                              type="text"
+                              value={profileAvatarInput}
+                              onChange={(e) => setProfileAvatarInput(e.target.value)}
+                              onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
+                              onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
+                              className="input-field font-mono flex-1"
+                              placeholder="Image URL"
+                            />
+                            <div className="relative overflow-hidden inline-block shrink-0">
+                              <button className="h-full flex items-center justify-center px-4 rounded-xl border dark:border-[#222227] border-stone-200/50 bg-[#fafafa] dark:bg-[#18181c] text-xs font-semibold text-[#09090b] dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#1f1f23] transition-colors cursor-pointer">
+                                Upload
+                              </button>
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={handleAvatarUpload}
+                                className="absolute left-0 top-0 opacity-0 w-full h-full cursor-pointer"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         <div className="space-y-1.5">
@@ -5786,6 +6007,20 @@ export default function App() {
           </div>
         </div>
       )}
+      <CommandPalette 
+        isOpen={cmdKOpen} 
+        onClose={() => setCmdKOpen(false)}
+        onNavigate={(tab) => {
+          setActiveTab(tab);
+          if (tab === "rooms") {
+            setSelectedRoomName(null);
+          }
+        }}
+        onJoinRoom={(room) => {
+          setSelectedRoomName(room);
+          setActiveTab("rooms");
+        }}
+      />
     </div>
   );
 }

@@ -371,3 +371,55 @@ input::placeholder, textarea::placeholder {
 .border-main { border-color: var(--border-main) !important; }
 .border-strong { border-color: var(--border-strong) !important; }
 
+.luxury-shadow-sm {
+  box-shadow: 0 1px 3px 0 rgba(0,0,0,0.05), 0 1px 2px -1px rgba(0,0,0,0.05);
+}
+.luxury-shadow-md {
+  box-shadow: 0 4px 20px -2px rgba(0,0,0,0.12), 0 2px 8px -1px rgba(0,0,0,0.08);
+}
+.luxury-shadow-lg {
+  box-shadow: 0 10px 30px -5px rgba(0,0,0,0.2), 0 4px 12px -2px rgba(0,0,0,0.1);
+}
+.light-border {
+  border-color: rgba(228,228,231,0.08);
+}
+@keyframes soft-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.8; transform: scale(0.995); }
+}
+.soft-pulse { animation: soft-pulse 4s cubic-bezier(0.4,0,0.6,1) infinite; }
+
+/* TRACKER-APP UI utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tracker-category-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.tracker-category-card:hover {
+  transform: translateY(-4px) scale(1.02);
+}
+.tracker-category-card:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.tracker-doctor-tile {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+.tracker-doctor-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.tracker-doctor-tile:active {
+  transform: translateY(0);
+}
+

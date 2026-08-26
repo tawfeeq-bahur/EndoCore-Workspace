@@ -32,14 +32,7 @@ const renderAiContent = (content: string | null | undefined) => {
   return content;
 };
 
-const tasks = [
-  { title: "Mobile Companion Shell & Navigation", done: true,  assignee: "Tawfeeq",       priority: "High"   },
-  { title: "Realtime Telemetry & Sockets",        done: true,  assignee: "EndoCore System", priority: "High"   },
-  { title: "Gemini AI Briefing Synthesis",         done: true,  assignee: "Tawfeeq",        priority: "Medium" },
-  { title: "Notification Preference Settings UI",  done: false, assignee: "Team",           priority: "Medium" },
-  { title: "End-to-End Sync Verification",         done: false, assignee: "Team",           priority: "Low"    },
-];
-
+// Tasks injected conditionally for showcase demo inside the component
 export const MobileRoomsScreen: React.FC<MobileRoomsScreenProps> = ({
   subTab,
   onSelectSubTab,
@@ -59,8 +52,27 @@ export const MobileRoomsScreen: React.FC<MobileRoomsScreenProps> = ({
     { id: "ai",        label: "AI Brief"  },
   ];
 
-  const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : "Engineering Team");
-  const doneCount = tasks.filter((t) => t.done).length;
+  const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : "");
+
+  const tasks = user?.email === "showcase@endocore.io" ? [
+    { title: "Mobile Companion Shell & Navigation", done: true, assignee: "Tawfeeq", priority: "High" },
+    { title: "Realtime Telemetry & Sockets", done: true, assignee: "EndoCore System", priority: "High" },
+    { title: "Authentication Flow MVP", done: true, assignee: "Sriram", priority: "Medium" },
+    { title: "Room Access Modes UI", done: false, assignee: "Unassigned", priority: "High" }
+  ] : [];
+
+  const doneCount = tasks.filter((t: any) => t.done).length;
+
+  let totalActualHours = 0;
+  let totalTargetHours = 0;
+  [user, ...friends].forEach(occ => {
+    if (!occ) return;
+    const focusHrs = parseFloat(occ.todayFocusTime?.replace("h", "") || "0");
+    const targetHrs = occ.productivityGoal || 6;
+    totalActualHours += focusHrs;
+    totalTargetHours += targetHrs;
+  });
+  const teamEffortProgress = totalTargetHours > 0 ? Math.min(100, Math.round((totalActualHours / totalTargetHours) * 100)) : 0;
 
   return (
     <div className="p-4 space-y-4 pb-32 bg-[#fafafa] font-sans min-h-screen">
@@ -110,8 +122,8 @@ export const MobileRoomsScreen: React.FC<MobileRoomsScreenProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div className="studio-card p-4 space-y-1.5">
               <span className="text-[9px] font-mono text-[#71717a] uppercase tracking-widest block">Team Effort</span>
-              <span className="font-bold text-2xl text-emerald-700">78%</span>
-              <span className="text-[10px] text-[#71717a] font-mono block">On schedule</span>
+              <span className="font-bold text-2xl text-emerald-700">{teamEffortProgress}%</span>
+              <span className="text-[10px] text-[#71717a] font-mono block">{teamEffortProgress > 40 ? "On schedule" : "At risk"}</span>
             </div>
             <div className="studio-card p-4 space-y-1.5">
               <span className="text-[9px] font-mono text-[#71717a] uppercase tracking-widest block">Online Now</span>
@@ -206,7 +218,7 @@ export const MobileRoomsScreen: React.FC<MobileRoomsScreenProps> = ({
           <div className="bg-zinc-100 border border-[#e4e4e7] rounded-full h-2 overflow-hidden">
             <div
               className="h-full rounded-full bg-[#09090b]"
-              style={{ width: `${(doneCount / tasks.length) * 100}%` }}
+              style={{ width: `${tasks.length > 0 ? (doneCount / tasks.length) * 100 : 0}%` }}
             />
           </div>
 

@@ -3,6 +3,7 @@ const path = require('path');
 const activeWin = require('active-win');
 const axios = require('axios');
 const { exec } = require('child_process');
+const { sanitizeTitleOnEdge, hashTitle } = require('./edgeSanitizer');
 
 // Helper to list friendly names of all open windows on Windows (using PowerShell)
 function getOpenApps() {
@@ -118,15 +119,22 @@ ipcMain.on('start-tracking', (event) => {
       const appName = window.owner.name || 'Unknown';
       const windowTitle = window.title || 'Unknown';
 
+      // 🛡️ Edge Privacy Sanitization: process raw title locally on device before network transfer
+      const { sanitizedTitle, ollamaActive, sanitizedAtEdge } = await sanitizeTitleOnEdge(windowTitle);
+      const rawTitleHashed = hashTitle(windowTitle);
+
       // Get list of currently open applications on Windows
       const openApps = await getOpenApps();
 
-      // Send active app and open apps to backend
+      // Send sanitized activity to backend
       await axios.post(
         `${config.backendUrl}/api/my-activity`,
         {
           app: appName,
-          project: windowTitle,
+          project: sanitizedTitle,
+          rawTitleHashed,
+          sanitizedAtEdge,
+          ollamaActive,
           openApps: openApps
         },
         {
@@ -134,7 +142,7 @@ ipcMain.on('start-tracking', (event) => {
         }
       );
       
-      console.log(`Tracked active: ${appName} - ${windowTitle} | Open apps count: ${openApps.length}`);
+      console.log(`[Edge Privacy Sanitized] ${appName} - "${sanitizedTitle}" | Ollama: ${ollamaActive ? 'Active' : 'Fallback (Regex)'} | Open apps: ${openApps.length}`);
     } catch (err) {
       console.error('Error tracking active window:', err.message);
       if (err.response && (err.response.status === 401 || err.response.status === 403)) {

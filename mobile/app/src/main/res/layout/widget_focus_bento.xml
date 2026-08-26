@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="14dp">
+
+    <!-- Header Row -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="DAILY FOCUS GOAL"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="#5E6764"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/widget_status_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="80% ACHIEVED"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="#1B4D3E"
+            android:background="@drawable/widget_progress_bg"
+            android:paddingHorizontal="6dp"
+            android:paddingVertical="2dp" />
+    </LinearLayout>
+
+    <!-- Main Value & Target -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="6dp"
+        android:gravity="bottom">
+
+        <TextView
+            android:id="@+id/widget_current_hours"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="6.4"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#131A18"
+            android:fontFamily="sans-serif-black" />
+
+        <TextView
+            android:id="@+id/widget_target_hours"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="4dp"
+            android:text="/ 8.0 hrs"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="#78827F" />
+    </LinearLayout>
+
+    <!-- Active Task Subtitle -->
+    <TextView
+        android:id="@+id/widget_active_task"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="Active: EC-408 Timesheets &amp; Integrations"
+        android:textSize="11sp"
+        android:textColor="#3D4542"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Action Button (1-Tap Pomodoro Sprint) -->
+    <LinearLayout
+        android:id="@+id/widget_btn_pomodoro"
+        android:layout_width="match_parent"
+        android:layout_height="36dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:background="@drawable/widget_btn_bg">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚡ 1-Tap 25m Focus Sprint"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>

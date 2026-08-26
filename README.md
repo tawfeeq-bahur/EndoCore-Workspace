@@ -8,9 +8,10 @@
 [![React](https://img.shields.io/badge/Frontend-React_19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Electron](https://img.shields.io/badge/Desktop_Agent-Electron_34-47848F?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![Express](https://img.shields.io/badge/Backend-Express.js_4-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
+[![Redis](https://img.shields.io/badge/Cache-Redis_7-DC382D?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io/)
 [![Prisma](https://img.shields.io/badge/ORM-Prisma-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
-[![SQLite](https://img.shields.io/badge/Database-SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![Gemini](https://img.shields.io/badge/Gen_AI-Gemini_3.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
+[![SQLite](https://img.shields.io/badge/Database-SQLite_|_Postgres-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![Gemini](https://img.shields.io/badge/Gen_AI-Gemini_2.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Ollama](https://img.shields.io/badge/Edge_AI-Ollama-FFA500?style=for-the-badge)](https://ollama.com/)
 
 **The ultimate developer co-working platform. Tracks activity dynamically. Sanitizes data locally at the Edge. Coordinates Scrum alignments. Keeps team energy high and prevent burnout.**
@@ -58,16 +59,18 @@ No centralized visibility of distributed team statuses | **WebSocket-driven Work
 ```mermaid
 graph TD
     A["📂 Active Win Event"] --> B["🔎 Raw Title Captured"]
-    B --> C["🔐 Local Ollama Filter"]
-    C --> D["🤖 Phi-3/Llama-3 Sanitization"]
-    D --> E["✅ Category Mask (Work/Research)"]
-    E --> F["🌐 Secure Server Sync"]
+    B --> C["🛡️ Stage 0: Regex PII Guard"]
+    C --> D["⚡ Stage 1: LRU SHA-256 Cache"]
+    D --> E["🦙 Stage 2: Local Ollama (Phi-3)"]
+    E --> F["✅ Sanitized Category & Title"]
+    F --> G["🌐 Secure Server Sync"]
 ```
 
-**On-Device Privacy Sanitization:**
-- 🔐 Converts raw sensitive names (e.g., `personal_bank_statement.pdf`) to high-level context (e.g., `Researching Finance`).
-- 🛑 Configurable levels (Full Detail, Category Only, Summary Only, Private).
-- 🧬 Local execution via Ollama (Llama-3/Phi-3) with zero cloud data leaks.
+**On-Device Multi-Tier Privacy Sanitization:**
+- 🔐 **3-Tier Protection Pipeline**: Stage 0 (Regex Scrubbing) → Stage 1 (SHA-256 LRU Cache) → Stage 2 (Ollama SLM Phi-3/Llama-3 with 800ms timeout).
+- 🛡️ Converts raw sensitive names (e.g., `personal_bank_statement.pdf`) to high-level context (e.g., `[Private Document]`).
+- 🛑 Configurable privacy modes (*Full Detail*, *Team Only*, *Private Workstation*).
+- 🧬 Local execution via Ollama & regex engine with zero cloud data leaks.
 
 </td>
 <td width="50%">
@@ -214,22 +217,22 @@ graph TB
 <tr>
 <td>Build Tool</td><td>Vite 6 + Tailwind v4</td>
 <td>Routing</td><td>Express.js (TypeScript)</td>
-<td>Telemetry</td><td>active-win integration</td>
+<td>Telemetry</td><td>active-win + PowerShell App Enum</td>
 </tr>
 <tr>
 <td>State Sync</td><td>Socket.io-client</td>
-<td>Database</td><td>SQLite (dev.db)</td>
-<td>Local LLM</td><td>Ollama REST Client</td>
+<td>Caching & Presence</td><td>Redis 7 (ioredis)</td>
+<td>Privacy Engine</td><td>edgeSanitizer (Regex + Ollama + LRU)</td>
 </tr>
 <tr>
 <td>Transitions</td><td>Motion (Framer Motion)</td>
-<td>ORM</td><td>Prisma ORM</td>
-<td>IPC Bridge</td><td>ContextBridge Preload</td>
+<td>Database & ORM</td><td>SQLite / PostgreSQL + Prisma ORM</td>
+<td>Local LLM</td><td>Ollama REST Client (phi3:mini)</td>
 </tr>
 <tr>
 <td>Icons</td><td>Lucide React</td>
-<td>AI Models</td><td>Gemini 3.5 Flash SDK</td>
-<td>Systray</td><td>Electron Tray Icon</td>
+<td>AI Models</td><td>Gemini 2.5 Flash (@google/genai)</td>
+<td>System Tray</td><td>Electron Tray & Native OS Toast Notifications</td>
 </tr>
 </table>
 
@@ -301,6 +304,7 @@ cd ..
 ✅ Node.js v18 or higher (download: nodejs.org)
 ✅ Git (download: git-scm.com)
 ✅ Windows 10/11
+✅ Redis Server (running on localhost:6379 or remote URI)
 ✅ Ollama installed locally (for Edge AI sanitization)
 ✅ Gemini API Key (for Server Multi-Agent briefings)
 ```
@@ -312,6 +316,7 @@ Create a `.env` file in the root directory:
 ```env
 PORT=3000
 DATABASE_URL="file:./dev.db"
+REDIS_URL="redis://localhost:6379"
 JWT_SECRET="super-secret-dashboard-key"
 GEMINI_API_KEY="your-gemini-api-key"
 ```
@@ -345,7 +350,7 @@ npm run start
 
 | Endpoint | Method | Body | Purpose |
 |---|---|---|---|
-| `/api/auth/register` | POST | `{ name, email, password }` | Registers user & joins Default Group |
+| `/api/auth/register` | POST | `{ name, email, password }` | Registers user & joins Default Groups |
 | `/api/auth/login` | POST | `{ email, password }` | Authenticates user & issues JWT token |
 
 ### **📡 Activity Tracker Endpoints**
@@ -353,22 +358,23 @@ npm run start
 | Endpoint | Method | Headers | Body | Purpose |
 |---|---|---|---|---|
 | `/api/my-activity` | GET | `Authorization: Bearer <token>` | - | Fetches current activity & status |
-| `/api/my-activity` | POST | `Authorization: Bearer <token>` | `{ app, project, isPaused, togglePause, resetTimer }` | Updates active app, tracks heartbeats, logs context switches |
-| `/api/user/broadcast-groups` | POST | `Authorization: Bearer <token>` | `{ groups: ["Room A", "Room B"] }` | Configures active room broadcast lists |
+| `/api/my-activity` | POST | `Authorization: Bearer <token>` | `{ app, project, rawTitleHashed, sanitizedAtEdge, ollamaActive, openApps }` | Updates active app, heartbeats, & open applications |
+| `/api/user/broadcast-groups` | POST | `Authorization: Bearer <token>` | `{ groups: ["Engineering Team", "Focus Guild"] }` | Configures active room broadcast lists |
 
 ### **👥 Group & Peer Endpoints**
 
-| Endpoint | Method | Headers | Purpose |
-|---|---|---|---|
-| `/api/friends?group=...` | GET | `Authorization: Bearer <token>` | Retrieves active occupants, timelines, roles, & statuses |
-| `/api/groups` | GET | `Authorization: Bearer <token>` | Retrieves all collaboration groups / study halls |
-| `/api/groups/create` | POST | `Authorization: Bearer <token>` | Creates a new cooperative workspace room |
+| Endpoint | Method | Headers | Body / Query | Purpose |
+|---|---|---|---|---|
+| `/api/friends?group=...` | GET | `Authorization: Bearer <token>` | `?group=Engineering Team` | Retrieves active occupants, timelines, roles, & statuses |
+| `/api/groups` | GET | `Authorization: Bearer <token>` | - | Retrieves all collaboration groups / study halls |
+| `/api/groups/create` | POST | `Authorization: Bearer <token>` | `{ name, description, privacy }` | Creates a new cooperative workspace room |
+| `/api/connections/wave` | POST | `Authorization: Bearer <token>` | `{ targetUserId }` | Triggers persistent peer wave with 5-minute cooldown |
 
 ### **🤖 GenAI & Analytics Endpoints**
 
 | Endpoint | Method | Query | Response |
 |---|---|---|---|
-| `/api/ai-insights` | GET | `?force=true/false` | Generates a Gemini Scrum Summary & coaching brief |
+| `/api/ai-insights` | GET | `?force=true/false` | Generates a Gemini Multi-Agent Scrum briefing & coaching output |
 | `/api/analytics` | GET | - | Storage, focus scores history, and comparison metrics |
 
 ---
@@ -380,14 +386,17 @@ activity-dashboard/
 │
 ├── desktop-agent/                    # 🖥️ Electron Tracking App
 │   ├── package.json                  # Desktop agent package settings
-│   ├── main.js                       # Electron entry point (handles active-win tracking)
+│   ├── main.js                       # Electron entry point (active-win & notification handlers)
+│   ├── edgeSanitizer.js              # 🛡️ 3-tier Edge Privacy Sanitizer (Regex, LRU Cache, Ollama)
 │   ├── preload.js                    # Preload script exposing ContextBridge APIs
 │   └── index.html                    # Native HTML overlay (connects to server pipeline)
 │
 ├── prisma/                           # 🗄️ Database Schemas & Migrations
-│   └── schema.prisma                 # SQLite relational structure (User, Group, Activity, logs)
+│   └── schema.prisma                 # Relational structure (User, Group, Activity, ActivityLog, DailySummary)
 │
 ├── src/                              # 🎨 React 19 Frontend Dashboard
+│   ├── ai/                           # 🤖 Multi-Agent AI System
+│   │   └── multiAgentEngine.ts       # Gemini 2.5 Flash Scrum Coordinator & Welfare Coach + Heuristic Engine
 │   ├── App.tsx                       # Main Dashboard component (EndoCore Dark theme)
 │   ├── types.ts                      # Common TypeScript interfaces
 │   ├── index.css                     # Global stylesheets & design tokens
@@ -396,7 +405,7 @@ activity-dashboard/
 ├── dev.db                            # SQLite Workspace database file
 ├── db.ts                             # Prisma Client adapter instantiation
 ├── seed.ts                           # Seeder script populating default groups & admin users
-├── server.ts                         # ⚙️ Express Backend Server & WebSockets (Socket.io)
+├── server.ts                         # ⚙️ Express Backend Server, Redis Caching & WebSockets (Socket.io)
 ├── package.json                      # Workspace dependencies & build scripts
 ├── tsconfig.json                     # Root TypeScript configurations
 └── vite.config.ts                    # Vite client configurations
