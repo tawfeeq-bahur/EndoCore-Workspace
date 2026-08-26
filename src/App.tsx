@@ -2921,7 +2921,7 @@ export default function App() {
         </header>
 
         {/* 📚 PRIMARY SCROLLABLE BODY */}
-        <div className={`p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 w-full ${activeTab === "analytics" ? "max-w-[1600px] mx-auto px-4 sm:px-8" : "max-w-5xl mx-auto"}`}>
+        <div className="p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 w-full max-w-none px-4 sm:px-6 md:px-8">
 
           {/* SLIDING TIMELINE SUBSECTION FOR SELECTED FRIENDS */}
           <AnimatePresence>
