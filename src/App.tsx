@@ -67,6 +67,8 @@ import {
 } from "./types";
 import { RoomCreationWizard } from "./components/RoomCreationWizard";
 import { OwnerRoomDashboard } from "./components/OwnerRoomDashboard";
+import MyIntegrations from "./components/MyIntegrations";
+import MyTimesheets from "./components/MyTimesheets";
 import { NumberTicker } from "./components/NumberTicker";
 import { TiltCard } from "./components/TiltCard";
 import { CommandPalette } from "./components/CommandPalette";
@@ -1934,6 +1936,26 @@ export default function App() {
                 <Users className="h-4 w-4 shrink-0" />
                 <span>My Connections</span>
               </button>
+
+              <button
+                onClick={() => { setActiveTab("integrations"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "integrations" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <Zap className="h-4 w-4 shrink-0" />
+                <span>My Integrations</span>
+              </button>
+
+              <button
+                onClick={() => { setActiveTab("timesheets"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
+                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
+                  activeTab === "timesheets" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+                }`}
+              >
+                <Clock className="h-4 w-4 shrink-0" />
+                <span>My Timesheets</span>
+              </button>
             </div>
 
             {/* Rooms Section */}
@@ -2164,6 +2186,48 @@ export default function App() {
                 {isSidebarOpen && (
                   <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
                     My Connections
+                  </motion.span>
+                )}
+              </span>
+            </button>
+
+            {/* My Integrations */}
+            <button
+              onClick={() => { setActiveTab("integrations"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "integrations" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Integrations"
+            >
+              {activeTab === "integrations" && (
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Zap className="h-4 w-4 shrink-0" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Integrations
+                  </motion.span>
+                )}
+              </span>
+            </button>
+
+            {/* My Timesheets */}
+            <button
+              onClick={() => { setActiveTab("timesheets"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "timesheets" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
+              }`}
+              title="My Timesheets"
+            >
+              {activeTab === "timesheets" && (
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Clock className="h-4 w-4 shrink-0" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
+                    My Timesheets
                   </motion.span>
                 )}
               </span>
@@ -2644,9 +2708,22 @@ export default function App() {
               <Menu className="h-5 w-5 text-black" />
             </button>
 
-            {/* Mobile Brand Tag */}
-            <span className="font-serif italic text-base font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
-            <span className="h-3.5 w-px bg-neutral-700/40 md:hidden"></span>
+            {/* Mobile Brand Tag & Page Title */}
+            <div className="flex items-center space-x-2 min-w-0">
+              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
+              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
+              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">
+                {activeTab === "dashboard" ? "Workspace Status" :
+                 activeTab === "analytics" ? "Analytics Dashboard" :
+                 activeTab === "focus" ? "Focus Station" :
+                 activeTab === "connections" ? "Connections Hub" :
+                 activeTab === "integrations" ? "My Integrations" :
+                 activeTab === "timesheets" ? "My Timesheets" :
+                 activeTab === "groups" ? "Squad Rooms" :
+                 activeTab === "profile" ? "Profile Parameters" :
+                 activeTab === "settings" ? "Settings Panel" : "EndoCore"}
+              </h1>
+            </div>
 
             {/* Promoted Greeting Header & Subtitle */}
             <div className="space-y-0.5 min-w-0">
@@ -4099,7 +4176,7 @@ export default function App() {
                         <span className="text-[10px] font-mono text-[#71717a] block">// {7 - ((user?.focusStreak || 0) % 7)} days remaining for weekly reward</span>
                       </div>
 
-                      {/* Distraction Card */}
+                      {/* Distraction Log Card */}
                       <div className="studio-card p-5 space-y-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2 text-[#09090b]">
@@ -5568,6 +5645,26 @@ export default function App() {
                 </div>
               )}
 
+              {/* 🔌 MY INTEGRATIONS VIEWPORT */}
+              {activeTab === "integrations" && (
+                <MyIntegrations
+                  apiFetch={apiFetch}
+                  triggerToast={triggerToast}
+                  activeProjectName={myActivity ? myActivity.project : ""}
+                  setActiveProjectName={(name) => {
+                    setMyActivity(prev => prev ? { ...prev, project: name } : null);
+                  }}
+                />
+              )}
+
+              {/* ⏱️ MY TIMESHEETS VIEWPORT */}
+              {activeTab === "timesheets" && (
+                <MyTimesheets
+                  apiFetch={apiFetch}
+                  triggerToast={triggerToast}
+                />
+              )}
+
               {/* 4️⃣ PROFILE PARAMETERS EDIT TAB VIEW */}
               {activeTab === "profile" && user && (
                 <div className="space-y-6">
@@ -5581,7 +5678,7 @@ export default function App() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                     {/* Left aggregate info */}
-                    <div className="studio-card p-5 text-center space-y-4 flex flex-col items-center justify-center">
+                    <div className="studio-card p-5 text-center space-y-4 flex flex-col items-center justify-start">
                       <img
                         src={user.avatarUrl}
                         alt="Avatar profile"
@@ -5781,6 +5878,53 @@ export default function App() {
                     </div>
 
                   </div>
+
+                  {/* Personal Records & Milestones */}
+                  <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} space-y-6`}>
+                    <div className="mb-2">
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Personal Records & Milestones</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">All-time workstation productivity benchmarks achieved during your focus sessions.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                      <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 text-center">
+                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block mb-1">Longest Session</span>
+                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">3h 18m</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Aug 24, 2026</span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 text-center">
+                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block mb-1">Best Focus Day</span>
+                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">8h 42m</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Aug 19, 2026</span>
+                      </div>
+
+                      <div className="p-2 sm:p-4 rounded-xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 text-center">
+                        <span className="text-[10px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wider block mb-1">Longest Streak</span>
+                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">14 days</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Current streak</span>
+                      </div>
+
+                      <div className="p-2 sm:p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900 text-center">
+                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block mb-1">Best Focus Week</span>
+                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">44h 10m</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Week 34</span>
+                      </div>
+
+                      <div className="p-2 sm:p-4 rounded-xl bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-100 dark:border-cyan-900 text-center">
+                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 uppercase tracking-wider block mb-1">Peak Hour</span>
+                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">11:00 AM</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Consistently peak</span>
+                      </div>
+
+                      <div className="p-2 sm:p-4 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 text-center">
+                        <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block mb-1">Total Sessions</span>
+                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">126 sessions</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">30-day window</span>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               )}
 

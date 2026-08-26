@@ -1,3 +1,45 @@
+# 🚀 EndoCore Workspace AI Studio Context Data
+
+Copy and paste the sections below to your AI Studio agent so it can configure and deploy the live network pipeline.
+
+---
+
+## 🔑 1. Server Environment Variables (.env)
+You can share these variables or paste them into the AI Studio Secrets panel:
+
+```env
+# PostgreSQL / Supabase connection URL
+DATABASE_URL="postgresql://postgres.your-db-instance:password@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres.your-db-instance:password@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+
+# Redis Cache connection string (Upstash)
+REDIS_URL="rediss://default:your-redis-password@champion-hamster-175503.upstash.io:6379"
+
+# GenAI API Key for Scrum Coordinator briefings
+GEMINI_API_KEY="your-gemini-api-key"
+
+# JSON Web Token sign secret
+JWT_SECRET="super-secret-dashboard-key"
+
+# Express server port
+PORT=3000
+```
+
+---
+
+## 🔌 2. Backend URL Overrides (Android-Specific)
+For your Android app to connect to the backend server running on your local machine:
+
+1. **Android Emulator:**
+   * Backend Base URL (REST & Socket.io): `http://10.0.2.2:3000`
+2. **Physical Android Device:**
+   * Find your machine's local IP address (e.g., `http://192.168.1.15:3000` on Windows running `ipconfig`) and make sure both your phone and machine are on the same Wi-Fi network.
+
+---
+
+## 📊 3. Full Prisma Database Schema (`prisma/schema.prisma`)
+
+```prisma
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
@@ -7,6 +49,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -75,10 +119,6 @@ model User {
 
   // Devices
   devices                    UserDevice[]
-
-  // Integrations & Timesheets
-  integrations               UserIntegration[]
-  timesheets                 Timesheet[]
 }
 
 model Group {
@@ -639,31 +679,4 @@ model AiInsight {
 
   @@index([roomId, generatedAt])
 }
-
-model UserIntegration {
-  id                 String   @id @default(uuid())
-  userId             String
-  provider           String   // GITHUB, JIRA, LINEAR, GOOGLE_CALENDAR
-  username           String?  // Linked profile name
-  isConnected        Boolean  @default(false)
-  autoPauseCalendar  Boolean  @default(false)
-  lastSyncedAt       DateTime @default(now())
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, provider])
-}
-
-model Timesheet {
-  id               String   @id @default(uuid())
-  userId           String
-  clientName       String
-  projectName      String
-  billableHours    Float
-  nonBillableHours Float    @default(0.0)
-  hourlyRate       Float    @default(120.0)
-  period           String   // e.g. "Current Week"
-  status           String   @default("Approved") // Approved, Pending
-  createdAt        DateTime @default(now())
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
+```
