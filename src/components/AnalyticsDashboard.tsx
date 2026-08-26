@@ -37,12 +37,14 @@ export default function AnalyticsDashboard() {
     setLoading(true);
     console.log("FRONTEND: Fetching dashboard data from API...");
     try {
-      const token = localStorage.getItem("endocore_token");
-      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const token = localStorage.getItem("token") || localStorage.getItem("endocore_token");
+      const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
       const res = await fetch(`/api/analytics/v2/dashboard?range=${dateRange}&team=${selectedTeam}&project=${selectedProject}&_t=${Date.now()}`, { headers });
       const json = await res.json();
       console.log("FRONTEND: Received dashboard data:", json);
-      setData(json);
+      if (json && !json.error) {
+        setData(json);
+      }
     } catch (e) {
       console.error("FRONTEND Fetch Error:", e);
     } finally {
@@ -54,8 +56,8 @@ export default function AnalyticsDashboard() {
     setSelectedDay(date);
     setLoadingDay(true);
     try {
-      const token = localStorage.getItem("endocore_token");
-      const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+      const token = localStorage.getItem("token") || localStorage.getItem("endocore_token");
+      const headers: Record<string, string> = token ? { "Authorization": `Bearer ${token}` } : {};
       const res = await fetch(`/api/analytics/v2/day/${date}`, { headers });
       const json = await res.json();
       setDayTimeline(json.events || []);
