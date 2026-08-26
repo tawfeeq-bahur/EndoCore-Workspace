@@ -29,7 +29,6 @@ import {
   Compass,
   ArrowRight,
   Home,
-  FileText,
   Target,
   Flame,
   MessageSquare,
@@ -48,8 +47,7 @@ import {
   Tablet,
   Monitor,
   Cpu,
-  ChevronDown,
-  AlertTriangle
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -70,6 +68,7 @@ import { NumberTicker } from "./components/NumberTicker";
 import { TiltCard } from "./components/TiltCard";
 import { CommandPalette } from "./components/CommandPalette";
 import { SkeletonLoader } from "./components/SkeletonLoader";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
 
 export default function App() {
   const [cmdKOpen, setCmdKOpen] = useState(false);
@@ -130,7 +129,7 @@ export default function App() {
   const [pomodoroMode, setPomodoroMode] = useState<"focus" | "break">("focus");
   const [pomodoroSessionCount, setPomodoroSessionCount] = useState<number>(0);
   const [distractionsManualCount, setDistractionsManualCount] = useState<number>(0);
-  const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
+  const [themeMode] = useState<"light" | "dark">("light");
 
   // Server-state synchronize mirrors
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -215,96 +214,29 @@ export default function App() {
   const [dbStatus, setDbStatus] = useState<"connected" | "error" | "checking">("checking");
   const [socketStatus, setSocketStatus] = useState<"connected" | "disconnected" | "error">("disconnected");
   const [aiStatus, setAiStatus] = useState<"configured" | "missing_key" | "checking">("checking");
-  const [showDiagnosticsPopover, setShowDiagnosticsPopover] = useState<boolean>(false);
 
-  const isAiHealthy = aiStatus === "configured" && !insightsError;
-  const isApiHealthy = apiStatus === "online";
-  const isSocketHealthy = socketStatus === "connected";
-  const isDbHealthy = dbStatus === "connected";
-  const isSystemHealthy = isApiHealthy && isSocketHealthy && isDbHealthy && isAiHealthy;
-
-  const getDiagnosticsErrorList = () => {
-    const errors: Array<{ service: string; message: string }> = [];
-    if (!isApiHealthy) {
-      errors.push({ service: "REST API", message: "REST API server endpoint is unreachable or offline." });
-    }
-    if (socketStatus === "error") {
-      errors.push({ service: "WebSockets", message: "Real-time Socket.io pipeline connection failed." });
-    } else if (socketStatus === "disconnected") {
-      errors.push({ service: "WebSockets", message: "WebSocket channel is currently disconnected." });
-    }
-    if (!isDbHealthy) {
-      errors.push({ service: "Supabase DB", message: "Database connection failed or pending schema initialization." });
-    }
-    if (!isAiHealthy) {
-      errors.push({
-        service: "Gemini AI",
-        message: insightsError
-          ? "Gemini AI engine encountered an error while processing requests."
-          : "Missing or invalid GEMINI_API_KEY environment variable."
-      });
-    }
-    return errors;
-  };
-
-  // Responsive layout state
+  // Responsive layout & Hamburger Sidebar state
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState<boolean>(false);
   const [isRoomWizardOpen, setIsRoomWizardOpen] = useState<boolean>(false);
 
-  // Active Agent Session Setup & Custom App State
-  const [isSessionSetupOpen, setIsSessionSetupOpen] = useState<boolean>(false);
-  const [customAppsList, setCustomAppsList] = useState<string[]>([
+  // Active Session & Custom App Addition Modal States
+  const [showSessionModal, setShowSessionModal] = useState<boolean>(false);
+  const [customApps, setCustomApps] = useState<string[]>([
     "VS Code",
-    "Chrome",
-    "Figma",
-    "Terminal",
-    "Slack",
-    "Spotify",
-    "Postman",
-    "IntelliJ IDEA",
-    "Xcode",
+    "Antigravity IDE",
     "PyCharm",
-    "Docker",
-    "Notion"
+    "Chrome Browser",
+    "Figma Design",
+    "Terminal / Shell",
+    "Postman API",
+    "Docker Desktop"
   ]);
   const [sessionAppInput, setSessionAppInput] = useState<string>("VS Code");
-  const [sessionTaskInput, setSessionTaskInput] = useState<string>("");
-  const [isAddingCustomApp, setIsAddingCustomApp] = useState<boolean>(false);
-  const [newCustomAppName, setNewCustomAppName] = useState<string>("");
-
-  const handleAddCustomApp = async () => {
-    if (!newCustomAppName.trim()) return;
-    const appName = newCustomAppName.trim();
-    if (!customAppsList.includes(appName)) {
-      setCustomAppsList(prev => [...prev, appName]);
-    }
-    const currentTask = sessionTaskInput.trim() || projectInput.trim() || "Active Workstation Task";
-    setSessionAppInput(appName);
-    setAppInput(appName);
-    setSessionTaskInput(currentTask);
-    setProjectInput(currentTask);
-    setNewCustomAppName("");
-    setIsAddingCustomApp(false);
-    triggerToast(`Added custom application: "${appName}"`);
-    // Instantly sync active app & ensure agent is active (resumed) so it renders in the Current Session box
-    await updateMyActiveTracker(appName, currentTask, false);
-  };
-
-  const handleStartActiveSession = async () => {
-    const selectedApp = sessionAppInput || appInput || "VS Code";
-    const selectedTask = sessionTaskInput.trim() || projectInput.trim() || "Active Workstation Task";
-    setSessionAppInput(selectedApp);
-    setAppInput(selectedApp);
-    setSessionTaskInput(selectedTask);
-    setProjectInput(selectedTask);
-    await updateMyActiveTracker(selectedApp, selectedTask, false);
-    setIsSessionSetupOpen(false);
-    triggerToast(`⚡ Live Agent Monitoring active for ${selectedApp}`);
-  };
+  const [sessionTaskInput, setSessionTaskInput] = useState<string>("Building EndoCore System");
 
   // Connected Devices Matrix State
-  const [showDevicesList, setShowDevicesList] = useState<boolean>(false);
+  const [showDevicesList, setShowDevicesList] = useState<boolean>(true);
   const [connectedDevices, setConnectedDevices] = useState<Array<{
     id: string;
     name: string;
@@ -759,14 +691,6 @@ export default function App() {
         const data = await res.json();
         if (data && !data.error) {
           setMyActivity(data);
-          if (data.app && data.app !== "Offline") {
-            setAppInput(data.app);
-            setSessionAppInput(data.app);
-          }
-          if (data.project && data.project !== "None") {
-            setProjectInput(data.project);
-            setSessionTaskInput(data.project);
-          }
         }
       }
     } catch (e) {
@@ -874,6 +798,30 @@ export default function App() {
       triggerToast("Error joining room.");
     }
   };
+
+  const handleToggleRoomStatus = async (newStatus: string) => {
+    try {
+      const activeGroupObj = groups.find(g => g.name === selectedRoomName);
+      if (!activeGroupObj) return;
+
+      const res = await apiFetch(`/api/rooms/${activeGroupObj.id}/status`, {
+        method: "POST",
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (res.ok) {
+        triggerToast(`🚀 Group status updated to "${newStatus.toUpperCase()}"!`);
+        setGroups(prev => prev.map(g => g.name === selectedRoomName ? { ...g, status: newStatus } : g));
+        fetchGroups();
+      } else {
+        const data = await res.json();
+        triggerToast(data.error || "Failed to update group status");
+      }
+    } catch (e) {
+      triggerToast("Error updating group status.");
+    }
+  };
+
 
   useEffect(() => {
     if (activeTab === "groups") {
@@ -1446,43 +1394,14 @@ export default function App() {
 
   const updateMyActiveTracker = async (app?: string, project?: string, togglePause?: boolean) => {
     setUpdatingActivity(true);
-    // Optimistic local state update for instant UI feedback
-    setMyActivity((prev) => {
-      if (!prev) {
-        return {
-          app: app || "VS Code",
-          project: project !== undefined ? project : "Active Workstation Task",
-          durationSeconds: 0,
-          isPaused: togglePause !== undefined ? togglePause : false,
-          startedAt: Date.now(),
-          openApps: []
-        };
-      }
-      return {
-        ...prev,
-        app: app !== undefined ? app : prev.app,
-        project: project !== undefined ? project : prev.project,
-        isPaused: togglePause !== undefined ? togglePause : false
-      };
-    });
-
     try {
-      const payload: any = { isManual: true };
+      const payload: any = {};
       if (app !== undefined) {
         payload.app = app;
         setAppInput(app);
-        setSessionAppInput(app);
       }
-      if (project !== undefined) {
-        payload.project = project;
-        setProjectInput(project);
-        setSessionTaskInput(project);
-      }
-      if (togglePause !== undefined) {
-        payload.togglePause = togglePause;
-      } else if (app !== undefined || project !== undefined) {
-        payload.togglePause = false;
-      }
+      if (project !== undefined) payload.project = project;
+      if (togglePause !== undefined) payload.togglePause = togglePause;
 
       const res = await apiFetch("/api/my-activity", {
         method: "POST",
@@ -1889,306 +1808,379 @@ export default function App() {
 
   // Reusable Sidebar Render Helper (closed over App states)
   const renderSidebar = (isMobileDrawer: boolean = false) => {
-    if (!isMobileDrawer) {
-      return (
-        <motion.aside
-          initial={false}
-          animate={{ width: isSidebarExpanded ? 240 : 64 }}
-          transition={{ type: "spring", stiffness: 320, damping: 32 }}
-          className="hidden md:flex flex-col border-r border-[#e4e4e7] h-screen sticky top-0 bg-white py-4 justify-between items-start z-40 shrink-0 select-none overflow-hidden shadow-xs"
-        >
-          {/* Top Main Navigation Icons & Hamburger Button */}
-          <div className="flex flex-col gap-2 w-full px-2">
-            {/* Hamburger Toggle Button & Brand Header */}
-            <div className="flex items-center w-full px-1 py-1 mb-2">
-              <button
-                onClick={() => setIsSidebarExpanded(prev => !prev)}
-                className="p-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition-colors cursor-pointer shrink-0"
-                title={isSidebarExpanded ? "Collapse Sidebar" : "Expand Navigation Menu"}
-              >
-                {isSidebarExpanded ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              </button>
-
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.div
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="flex items-center space-x-2 ml-2 overflow-hidden"
-                  >
-                    <span className="font-serif italic text-xl font-bold tracking-tight text-[#09090b]">EndoCore.</span>
-                    <span className="bg-[#f4f4f5] border border-[#e4e4e7] text-[9px] font-mono font-bold px-1.5 py-0.5 rounded text-[#71717a]">v1.0</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Navigation items */}
-            {/* Active App Home Icon */}
-            <button
-              onClick={() => { setActiveTab("dashboard"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="Dashboard Overview"
-            >
-              <Home className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Dashboard
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-
-            {/* Focus / Telemetry */}
-            <button
-              onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "analytics"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="Workstation Telemetry"
-            >
-              <Clock className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Telemetry & Time
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-
-            {/* Analytics */}
-            <button
-              onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "focus"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="Focus Goals & Productivity"
-            >
-              <BarChart3 className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Focus & Goals
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-
-            {/* Team & Connections */}
-            <button
-              onClick={() => { setActiveTab("connections"); setSelectedRoomName(null); setSelectedFriendId(null); fetchConnections(); }}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "connections"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="Team Telemetry & Co-workers"
-            >
-              <Users className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Guild & Team
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-
-            {/* Workstation Devices */}
-            <button
-              onClick={() => setShowDevicesList(prev => !prev)}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                showDevicesList
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="Connected Display Devices"
-            >
-              <Laptop className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Connected Devices
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-
-            {/* Rooms / Docs */}
-            <button
-              onClick={() => { setActiveTab("groups"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "groups"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="Guild Rooms & Documentation"
-            >
-              <FileText className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Guild Rooms & Docs
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-
-            {/* Settings */}
-            <button
-              onClick={() => { setActiveTab("settings"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`w-full flex items-center space-x-3.5 p-2.5 rounded-xl transition-all cursor-pointer ${
-                activeTab === "settings"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                  : "text-stone-400 hover:text-stone-800 hover:bg-stone-100"
-              }`}
-              title="System Settings"
-            >
-              <Settings className="h-5 w-5 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    System Settings
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-          </div>
-
-          {/* Bottom Theme Mode Switcher Button */}
-          <div className="flex flex-col items-center gap-3 w-full px-2 pt-2 border-t border-[#e4e4e7]">
-            <button
-              onClick={() => setThemeMode(prev => prev === "dark" ? "light" : "dark")}
-              className="w-full flex items-center space-x-3.5 p-2.5 rounded-xl text-stone-500 hover:text-stone-900 border border-stone-200/80 hover:bg-stone-100 transition-all cursor-pointer shadow-2xs"
-              title={`Toggle Theme (Current: ${themeMode})`}
-            >
-              <Sun className="h-4 w-4 shrink-0" />
-              <AnimatePresence>
-                {isSidebarExpanded && (
-                  <motion.span
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -8 }}
-                    transition={{ duration: 0.15 }}
-                    className="text-xs font-bold whitespace-nowrap overflow-hidden text-ellipsis"
-                  >
-                    Light Theme
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
-          </div>
-        </motion.aside>
-      );
-    }
-
     return (
-      <aside className="w-full h-full flex flex-col shrink-0 bg-[#f4f4f5] p-4">
+      <aside className={`${isMobileDrawer ? 'w-full h-full' : 'hidden md:flex w-64 border-r border-[#e4e4e7] h-screen sticky top-0'} flex flex-col shrink-0 bg-[#f4f4f5]`}>
+
         {/* Studio Branding Section */}
-        <div className="p-4 border-b border-[#e4e4e7] flex items-center justify-between">
+        <div className="p-5 border-b border-[#e4e4e7] flex items-center justify-between">
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               <span className="font-display text-xl font-bold tracking-tight text-[#09090b]">EndoCore</span>
               <span className="badge badge-neutral">v1.0</span>
             </div>
+            <div className="flex items-center space-x-1.5 text-[10px] font-mono t-muted">
+              <span className={`h-2 w-2 rounded-full ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "bg-emerald-500"
+                  : "bg-rose-500"
+                }`}></span>
+              <span>Workstation Pipeline</span>
+            </div>
           </div>
-          <button
-            onClick={() => setMobileMenuOpen(false)}
-            className="p-1.5 text-[#71717a] hover:text-[#09090b] rounded-md hover:bg-zinc-200/60 cursor-pointer"
-            title="Close menu"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          {isMobileDrawer && (
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-1.5 text-[#71717a] hover:text-[#09090b] rounded-md hover:bg-zinc-200/60 cursor-pointer"
+              title="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
-        {/* Navigation items for drawer */}
-        <nav className="p-3 flex-1 select-none overflow-y-auto space-y-4">
-          <button
-            onClick={() => { setActiveTab("dashboard"); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold ${activeTab === "dashboard" ? "bg-[#09090b] text-white" : "text-stone-700"}`}
-          >
-            <Home className="h-4 w-4" />
-            <span>Dashboard Overview</span>
-          </button>
+        {/* Dynamic Guild Selector */}
+        {user && (
+          <div className="p-3.5 border-b border-[#e4e4e7] bg-white/60">
+            <label className="text-[10px] font-semibold uppercase tracking-wider t-muted block mb-1">
+              Active Focus Guild
+            </label>
+            <div className="relative">
+              <select
+                value={user.activeGroup}
+                onChange={(e) => {
+                  submitProfileSettings({ activeGroup: e.target.value });
+                  if (isMobileDrawer) setMobileMenuOpen(false);
+                }}
+                className="w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 py-1.5 font-sans text-xs font-medium text-[#09090b] cursor-pointer focus:outline-none"
+              >
+                {groups.map(g => (
+                  <option key={g.id} value={g.name} className="bg-white text-[#09090b]">
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
 
-          <button
-            onClick={() => { setActiveTab("analytics"); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold ${activeTab === "analytics" ? "bg-[#09090b] text-white" : "text-stone-700"}`}
-          >
-            <Clock className="h-4 w-4" />
-            <span>Telemetry</span>
-          </button>
+        {/* Studio Navigation List */}
+        <nav className="p-3 flex-1 select-none overflow-y-auto space-y-5">
+          {/* HOME Section */}
+          <div className="space-y-1">
+            <div className="px-3 mb-1.5 text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
+              Home
+            </div>
 
-          <button
-            onClick={() => { setActiveTab("connections"); setMobileMenuOpen(false); }}
-            className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-semibold ${activeTab === "connections" ? "bg-[#09090b] text-white" : "text-stone-700"}`}
-          >
-            <Users className="h-4 w-4" />
-            <span>Connections</span>
-          </button>
+            <button
+              onClick={() => {
+                setActiveTab("dashboard");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                  activeTab === "dashboard" && !selectedRoomName && !selectedFriendId
+                    ? "text-white font-semibold"
+                    : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              {activeTab === "dashboard" && !selectedRoomName && !selectedFriendId && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Home className="h-4 w-4 shrink-0" />
+                <span>My Productivity</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("analytics");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "analytics"
+                  ? "text-white font-semibold"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              {activeTab === "analytics" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <BarChart3 className="h-4 w-4 shrink-0" />
+                <span>My Analytics</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("focus");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "focus"
+                  ? "text-white font-semibold"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              {activeTab === "focus" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Target className="h-4 w-4 shrink-0" />
+                <span>My Focus</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("goals");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "goals"
+                  ? "text-white font-semibold"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              {activeTab === "goals" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Target className="h-4 w-4 shrink-0" />
+                <span>My Goals</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("connections");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                fetchConnections();
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "connections"
+                  ? "text-white font-semibold"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              {activeTab === "connections" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Users className="h-4 w-4 shrink-0" />
+                <span>My Connections</span>
+              </span>
+            </button>
+          </div>
+
+          {/* Rooms Section */}
+          <div className="space-y-1">
+            <div
+              onClick={() => {
+                setActiveTab("groups");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className="px-3 mb-2 text-[9px] font-mono tracking-widest text-zinc-500 uppercase cursor-pointer hover:text-stone-300 flex items-center justify-between"
+            >
+              <span>ROOMS</span>
+              <Plus className="h-3 w-3 hover:text-white" onClick={(e) => { e.stopPropagation(); setActiveTab("groups"); setSelectedRoomName(null); }} />
+            </div>
+
+            <div className="space-y-2">
+              {groups.map((group) => {
+                const isSelected = selectedRoomName === group.name;
+                return (
+                  <div key={group.id} className="space-y-1">
+                    <button
+                      onClick={() => {
+                        enterRoomChannel(group.name);
+                        if (isMobileDrawer) setMobileMenuOpen(false);
+                      }}
+                      className={`relative w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-mono transition-colors cursor-pointer ${isSelected
+                          ? "text-white font-semibold"
+                          : "text-stone-500 hover:text-[#09090b] hover:bg-zinc-200/60"
+                        }`}
+                    >
+                      {isSelected && (
+                        <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                      )}
+                      <div className="relative z-10 flex items-center space-x-3 text-ellipsis overflow-hidden">
+                        <span className="text-zinc-500 font-mono">#</span>
+                        <span className="truncate">{group.name}</span>
+                      </div>
+                      <span className="relative z-10 h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    </button>
+
+                    {/* Indented room sub-navigation */}
+                    {isSelected && (
+                      <div className="pl-3.5 border-l border-[#e4e4e7] space-y-1 ml-3.5 mt-1">
+                        <button
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("overview");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "overview" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
+                            }`}
+                        >
+                          <LayoutDashboard className="h-3 w-3 opacity-70" />
+                          <span>Overview</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("members");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "members" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
+                            }`}
+                        >
+                          <Users className="h-3 w-3 opacity-70" />
+                          <span>Members</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("live");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "live" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
+                            }`}
+                        >
+                          <Activity className="h-3 w-3 opacity-70" />
+                          <span>Live Activity</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("leaderboard");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "leaderboard" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
+                            }`}
+                        >
+                          <Award className="h-3 w-3 opacity-70" />
+                          <span>Leaderboard</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("ai-summary");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "ai-summary" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
+                            }`}
+                        >
+                          <Sparkles className="h-3 w-3 opacity-70" />
+                          <span>AI Summary</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setActiveTab("groups");
+                            setRoomTab("chat");
+                            if (isMobileDrawer) setMobileMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center space-x-2 px-2 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer text-left ${roomTab === "chat" && activeTab === "groups" ? "text-[#09090b] font-semibold bg-zinc-200/70" : "text-[#71717a] hover:text-[#09090b]"
+                            }`}
+                        >
+                          <MessageSquare className="h-3 w-3 opacity-70" />
+                          <span>Chat</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Account Section */}
+          <div className="space-y-1">
+            <div className="px-3 mb-1.5 text-[10px] font-semibold tracking-wider text-[#a1a1aa] uppercase">
+              Account
+            </div>
+
+            <button
+              onClick={() => {
+                setActiveTab("profile");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "profile"
+                  ? "nav-item-active"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              <User className="h-4 w-4 shrink-0" />
+              <span>Profile</span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("settings");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "settings"
+                  ? "nav-item-active"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              <span>Settings</span>
+            </button>
+          </div>
         </nav>
 
+        {/* Bottom Profile Status Card */}
         {user && (
-          <button
-            onClick={handleLogout}
-            className="w-full text-center py-2.5 border border-rose-200 text-xs font-semibold uppercase tracking-wider rounded-xl text-rose-600 hover:bg-rose-50 cursor-pointer"
-          >
-            Sign Out
-          </button>
+          <div className="p-3.5 border-t border-[#e4e4e7] bg-white/40 space-y-3">
+            <div className="flex items-center space-x-3">
+              <img
+                src={user.avatarUrl}
+                alt={user.name}
+                className="h-8 w-8 rounded-full object-cover border border-[#e4e4e7]"
+              />
+              <div className="flex-1 min-w-0">
+                <h4 className="text-xs font-semibold text-[#09090b] truncate">{user.name}</h4>
+                <p className="text-[10px] text-[#71717a] font-mono truncate">{user.email}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] font-mono text-[#52525b] bg-[#f4f4f5] px-2.5 py-2 rounded-md border border-[#e4e4e7]">
+              <div className="flex items-center space-x-1.5">
+                <Laptop className="h-3 w-3 opacity-60" />
+                <span className="truncate max-w-[90px]">{user.deviceConnected}</span>
+              </div>
+              <span className={`text-[9px] font-semibold uppercase ${electronTracking ? "text-emerald-600" : "text-[#71717a]"}`}>
+                {electronTracking ? "Active" : "Synced"}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                handleLogout();
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className="w-full text-center py-1.5 border border-rose-200 text-[10px] font-semibold uppercase tracking-wider rounded-md text-rose-600 hover:bg-rose-50 cursor-pointer transition-all"
+            >
+              Sign Out
+            </button>
+          </div>
         )}
       </aside>
     );
@@ -2480,164 +2472,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ⚡ ACTIVE AGENT MONITORING SESSION SETUP MODAL */}
-      <AnimatePresence>
-        {isSessionSetupOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-md bg-white rounded-2xl border border-[#e4e4e7] shadow-2xl p-5 sm:p-6 space-y-4 font-sans text-left"
-            >
-              {/* Modal Header */}
-              <div className="flex items-start justify-between border-b border-[#f4f4f5] pb-3">
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 font-bold text-lg shrink-0 shadow-2xs">
-                    ⚡
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-[#09090b] tracking-tight">Active Agent Monitoring</h3>
-                    <p className="text-xs text-[#71717a] font-medium">Select application and task to start live session</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsSessionSetupOpen(false)}
-                  className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 cursor-pointer transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Form Body */}
-              <div className="space-y-4 pt-1">
-                {/* Active Application Input + Plus Icon Button */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-[#71717a] block">
-                      Active Application
-                    </label>
-                    {!isAddingCustomApp && (
-                      <button
-                        onClick={() => setIsAddingCustomApp(true)}
-                        className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer hover:underline"
-                        title="Add New Custom Application"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>Add Application</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {isAddingCustomApp ? (
-                    <div className="flex items-center space-x-2 bg-[#f4f4f5] p-2 rounded-xl border border-[#e4e4e7]">
-                      <input
-                        type="text"
-                        value={newCustomAppName}
-                        onChange={(e) => setNewCustomAppName(e.target.value)}
-                        placeholder="e.g. PyCharm, Blender, Notion..."
-                        className="input-field text-xs flex-1 bg-white"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleAddCustomApp();
-                        }}
-                      />
-                      <button
-                        onClick={handleAddCustomApp}
-                        className="btn-primary py-1.5 px-3 text-xs font-bold shrink-0"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={() => setIsAddingCustomApp(false)}
-                        className="p-1.5 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-200"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <select
-                        value={sessionAppInput}
-                        onChange={(e) => setSessionAppInput(e.target.value)}
-                        className="input-field cursor-pointer text-xs font-semibold flex-1"
-                      >
-                        {!customAppsList.includes(sessionAppInput) && (
-                          <option value={sessionAppInput}>{sessionAppInput}</option>
-                        )}
-                        {customAppsList.map((app) => (
-                          <option key={app} value={app}>
-                            {app}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => setIsAddingCustomApp(true)}
-                        className="p-2 rounded-xl bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#e4e4e7] text-[#09090b] cursor-pointer transition-colors shrink-0 shadow-2xs"
-                        title="Add custom application (+)"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Active Task / Project Input */}
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-[#71717a] block">
-                    Active Task / Project Description
-                  </label>
-                  <input
-                    type="text"
-                    value={sessionTaskInput}
-                    onChange={(e) => setSessionTaskInput(e.target.value)}
-                    placeholder="e.g. i am going to build endo core project..."
-                    className="input-field text-xs font-medium"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") handleStartActiveSession();
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-3 border-t border-[#f4f4f5] flex items-center justify-between">
-                {!myActivity?.isPaused ? (
-                  <button
-                    onClick={async () => {
-                      await updateMyActiveTracker(undefined, undefined, true);
-                      setIsSessionSetupOpen(false);
-                      triggerToast("Agent monitoring paused");
-                    }}
-                    className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                  >
-                    Pause Agent
-                  </button>
-                ) : <span />}
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setIsSessionSetupOpen(false)}
-                    className="px-4 py-2 rounded-xl border border-[#e4e4e7] text-xs font-bold text-stone-600 hover:bg-stone-100 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleStartActiveSession}
-                    disabled={updatingActivity}
-                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer flex items-center space-x-2"
-                  >
-                    <span className="h-2 w-2 rounded-full bg-white animate-pulse shrink-0" />
-                    <span>Turn ON Session & Sync</span>
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {/* 🕊️ LEFT SYSTEM BRAND & WORKSPACE COMMAND PANEL */}
       {renderSidebar(false)}
 
@@ -2685,271 +2519,38 @@ export default function App() {
               <Menu className="h-5 w-5" />
             </button>
 
-            {/* Seamless System Diagnostics Indicator */}
-            <div
-              className="relative inline-block"
-              onMouseEnter={() => setShowDiagnosticsPopover(true)}
-              onMouseLeave={() => setShowDiagnosticsPopover(false)}
-            >
-              <button
-                onClick={() => setShowDiagnosticsPopover(prev => !prev)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#f4f4f5]/90 border border-[#e4e4e7] text-[#09090b] hover:bg-[#e4e4e7] transition-all cursor-pointer text-xs font-mono shadow-2xs"
-                title="Hover to view microservice health diagnostics"
-              >
-                {/* Simple Muted Dot */}
-                <span className={`h-2 w-2 rounded-full inline-block shrink-0 ${isSystemHealthy ? "bg-emerald-500" : "bg-rose-500"}`} />
-                <span className="text-xs font-bold text-[#09090b]">
-                  {isSystemHealthy ? "Pipeline Operational" : `Diagnostics (${getDiagnosticsErrorList().length})`}
-                </span>
-                <ChevronDown className={`h-3 w-3 text-[#71717a] transition-transform ${showDiagnosticsPopover ? "rotate-180" : ""}`} />
-              </button>
+            {/* Mobile Brand Tag & Page Title */}
+            <div className="flex items-center space-x-2 min-w-0">
+              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
+              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
+              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">Workspace Status</h1>
+            </div>
 
-              {/* Hover Popover Dropdown */}
-              <AnimatePresence>
-                {showDiagnosticsPopover && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.96 }}
-                    transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                    className="absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-[#121215] border border-[#e4e4e7] dark:border-[#27272a] p-4 shadow-2xl z-50 text-left font-sans text-xs text-[#09090b] dark:text-[#f4f4f5]"
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between pb-3 border-b border-[#f4f4f5] dark:border-[#27272a]">
-                      <div className="flex items-center space-x-2">
-                        <Terminal className="h-4 w-4 text-[#18181b] dark:text-[#f4f4f5]" />
-                        <h4 className="font-semibold text-xs uppercase tracking-wider text-[#09090b] dark:text-[#f4f4f5]">
-                          Pipeline Diagnostics
-                        </h4>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
-                        isSystemHealthy
-                          ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-                          : "bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                      }`}>
-                        {isSystemHealthy ? "● All Systems Operational" : "● Issues Detected"}
-                      </span>
-                    </div>
-
-                    {/* Microservices Matrix */}
-                    <div className="py-3 space-y-2">
-                      {/* 1. REST API */}
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#fafafa] dark:bg-[#18181b] border border-[#e4e4e7]/60 dark:border-[#27272a]">
-                        <span className="font-mono text-[11px] font-semibold text-[#52525b] dark:text-[#a1a1aa]">REST API</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`h-2 w-2 rounded-full ${isApiHealthy ? "bg-emerald-500" : "bg-rose-500"}`} />
-                          <span className="font-mono font-bold text-[11px]">{isApiHealthy ? "ONLINE" : "OFFLINE"}</span>
-                        </div>
-                      </div>
-
-                      {/* 2. WebSockets */}
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#fafafa] dark:bg-[#18181b] border border-[#e4e4e7]/60 dark:border-[#27272a]">
-                        <span className="font-mono text-[11px] font-semibold text-[#52525b] dark:text-[#a1a1aa]">WEBSOCKETS</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`h-2 w-2 rounded-full ${socketStatus === "connected" ? "bg-emerald-500" : socketStatus === "error" ? "bg-rose-500" : "bg-zinc-400"}`} />
-                          <span className="font-mono font-bold text-[11px]">
-                            {socketStatus === "connected" ? "CONNECTED" : socketStatus === "error" ? "ERROR" : "OFFLINE"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 3. Supabase DB */}
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#fafafa] dark:bg-[#18181b] border border-[#e4e4e7]/60 dark:border-[#27272a]">
-                        <span className="font-mono text-[11px] font-semibold text-[#52525b] dark:text-[#a1a1aa]">SUPABASE DB</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`h-2 w-2 rounded-full ${isDbHealthy ? "bg-emerald-500" : dbStatus === "checking" ? "bg-amber-500 animate-pulse" : "bg-rose-500"}`} />
-                          <span className="font-mono font-bold text-[11px]">
-                            {dbStatus === "connected" ? "CONNECTED" : dbStatus === "checking" ? "CHECKING" : "ERROR"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 4. Desktop Agent */}
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#fafafa] dark:bg-[#18181b] border border-[#e4e4e7]/60 dark:border-[#27272a]">
-                        <span className="font-mono text-[11px] font-semibold text-[#52525b] dark:text-[#a1a1aa]">DESKTOP AGENT</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`h-2 w-2 rounded-full ${electronTracking ? "bg-emerald-500" : "bg-zinc-400"}`} />
-                          <span className="font-mono font-bold text-[11px]">{electronTracking ? "SYNCED" : "OFFLINE"}</span>
-                        </div>
-                      </div>
-
-                      {/* 5. Gemini AI */}
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#fafafa] dark:bg-[#18181b] border border-[#e4e4e7]/60 dark:border-[#27272a]">
-                        <span className="font-mono text-[11px] font-semibold text-[#52525b] dark:text-[#a1a1aa]">GEMINI AI</span>
-                        <div className="flex items-center space-x-1.5">
-                          <span className={`h-2 w-2 rounded-full ${isAiHealthy ? "bg-emerald-500" : "bg-rose-500"}`} />
-                          <span className="font-mono font-bold text-[11px]">{isAiHealthy ? "ACTIVE" : "ERROR"}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* What Went Wrong / Error Details Callout */}
-                    {getDiagnosticsErrorList().length > 0 && (
-                      <div className="mt-1 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/60 space-y-1.5">
-                        <div className="flex items-center space-x-1.5 text-rose-900 dark:text-rose-300 font-bold text-[11px]">
-                          <AlertTriangle className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
-                          <span>What Went Wrong:</span>
-                        </div>
-                        <ul className="space-y-1 pl-4 list-disc text-[11px] text-rose-800 dark:text-rose-300 font-sans leading-relaxed">
-                          {getDiagnosticsErrorList().map((err, idx) => (
-                            <li key={idx}>
-                              <strong className="font-mono">{err.service}:</strong> {err.message}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Action Footer */}
-                    <div className="mt-3 pt-2.5 border-t border-[#f4f4f5] dark:border-[#27272a] flex items-center justify-between">
-                      <span className="text-[10px] text-[#a1a1aa]">Microservice live diagnostics</span>
-                      <button
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          triggerToast("Running microservice health check...");
-                          await checkHealth();
-                          if (socketRef.current && !socketRef.current.connected) {
-                            socketRef.current.connect();
-                          }
-                        }}
-                        className="btn-secondary text-[10px] py-1 px-2.5 font-semibold hover:bg-stone-100 dark:hover:bg-stone-800"
-                      >
-                        Run Health Check 🔄
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+            {/* System Status Quick Indicator */}
+            <div className="hidden xs:flex items-center space-x-1.5 bg-[#f5f4ef]/40 dark:bg-stone-900/40 px-2.5 py-1 rounded-full border dark:border-neutral-850 border-stone-250/60 text-[9px] font-mono text-stone-400 shrink-0">
+              <span className={`h-1.5 w-1.5 rounded-full inline-block ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "bg-emerald-500 animate-pulse"
+                  : "bg-red-500 animate-ping"
+                }`}></span>
+              <span className="hidden sm:inline">
+                {socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected"
+                  ? "Pipeline Healthy"
+                  : "Pipeline Error"}
+              </span>
             </div>
 
             <span className="h-3.5 w-px bg-[#e4e4e7] hidden md:block"></span>
-            <p className="text-xs font-sans text-stone-600 font-semibold hidden md:block">
-              {user ? `Guild: ${user.activeGroup || "Engineering Team"}` : "Guild: Engineering Team"}
+            <p className="text-[11px] font-sans text-[#71717a] hidden md:block">
+              {user ? `Guild: ${user.activeGroup}` : ""}
             </p>
           </div>
 
-          {/* Top Header Right Actions matching Target UI */}
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={() => setCmdKOpen(true)}
-              className="p-2 text-stone-500 hover:text-stone-900 rounded-full hover:bg-stone-100 cursor-pointer transition-colors"
-              title="Quick Search (Ctrl+K)"
-            >
-              <Search className="h-4.5 w-4.5" />
-            </button>
-
-            <div className="relative">
-              <button className="p-2 text-stone-500 hover:text-stone-900 rounded-full hover:bg-stone-100 cursor-pointer transition-colors">
-                <Bell className="h-4.5 w-4.5" />
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
-              </button>
-            </div>
-
-            <img
-              src={user?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80"}
-              alt={user?.name || "Deepak"}
-              className="h-8 w-8 rounded-full object-cover border border-stone-200 cursor-pointer shadow-2xs"
-              onClick={() => setActiveTab("profile")}
-            />
+          <div className="flex items-center space-x-4">
           </div>
         </header>
 
         {/* 📚 PRIMARY SCROLLABLE BODY */}
-        <div className="p-3 sm:p-5 space-y-4 max-w-5xl w-full mx-auto">
-
-          {/* 100% BLENDED TOP-MIDDLE GREETING HEADER */}
-          <div className="mx-auto w-full px-1 py-1 flex flex-col md:flex-row md:items-center md:justify-between gap-3 transition-colors duration-300">
-            <div className="space-y-0.5 min-w-0">
-              <h2 className="text-xl sm:text-2xl font-display font-bold text-[#09090b] tracking-tight truncate flex items-center gap-2">
-                <span>{getGreeting()}</span>
-                <span>👋</span>
-              </h2>
-              <p className="text-xs text-stone-600 font-medium truncate">
-                Here's your real-time workstation overview for today.
-              </p>
-            </div>
-
-            {/* Quick Segment Controls (Blended with page canvas) */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {/* Agent Active/Paused Monitor Toggle */}
-              <button
-                onClick={() => {
-                  setSessionAppInput(myActivity?.app && myActivity.app !== "Offline" && myActivity.app !== "Inactive" ? myActivity.app : "VS Code");
-                  setSessionTaskInput(myActivity?.project && myActivity.project !== "None" ? myActivity.project : "");
-                  setIsSessionSetupOpen(true);
-                }}
-                disabled={updatingActivity}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-2xs ${
-                  myActivity?.isPaused
-                    ? "bg-rose-50 text-rose-800 border border-rose-200 hover:bg-rose-100"
-                    : "bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100"
-                }`}
-                title={myActivity?.isPaused ? "Agent Paused - Click to configure & resume session" : "Agent Active - Click to configure session"}
-              >
-                <span className="text-xs font-bold">Agent</span>
-                {myActivity?.isPaused ? (
-                  <span className="relative flex h-2.5 w-2.5 shrink-0" title="Agent Paused">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                  </span>
-                ) : (
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" title="Agent Running" />
-                )}
-              </button>
-
-              {/* Privacy Toggle Pills */}
-              <div className="flex items-center gap-0.5 bg-[#f4f4f5]/90 border border-[#e4e4e7] p-1 rounded-xl shadow-2xs">
-                <button
-                  onClick={() => submitProfileSettings({ privacyMode: "Private" })}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                    user?.privacyMode === "Private"
-                      ? "bg-white text-[#09090b] shadow-xs border border-[#d4d4d8] font-bold"
-                      : "text-stone-600 hover:text-[#09090b]"
-                  }`}
-                  title="Private Mode"
-                >
-                  <Lock className="h-3.5 w-3.5 text-amber-600" />
-                  <span>Private</span>
-                </button>
-
-                <button
-                  onClick={() => submitProfileSettings({ privacyMode: "Team" })}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                    user?.privacyMode === "Team"
-                      ? "bg-white text-[#09090b] shadow-xs border border-[#d4d4d8] font-bold"
-                      : "text-stone-600 hover:text-[#09090b]"
-                  }`}
-                  title="Team Mode"
-                >
-                  <Users className="h-3.5 w-3.5 text-blue-600" />
-                  <span>Team</span>
-                </button>
-
-                <button
-                  onClick={() => submitProfileSettings({ privacyMode: "Public" })}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                    user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
-                      ? "bg-white text-[#09090b] shadow-xs border border-[#d4d4d8] font-bold"
-                      : "text-stone-600 hover:text-[#09090b]"
-                  }`}
-                  title="Public Mode"
-                >
-                  <Globe className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Public</span>
-                </button>
-              </div>
-
-              {/* Connected Devices Trigger */}
-              <button
-                onClick={() => setShowDevicesList(!showDevicesList)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-[#f4f4f5]/90 border border-[#e4e4e7] text-[#09090b] hover:bg-[#e4e4e7] transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
-              >
-                <Laptop className="h-3.5 w-3.5 text-indigo-600" />
-                <span className="text-xs font-bold text-[#09090b]">{connectedDevices.length} Connected Devices</span>
-                <ChevronDown className={`h-3 w-3 text-stone-500 transition-transform ${showDevicesList ? "rotate-180" : ""}`} />
-              </button>
-            </div>
-          </div>
+        <div className={`p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 w-full ${activeTab === "analytics" ? "max-w-[1600px] mx-auto px-4 sm:px-8" : "max-w-5xl mx-auto"}`}>
 
           {/* SLIDING TIMELINE SUBSECTION FOR SELECTED FRIENDS */}
           <AnimatePresence>
@@ -3030,6 +2631,96 @@ export default function App() {
               {/* 1⃣ MAIN DASHBOARD TAB VIEW */}
               {activeTab === "dashboard" && (
                 <>
+                  {/* STUDIO HERO TITLE BLOCK */}
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-5 rounded-2xl border border-[#e4e4e7] shadow-xs">
+                    <div className="space-y-1">
+                      <h2 className="text-2xl sm:text-3xl font-display font-bold text-[#09090b] tracking-tight">
+                        {getGreeting()}
+                      </h2>
+                      <p className="text-xs text-[#71717a]">
+                        Here's your real-time workstation overview for today.
+                      </p>
+                    </div>
+
+                    {/* Quick Segment Controls: Privacy Mode, Agent Monitor Status, & Connected Devices */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {/* Agent Status Pill Indicator */}
+                      <button
+                        onClick={() => {
+                          if (myActivity?.isPaused) {
+                            setShowSessionModal(true);
+                          } else {
+                            updateMyActiveTracker(undefined, undefined, true);
+                          }
+                        }}
+                        disabled={updatingActivity}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 bg-white border border-[#e4e4e7] hover:bg-[#f4f4f5] transition-all cursor-pointer shadow-xs"
+                        title="Click to configure agent monitoring session"
+                      >
+                        <span className="font-bold text-[#09090b]">Agent</span>
+                        {myActivity?.isPaused ? (
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                          </span>
+                        ) : (
+                          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]"></span>
+                        )}
+                      </button>
+
+                      {/* Privacy Toggle Pills */}
+                      <div className="flex items-center gap-1 bg-[#f4f4f5] border border-[#e4e4e7] p-1 rounded-xl">
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Private" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Private"
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
+                          }`}
+                          title="Private Mode: Activity hidden from co-workers"
+                        >
+                          <Lock className="h-3.5 w-3.5 text-amber-600" />
+                          <span>Private</span>
+                        </button>
+
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Team" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Team"
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
+                          }`}
+                          title="Team Mode: Activity visible to room members"
+                        >
+                          <Users className="h-3.5 w-3.5 text-blue-600" />
+                          <span>Team</span>
+                        </button>
+
+                        <button
+                          onClick={() => submitProfileSettings({ privacyMode: "Public" })}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+                            user?.privacyMode === "Public" || (!user?.privacyMode || user?.privacyMode === "Level 1: Full Detail")
+                              ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7] font-semibold"
+                              : "text-[#71717a] hover:text-[#09090b]"
+                          }`}
+                          title="Public Mode: Live activity broadcasting ON"
+                        >
+                          <Globe className="h-3.5 w-3.5 text-emerald-600" />
+                          <span>Public</span>
+                        </button>
+                      </div>
+
+                      {/* Connected Devices Quick Hub Trigger */}
+                      <button
+                        onClick={() => setShowDevicesList(!showDevicesList)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-white border border-[#e4e4e7] text-[#09090b] hover:bg-[#f4f4f5] transition-all cursor-pointer flex items-center gap-2 shadow-xs"
+                      >
+                        <Laptop className="h-4 w-4 text-indigo-600" />
+                        <span>{connectedDevices.length} Connected Devices</span>
+                        <ChevronDown className={`h-3.5 w-3.5 text-[#71717a] transition-transform ${showDevicesList ? "rotate-180" : ""}`} />
+                      </button>
+                    </div>
+                  </div>
 
                   {/* CONNECTED DEVICES & DISPLAY MONITOR MATRIX */}
                   <AnimatePresence>
@@ -3109,16 +2800,93 @@ export default function App() {
                     )}
                   </AnimatePresence>
 
+                  {/* WORKSPACE PIPELINE CONNECTIVITY STRIP */}
+                  <div className="studio-card p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <Terminal className="h-4 w-4 text-[#09090b]" />
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
+                          Pipeline Diagnostics & Microservices
+                        </h3>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          triggerToast("Running diagnostics health-check...");
+                          await checkHealth();
+                          if (socketRef.current) {
+                            if (!socketRef.current.connected) {
+                              socketRef.current.connect();
+                            }
+                          }
+                        }}
+                        className="btn-secondary text-[11px] py-1 px-2.5"
+                      >
+                        Run Health Check
+                      </button>
+                    </div>
 
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+                      {/* 1. REST API */}
+                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
+                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">REST API</span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`status-dot ${apiStatus === "online" ? "status-dot-emerald" : "status-dot-rose"}`} />
+                          <span className="text-xs font-semibold text-[#09090b]">{apiStatus === "online" ? "ONLINE" : "OFFLINE"}</span>
+                        </div>
+                      </div>
+
+                      {/* 2. WebSockets */}
+                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
+                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">WebSockets</span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`status-dot ${socketStatus === "connected" ? "status-dot-emerald" : socketStatus === "error" ? "status-dot-rose" : "status-dot-neutral"}`} />
+                          <span className="text-xs font-semibold text-[#09090b]">
+                            {socketStatus === "connected" ? "CONNECTED" : socketStatus === "error" ? "ERROR" : "OFFLINE"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 3. Supabase Database */}
+                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
+                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">Supabase DB</span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`status-dot ${dbStatus === "connected" ? "status-dot-emerald" : "status-dot-rose"}`} />
+                          <span className="text-xs font-semibold text-[#09090b]">
+                            {dbStatus === "connected" ? "CONNECTED" : dbStatus === "checking" ? "CHECKING..." : "ERROR"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 4. Desktop Agent */}
+                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
+                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">Desktop Agent</span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`status-dot ${electronTracking ? "status-dot-emerald" : "status-dot-neutral"}`} />
+                          <span className="text-xs font-semibold text-[#09090b]">{electronTracking ? "SYNCED" : "OFFLINE"}</span>
+                        </div>
+                      </div>
+
+                      {/* 5. Gemini AI Engine */}
+                      <div className="p-3 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] flex flex-col justify-between h-20">
+                        <span className="text-[10px] font-semibold text-[#71717a] uppercase tracking-wider">Gemini AI</span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`status-dot ${aiStatus === "configured" && !insightsError ? "status-dot-emerald" : "status-dot-rose"}`} />
+                          <span className="text-xs font-semibold text-[#09090b]">
+                            {aiStatus === "configured" && !insightsError ? "ACTIVE" : "ERROR"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* CARDS GRID */}
                   <div className="grid grid-cols-12 gap-3 sm:gap-5">
                     {/* Focus Time Card */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#71717a]">Focus Time</span>
-                        <div className="space-y-0.5">
-                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-semibold text-[#71717a]">hrs</span></div>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Focus Time</span>
+                        <div className="space-y-1">
+                          <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-normal text-[#71717a]">hrs</span></div>
                           <div className="text-[11px] text-[#71717a] font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                         </div>
                       </div>
@@ -3127,38 +2895,21 @@ export default function App() {
                     {/* Productivity Score */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
-                        <div className="space-y-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Productivity Score</span>
+                        <div className="space-y-1">
                           <div className="text-2xl font-display font-bold text-[#09090b]"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
-                          <div className="text-[11px] text-[#71717a] font-medium">Target achieved</div>
+                          <div className="text-[11px] text-[#71717a]">Target achieved</div>
                         </div>
                       </div>
                     </TiltCard>
 
-                    {/* Current Session Card */}
+                    {/* Current Session */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-[#71717a]">Current Session</span>
-                          {myActivity?.isPaused ? (
-                            <span className="relative flex h-2.5 w-2.5 shrink-0" title="Agent Paused">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                            </span>
-                          ) : (
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" title="Agent Running" />
-                          )}
-                        </div>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a]">Current Session</span>
                         <div className="space-y-0.5">
-                          <div className="text-base font-bold text-[#09090b] truncate">
-                            {myActivity?.app || "VS Code"}
-                          </div>
-                          <div
-                            className="text-[11px] text-[#71717a] font-mono truncate"
-                            title={myActivity?.project || "None"}
-                          >
-                            Proj: {myActivity?.project || "None"}
-                          </div>
+                          <div className="text-base font-semibold text-[#09090b] truncate">{myActivity ? myActivity.app : "Inactive"}</div>
+                          <div className="text-[11px] text-[#71717a] font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
                         </div>
                       </div>
                     </TiltCard>
@@ -3168,72 +2919,71 @@ export default function App() {
                       <div className="col-span-12 sm:col-span-12 lg:col-span-6 studio-card flex flex-col justify-between p-4 min-h-32">
                         <div className="flex items-center justify-between">
                           <div className="inline-flex items-center space-x-2">
-                            <span className="badge badge-neutral text-xs font-semibold px-2.5 py-0.5">
+                            <span className="badge badge-neutral">
                               Activity Tracker Console
                             </span>
+                            {myActivity.isPaused ? (
+                              <span className="relative flex h-2.5 w-2.5 ml-2" title="Agent Monitoring Paused">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                              </span>
+                            ) : (
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] ml-2" title="Agent Monitoring Active"></span>
+                            )}
                           </div>
-                          {myActivity.isPaused ? (
-                            <span className="relative flex h-2.5 w-2.5 shrink-0" title="Agent Paused">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                            </span>
-                          ) : (
-                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" title="Agent Running" />
-                          )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
                           {/* App Selector Custom Node with Plus Button */}
                           <div className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <label className="text-[11px] font-bold uppercase tracking-wider text-[#71717a] block">Active Application</label>
-                            </div>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Application</label>
                             <div className="flex items-center space-x-1.5">
                               <select
                                 value={myActivity.app}
-                                onChange={(e) => updateMyActiveTracker(e.target.value, projectInput || sessionTaskInput || undefined, false)}
-                                className="input-field cursor-pointer text-xs font-medium flex-1"
+                                onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
+                                className="input-field cursor-pointer text-xs flex-1"
                               >
-                                {!customAppsList.includes(myActivity.app) && myActivity.app !== "Offline" && myActivity.app !== "Inactive" && (
-                                  <option value={myActivity.app}>{myActivity.app}</option>
-                                )}
-                                {customAppsList.map(app => (
+                                {customApps.map(app => (
                                   <option key={app} value={app}>{app}</option>
+                                ))}
+                                {myActivity.openApps && myActivity.openApps.map(app => (
+                                  !customApps.includes(app) && <option key={app} value={app}>{app}</option>
                                 ))}
                               </select>
                               <button
                                 onClick={() => {
-                                  setSessionAppInput(myActivity.app);
-                                  setSessionTaskInput(myActivity.project || "");
-                                  setIsAddingCustomApp(true);
-                                  setIsSessionSetupOpen(true);
+                                  const name = prompt("Enter new custom application name:");
+                                  if (name && name.trim()) {
+                                    const cleanName = name.trim();
+                                    if (!customApps.includes(cleanName)) {
+                                      setCustomApps(prev => [...prev, cleanName]);
+                                    }
+                                    updateMyActiveTracker(cleanName, undefined, false);
+                                  }
                                 }}
-                                className="p-2 rounded-xl bg-[#f4f4f5] hover:bg-[#e4e4e7] border border-[#e4e4e7] text-[#09090b] cursor-pointer transition-colors shrink-0 shadow-2xs"
-                                title="Add Custom Application Name (+)"
+                                className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer font-bold text-xs shrink-0"
+                                title="Add New Custom Application"
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </div>
 
                           {/* Project description inline apply */}
                           <div className="space-y-1">
-                            <label className="text-[11px] font-bold uppercase tracking-wider text-[#71717a] block">Active Task / Project</label>
+                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Task / Project</label>
                             <div className="flex items-center space-x-1.5">
                               <input
                                 type="text"
                                 value={projectInput}
-                                onChange={(e) => {
-                                  setProjectInput(e.target.value);
-                                  setSessionTaskInput(e.target.value);
-                                }}
-                                className="input-field text-xs font-medium"
+                                onChange={(e) => setProjectInput(e.target.value)}
+                                className="input-field text-xs"
                                 placeholder="What are you building?"
-                                onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, false)}
+                                onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
                               />
                               <button
-                                onClick={() => updateMyActiveTracker(undefined, projectInput, false)}
-                                className="btn-primary shrink-0 py-1.5 px-3 text-xs font-bold"
+                                onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
+                                className="btn-primary shrink-0 py-1.5 px-3 text-xs"
                               >
                                 Sync
                               </button>
@@ -3252,20 +3002,20 @@ export default function App() {
                         <div className="studio-card p-5 h-full relative overflow-hidden">
                           <div className="flex flex-col justify-between h-full space-y-5">
                             {/* Team & Scrum Telemetry Section */}
-                            <div className="p-3.5 rounded-lg bg-[#f4f4f5] border border-[#e4e4e7] space-y-2.5">
+                            <div className="p-4 rounded-lg bg-[#f4f4f5] border border-[#e4e4e7] space-y-3">
                               <div className="flex items-center justify-between">
-                                <h3 className="text-xs font-bold uppercase tracking-wider text-[#09090b] flex items-center gap-1.5">
-                                  <Users className="h-4 w-4 text-indigo-600" />
+                                <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b] flex items-center gap-1.5">
+                                  <Users className="h-4 w-4" />
                                   <span>Team & Scrum Telemetry</span>
                                 </h3>
-                                <div className="badge badge-emerald text-xs font-semibold px-2 py-0.5">
+                                <div className="badge badge-emerald">
                                   <span className="status-dot status-dot-emerald"></span>
                                   <span>Live Synced</span>
                                 </div>
                               </div>
 
                               {/* Active Room Members Grid */}
-                              <div className="space-y-2.5">
+                              <div className="space-y-3">
                                 {(() => {
                                   const activeGroupName = user?.activeGroup || (groups.length > 0 ? groups[0].name : null);
                                   if (!activeGroupName) {
@@ -3279,8 +3029,8 @@ export default function App() {
                                     : (roomsOccupants[activeGroupName] || []);
 
                                   return (
-                                    <div className="space-y-2.5">
-                                      <div className="flex justify-between items-center text-xs font-semibold text-[#52525b] border-b border-[#e4e4e7] pb-1.5">
+                                    <div className="space-y-3">
+                                      <div className="flex justify-between items-center text-xs font-medium text-[#71717a] border-b border-[#e4e4e7] pb-1.5">
                                         <span>Guild: #{activeGroupName}</span>
                                         <span>{occupants.length} Co-workers</span>
                                       </div>
@@ -3303,22 +3053,22 @@ export default function App() {
                                                       <img
                                                         src={occ.avatarUrl}
                                                         alt={occ.name}
-                                                        className="h-6.5 w-6.5 rounded-full object-cover border border-[#e4e4e7]"
+                                                        className="h-6 w-6 rounded-full object-cover border border-[#e4e4e7]"
                                                       />
                                                       <span className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-white ${occOnline ? "bg-emerald-500" : "bg-zinc-400"
                                                         }`} />
                                                     </div>
                                                     <div className="min-w-0">
-                                                      <span className="font-sans font-bold text-xs text-[#09090b] truncate block leading-tight">{occ.name}</span>
-                                                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">{occ.role}</span>
+                                                      <span className="font-sans font-semibold text-xs text-[#09090b] truncate block leading-tight">{occ.name}</span>
+                                                      <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">{occ.role}</span>
                                                     </div>
                                                   </div>
-                                                  <span className="text-[11px] font-mono text-[#71717a] shrink-0">{duration}</span>
+                                                  <span className="text-[10px] font-mono text-[#71717a] shrink-0">{duration}</span>
                                                 </div>
 
                                                 {occOnline ? (
-                                                  <div className="flex items-center justify-between text-[11px] font-medium bg-[#f4f4f5] p-1.5 rounded border border-[#e4e4e7]">
-                                                    <span className="text-[#09090b] font-bold truncate flex items-center space-x-1">
+                                                  <div className="flex items-center justify-between text-[11px] bg-[#f4f4f5] p-1.5 rounded border border-[#e4e4e7]">
+                                                    <span className="text-[#09090b] font-semibold truncate flex items-center space-x-1">
                                                       <span className="text-emerald-600">⚡</span>
                                                       <span>{activityApp}</span>
                                                     </span>
@@ -3342,21 +3092,21 @@ export default function App() {
                               </div>
 
                               {/* AI Scrum Coordinator Brief */}
-                                <div className="pt-3 border-t border-[#e4e4e7]">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <div className="flex items-center space-x-1.5">
-                                      <Sparkles className="h-4 w-4 text-amber-600" />
-                                      <span className="text-xs font-bold uppercase tracking-wider text-[#09090b]">Scrum Coordinator Brief</span>
-                                    </div>
-                                    <button
-                                      onClick={() => fetchAiBriefing(true)}
-                                      disabled={loadingInsights}
-                                      className="p-1 rounded hover:bg-zinc-200/60 text-[#71717a] hover:text-[#09090b] transition-all cursor-pointer disabled:opacity-50"
-                                      title="Regenerate Scrum Alignment Brief"
-                                    >
-                                      <RefreshCw className={`h-3.5 w-3.5 ${loadingInsights ? "animate-spin" : ""}`} />
-                                    </button>
+                              <div className="pt-3 border-t border-[#e4e4e7]">
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center space-x-1.5">
+                                    <Sparkles className="h-4 w-4 text-amber-600" />
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">Scrum Coordinator Brief</span>
                                   </div>
+                                  <button
+                                    onClick={() => fetchAiBriefing(true)}
+                                    disabled={loadingInsights}
+                                    className="p-1 rounded hover:bg-zinc-200/60 text-[#71717a] hover:text-[#09090b] transition-all cursor-pointer disabled:opacity-50"
+                                    title="Regenerate Scrum Alignment Brief"
+                                  >
+                                    <RefreshCw className={`h-3.5 w-3.5 ${loadingInsights ? "animate-spin" : ""}`} />
+                                  </button>
+                                </div>
 
                                 {loadingInsights ? (
                                   <SkeletonLoader lines={3} className="py-1" />
@@ -3393,30 +3143,30 @@ export default function App() {
                                       {/* Mini Cards Grid */}
                                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
                                         <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
-                                          <span className="text-xs sm:text-sm font-bold text-[#09090b] block mt-0.5">{roomSummary.productivityPercentage}%</span>
-                                          <span className={`text-[9px] font-semibold block mt-0.5 ${roomSummary.productivityPercentage >= 60 ? "text-emerald-600" : roomSummary.productivityPercentage >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Productivity</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{roomSummary.productivityPercentage}%</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${roomSummary.productivityPercentage >= 60 ? "text-emerald-600" : roomSummary.productivityPercentage >= 30 ? "text-amber-600" : "text-zinc-400"}`}>
                                             {roomSummary.productivityPercentage >= 60 ? "Strong" : roomSummary.productivityPercentage >= 30 ? "Moderate" : "Low Activity"}
                                           </span>
                                         </div>
                                         <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
-                                          <span className="text-xs sm:text-sm font-bold text-[#09090b] block mt-0.5">{focusPatterns.deepWorkStreak}m</span>
-                                          <span className={`text-[9px] font-semibold block mt-0.5 ${focusPatterns.flowStateDetected ? "text-emerald-600" : "text-zinc-400"}`}>
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Deep Work</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{focusPatterns.deepWorkStreak}m</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${focusPatterns.flowStateDetected ? "text-emerald-600" : "text-zinc-400"}`}>
                                             {focusPatterns.flowStateDetected ? "Flow Detected ✦" : "No Flow State"}
                                           </span>
                                         </div>
                                         <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Burnout Risk</span>
-                                          <span className={`text-xs sm:text-sm font-bold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>{welfare.burnoutRiskIndex}/100</span>
-                                          <span className={`text-[9px] font-semibold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-500" : welfare.burnoutRiskIndex > 30 ? "text-amber-500" : "text-emerald-500"}`}>
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Burnout Risk</span>
+                                          <span className={`text-xs font-bold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-600" : welfare.burnoutRiskIndex > 30 ? "text-amber-600" : "text-emerald-600"}`}>{welfare.burnoutRiskIndex}/100</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${welfare.burnoutRiskIndex > 60 ? "text-red-500" : welfare.burnoutRiskIndex > 30 ? "text-amber-500" : "text-emerald-500"}`}>
                                             {welfare.burnoutRiskIndex > 60 ? "High Risk ⚠" : welfare.burnoutRiskIndex > 30 ? "Moderate" : "Healthy"}
                                           </span>
                                         </div>
                                         <div className="p-2.5 bg-white rounded-md border border-[#e4e4e7] text-center">
-                                          <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Collaboration</span>
-                                          <span className="text-xs sm:text-sm font-bold text-[#09090b] block mt-0.5">{collaborationScore}/100</span>
-                                          <span className={`text-[9px] font-semibold block mt-0.5 ${collaborationScore >= 60 ? "text-emerald-600" : "text-zinc-400"}`}>
+                                          <span className="text-[9px] font-semibold uppercase tracking-wider text-[#71717a] block">Collaboration</span>
+                                          <span className="text-xs font-bold text-[#09090b] block mt-0.5">{collaborationScore}/100</span>
+                                          <span className={`text-[8px] font-semibold block mt-0.5 ${collaborationScore >= 60 ? "text-emerald-600" : "text-zinc-400"}`}>
                                             {collaborationScore >= 70 ? "High Synergy" : collaborationScore >= 40 ? "Moderate" : "Independent"}
                                           </span>
                                         </div>
@@ -3662,23 +3412,25 @@ export default function App() {
                     {/* Right Column: Unified Sync & Room Hub */}
                     <div className="space-y-6">
                       <div className="studio-card p-5 space-y-5 flex flex-col justify-between">
-                        {/* Tab Switcher */}
-                        <div className="grid grid-cols-2 border-b border-[#e4e4e7]">
+                        {/* Equally Placed Tab Switcher Header */}
+                        <div className="grid grid-cols-2 gap-2 border-b border-[#e4e4e7] pb-3">
                           <button
                             onClick={() => setHubTab("timeline")}
-                            className={`text-xs font-bold tracking-wider uppercase pb-2.5 text-center border-b-2 transition-all cursor-pointer ${hubTab === "timeline"
-                                ? "text-[#09090b] border-[#09090b]"
-                                : "text-[#71717a] border-transparent hover:text-[#09090b]"
-                              }`}
+                            className={`w-full py-2 text-xs font-bold tracking-wider uppercase border-b-2 transition-all cursor-pointer text-center ${
+                              hubTab === "timeline"
+                                ? "text-[#09090b] border-[#09090b] bg-[#f4f4f5]"
+                                : "text-[#71717a] border-transparent hover:text-[#09090b] hover:bg-stone-50"
+                            } rounded-t-lg`}
                           >
                             Timeline
                           </button>
                           <button
                             onClick={() => setHubTab("rooms")}
-                            className={`text-xs font-bold tracking-wider uppercase pb-2.5 text-center border-b-2 transition-all cursor-pointer ${hubTab === "rooms"
-                                ? "text-[#09090b] border-[#09090b]"
-                                : "text-[#71717a] border-transparent hover:text-[#09090b]"
-                              }`}
+                            className={`w-full py-2 text-xs font-bold tracking-wider uppercase border-b-2 transition-all cursor-pointer text-center ${
+                              hubTab === "rooms"
+                                ? "text-[#09090b] border-[#09090b] bg-[#f4f4f5]"
+                                : "text-[#71717a] border-transparent hover:text-[#09090b] hover:bg-stone-50"
+                            } rounded-t-lg`}
                           >
                             Rooms & Sync
                           </button>
@@ -3689,7 +3441,7 @@ export default function App() {
                             {/* Today's Work Breakdown Card (Inlined) */}
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold uppercase tracking-wider text-[#09090b] block">Today's Work Breakdown</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Today's Work Breakdown</span>
                                 <span className="text-[10px] font-mono text-[#71717a]">Distribution</span>
                               </div>
 
@@ -3711,11 +3463,11 @@ export default function App() {
                                     return (
                                       <div key={idx} className="space-y-1">
                                         <div className="flex justify-between items-center text-xs">
-                                          <span className="font-bold text-[#09090b] truncate flex items-center space-x-2">
+                                          <span className="font-semibold text-[#09090b] truncate flex items-center space-x-2">
                                             <span className={`h-2 w-2 rounded-full ${getAppColor(item.app)} shrink-0`}></span>
                                             <span>{item.app}</span>
                                           </span>
-                                          <span className="font-mono text-[11px] text-[#71717a] shrink-0">{item.hoursText}</span>
+                                          <span className="font-mono text-[10px] text-[#71717a] shrink-0">{item.hoursText}</span>
                                         </div>
                                         <div className="h-1.5 bg-[#f4f4f5] rounded-full overflow-hidden border border-[#e4e4e7]">
                                           <div
@@ -3735,13 +3487,13 @@ export default function App() {
                             {/* Daily Activity Feed */}
                             <div className="space-y-3">
                               <div className="flex items-center justify-between pb-1">
-                                <h4 className="text-xs font-bold uppercase tracking-wider text-[#09090b] flex items-center">
-                                  <Target className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                                <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] flex items-center">
+                                  <Target className="h-3.5 w-3.5 mr-1.5 text-[#71717a]" />
                                   Recent Activity Logs
                                 </h4>
                                 {myActivity && (
                                   <div className="flex items-center space-x-2 bg-[#f4f4f5] border border-[#e4e4e7] px-2.5 py-1 rounded-full shrink-0">
-                                    <div className="flex items-center text-xs font-mono font-semibold text-[#09090b]">
+                                    <div className="flex items-center text-[10px] font-mono font-bold text-[#09090b]">
                                       <Clock className="h-3 w-3 text-[#71717a] mr-1.5 shrink-0 animate-pulse" />
                                       <span>{parsedDurationText(myActivity.durationSeconds || 0)}</span>
                                     </div>
@@ -3794,8 +3546,8 @@ export default function App() {
                                   return grouped.map(([groupLabel, items]) => (
                                     <div key={groupLabel} className="space-y-2">
                                       {/* Group Label */}
-                                      <h4 className="text-[11px] font-bold tracking-wider text-[#52525b] uppercase flex items-center">
-                                        <span className="bg-[#f4f4f5] border border-[#e4e4e7] px-2 py-0.5 rounded text-[10px] font-semibold text-[#09090b]">
+                                      <h4 className="text-[10px] font-semibold tracking-wider text-[#71717a] uppercase flex items-center">
+                                        <span className="bg-[#f4f4f5] border border-[#e4e4e7] px-2 py-0.5 rounded text-[9px] font-semibold text-[#09090b]">
                                           {groupLabel}
                                         </span>
                                       </h4>
@@ -3810,7 +3562,7 @@ export default function App() {
                                               <div className="flex flex-col space-y-0.5">
                                                 <div className="flex items-start justify-between">
                                                   {renderTimelineItemText(item)}
-                                                  <span className="font-mono text-[10px] font-medium text-[#71717a] shrink-0 ml-2 mt-0.5">{item.time}</span>
+                                                  <span className="font-mono text-[10px] font-semibold text-[#52525b] shrink-0 ml-2 mt-0.5">{item.time}</span>
                                                 </div>
                                               </div>
                                             </div>
@@ -3961,163 +3713,16 @@ export default function App() {
                 </>
               )}
 
-              {/* 2⃣ ANALYTICS COMPILATIONS TAB VIEW */}
-              {activeTab === "analytics" && analytics && (
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold tracking-tight text-[#09090b]">My Analytics</h2>
-                    <p className="text-xs text-[#71717a]">
-                      Analyzing application distribution, focus history charts, and deep work contribution logs.
-                    </p>
-                  </div>
+              {activeTab === "analytics" && (
+                <div className="analytics-container w-full h-full p-0 m-0 bg-[#f8fafc]">
+                  <AnalyticsDashboard />
+                </div>
+              )}
 
-                  {/* GitHub-style focus calendar heatmap */}
-                  <div className="studio-card p-5">
-                    {renderContributionCalendar()}
-                  </div>
-
-                  {/* Summary blocks */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="studio-card studio-card-indigo p-5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Average Daily Focus</span>
-                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.averageDailyFocus} decimals={1} /> hrs</div>
-                      <p className="text-[10px] text-[#71717a] font-mono mt-1">Calculated on active window durations</p>
-                    </div>
-                    <div className="studio-card studio-card-emerald p-5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Daily Focus Goal</span>
-                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
-                      <p className="text-[10px] text-[#71717a] font-mono mt-1">Configured target parameters</p>
-                    </div>
-                    <div className="studio-card studio-card-amber p-5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Weekly Goal Achievement</span>
-                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.weeklyProdGoalAchieved} />%</div>
-                      <p className="text-[10px] text-[#71717a] font-mono mt-1">Goal compliance indicator</p>
-                    </div>
-                  </div>
-
-                  {/* HIGH-END VISUAL CHART BLOCKS */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    {/* Circle chart */}
-                    <div className="studio-card p-5 space-y-4">
-                      <div className="flex justify-between items-center border-b border-[#e4e4e7] pb-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                          App Distribution Share
-                        </h3>
-                        <span className="badge badge-indigo">Live Telemetry</span>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-2">
-                        <div className="relative w-44 h-44 shrink-0">
-                          <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="#e4e4e7" strokeWidth="3" />
-
-                            {(() => {
-                              let currentOffset = 0;
-                              const colors = ["#2563eb", "#10b981", "#d97706", "#8b5cf6", "#ec4899", "#64748b", "#06b6d4", "#f97316"];
-                              return analytics.appBreakdown.map((item, id) => {
-                                const percentage = item.value;
-                                const strokeDashoffset = -currentOffset;
-                                currentOffset += percentage;
-                                const strokeColor = item.color || colors[id % colors.length];
-
-                                return (
-                                  <circle
-                                    key={id}
-                                    cx="18"
-                                    cy="18"
-                                    r="15.915"
-                                    fill="none"
-                                    stroke={strokeColor}
-                                    strokeWidth="3.5"
-                                    strokeDasharray={`${percentage} 100`}
-                                    strokeDashoffset={strokeDashoffset}
-                                    className="transition-all duration-500"
-                                  />
-                                );
-                              });
-                            })()}
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
-                            <span className="text-2xl font-bold text-[#09090b]">
-                              {analytics.appBreakdown && analytics.appBreakdown.length > 0
-                                ? `${analytics.appBreakdown[0].value}%`
-                                : "0%"}
-                            </span>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] mt-0.5 truncate max-w-[120px]">
-                              {analytics.appBreakdown && analytics.appBreakdown.length > 0
-                                ? `${analytics.appBreakdown[0].name}`
-                                : "No Data"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 flex-1 w-full sm:w-auto">
-                          {analytics.appBreakdown.map((item, id) => {
-                            const colors = ["#2563eb", "#10b981", "#d97706", "#8b5cf6", "#ec4899", "#64748b", "#06b6d4", "#f97316"];
-                            const color = item.color || colors[id % colors.length];
-                            return (
-                              <motion.div 
-                                key={id} 
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: id * 0.05, type: "spring", stiffness: 300 }}
-                                whileHover={{ scale: 1.02, x: 5, backgroundColor: "#f4f4f5" }}
-                                className="flex justify-between items-center text-xs p-1.5 rounded transition-colors cursor-default"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
-                                  <span className="font-semibold text-[#09090b]">{item.name}</span>
-                                </div>
-                                <span className="font-mono text-xs font-bold text-[#09090b]"><NumberTicker value={item.value} />%</span>
-                              </motion.div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bar chart */}
-                    <div className="studio-card p-5 space-y-4">
-                      <div className="flex justify-between items-center border-b border-[#e4e4e7] pb-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                          Weekly Focus Retention Score
-                        </h3>
-                        <span className="badge badge-emerald">Ideal Baseline</span>
-                      </div>
-
-                      <div className="space-y-3.5 pt-1">
-                        {analytics.focusScoreHistory.map((item, id) => (
-                          <motion.div 
-                            key={id} 
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: id * 0.1, type: "spring", stiffness: 200 }}
-                            className="space-y-1"
-                          >
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-semibold text-[#09090b]">{item.day}</span>
-                              <span className="font-mono text-[11px] text-[#71717a]">score: <strong className="text-[#09090b]"><NumberTicker value={item.score} />%</strong> / ideal {item.ideal}%</span>
-                            </div>
-                            <div className="h-2.5 w-full bg-[#f4f4f5] rounded-full border border-[#e4e4e7] overflow-hidden relative">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${item.score}%` }}
-                                transition={{ duration: 1, delay: 0.2 + (id * 0.1), ease: "easeOut" }}
-                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"
-                              ></motion.div>
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10"
-                                style={{ left: `${item.ideal}%` }}
-                                title="Goal baseline margin"
-                              ></div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </div>
-
-                  </div>
+              {/* GOALS TAB VIEW */}
+              {activeTab === "goals" && (
+                <div className="goals-container w-full h-full p-0 m-0 relative -mx-4 sm:-mx-6 -my-6 bg-[#f8fafc]">
+                  <AnalyticsDashboard />
                 </div>
               )}
 
@@ -4630,8 +4235,10 @@ export default function App() {
                                 roomDetails={groups.find(g => g.name === selectedRoomName)}
                                 occupants={friends}
                                 userRole="OWNER"
+                                roomStatus={(groups.find(g => g.name === selectedRoomName) as any)?.status || "active"}
                                 onRefreshAi={() => fetchAiBriefing(true)}
                                 onNudgeMember={(name, id) => triggerPeerNudge(name, id)}
+                                onToggleRoomStatus={(newStatus) => handleToggleRoomStatus(newStatus)}
                               />
 
                               {/* Quick AI co-working briefing */}
@@ -6321,6 +5928,101 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* 🚀 SESSION SETUP & CUSTOM APPLICATION ADDITION MODAL */}
+      <AnimatePresence>
+        {showSessionModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="w-full max-w-md bg-white rounded-2xl p-6 border border-[#e4e4e7] shadow-2xl space-y-5"
+            >
+              <div className="flex items-center justify-between border-b border-[#e4e4e7] pb-3.5">
+                <div className="flex items-center space-x-2.5">
+                  <div className="p-2 bg-indigo-50 rounded-xl border border-indigo-100 text-indigo-600">
+                    <Activity className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#09090b]">Active Workstation Session</h3>
+                    <p className="text-[11px] text-[#71717a]">Select active application and current task</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSessionModal(false)}
+                  className="text-[#71717a] hover:text-[#09090b] p-1.5 rounded-lg hover:bg-[#f4f4f5] cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-[#09090b]">Active Application</label>
+                    <button
+                      onClick={() => {
+                        const name = prompt("Enter new custom application name (e.g. PyCharm, Postman, Blender):");
+                        if (name && name.trim()) {
+                          const cleanName = name.trim();
+                          if (!customApps.includes(cleanName)) {
+                            setCustomApps(prev => [...prev, cleanName]);
+                          }
+                          setSessionAppInput(cleanName);
+                        }
+                      }}
+                      className="text-xs text-indigo-600 font-semibold hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add Application
+                    </button>
+                  </div>
+                  <select
+                    value={sessionAppInput}
+                    onChange={(e) => setSessionAppInput(e.target.value)}
+                    className="input-field cursor-pointer text-xs"
+                  >
+                    {customApps.map(app => (
+                      <option key={app} value={app}>{app}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-[#09090b]">Next Active Task / Project</label>
+                  <input
+                    type="text"
+                    value={sessionTaskInput}
+                    onChange={(e) => setSessionTaskInput(e.target.value)}
+                    className="input-field text-xs"
+                    placeholder="e.g. Building EndoCore Workspace"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-[#e4e4e7]">
+                <button
+                  onClick={() => setShowSessionModal(false)}
+                  className="btn-secondary py-2 px-4 text-xs font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setShowSessionModal(false);
+                    await updateMyActiveTracker(sessionAppInput, sessionTaskInput, false);
+                    triggerToast(`Session active: ${sessionAppInput} — ${sessionTaskInput}`);
+                  }}
+                  className="btn-primary py-2 px-4 text-xs font-semibold"
+                >
+                  Turn ON Session & Sync
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <CommandPalette 
         isOpen={cmdKOpen} 
         onClose={() => setCmdKOpen(false)}

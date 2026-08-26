@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { MobileTab, RoomsSubTab, ConnectionsSubTab, AlertsFilter } from "../types";
+import { MobileTab, RoomsSubTab, ConnectionsSubTab, AlertsFilter, MobileNavigationState } from "../types";
 
-export function useMobileNavigation() {
-  const [activeTab, setActiveTab] = useState<MobileTab>("home");
+export function useMobileNavigation(initialTab: MobileTab = "home"): MobileNavigationState {
+  const [activeTab, setActiveTab] = useState<MobileTab>(initialTab);
   const [roomsSubTab, setRoomsSubTab] = useState<RoomsSubTab>("overview");
-  const [connectionsSubTab, setConnectionsSubTab] = useState<ConnectionsSubTab>("friends");
+  const [connectionsSubTab, setConnectionsSubTab] = useState<ConnectionsSubTab>("lobby");
   const [alertsFilter, setAlertsFilter] = useState<AlertsFilter>("all");
 
   return {
