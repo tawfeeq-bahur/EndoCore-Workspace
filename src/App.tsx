@@ -68,6 +68,8 @@ import { NumberTicker } from "./components/NumberTicker";
 import { TiltCard } from "./components/TiltCard";
 import { CommandPalette } from "./components/CommandPalette";
 import { SkeletonLoader } from "./components/SkeletonLoader";
+import AnalyticsDashboard from "./components/AnalyticsDashboard";
+import { GoalsDashboard } from "./components/GoalsDashboard";
 
 export default function App() {
   const [cmdKOpen, setCmdKOpen] = useState(false);
@@ -1889,6 +1891,27 @@ export default function App() {
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
                 <Target className="h-4 w-4 shrink-0" />
+                <span>My Focus</span>
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setActiveTab("goals");
+                setSelectedRoomName(null);
+                setSelectedFriendId(null);
+                if (isMobileDrawer) setMobileMenuOpen(false);
+              }}
+              className={`relative w-full flex items-center space-x-3 px-3 py-2 rounded-md text-xs font-medium transition-colors cursor-pointer ${activeTab === "goals"
+                  ? "text-white font-semibold"
+                  : "text-[#52525b] hover:text-[#09090b] hover:bg-zinc-200/60"
+                }`}
+            >
+              {activeTab === "goals" && (
+                <motion.div layoutId="nav-pill" className="absolute inset-0 bg-[#18181b] rounded-md" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+              )}
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <Target className="h-4 w-4 shrink-0" />
                 <span>My Goals</span>
               </span>
             </button>
@@ -3647,163 +3670,16 @@ export default function App() {
                 </>
               )}
 
-              {/* 2⃣ ANALYTICS COMPILATIONS TAB VIEW */}
-              {activeTab === "analytics" && analytics && (
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold tracking-tight text-[#09090b]">My Analytics</h2>
-                    <p className="text-xs text-[#71717a]">
-                      Analyzing application distribution, focus history charts, and deep work contribution logs.
-                    </p>
-                  </div>
+              {activeTab === "analytics" && (
+                <div className="analytics-container w-full h-full p-0 m-0 relative -mx-4 sm:-mx-6 -my-6 bg-[#f8fafc]">
+                  <AnalyticsDashboard />
+                </div>
+              )}
 
-                  {/* GitHub-style focus calendar heatmap */}
-                  <div className="studio-card p-5">
-                    {renderContributionCalendar()}
-                  </div>
-
-                  {/* Summary blocks */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="studio-card studio-card-indigo p-5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Average Daily Focus</span>
-                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.averageDailyFocus} decimals={1} /> hrs</div>
-                      <p className="text-[10px] text-[#71717a] font-mono mt-1">Calculated on active window durations</p>
-                    </div>
-                    <div className="studio-card studio-card-emerald p-5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Daily Focus Goal</span>
-                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
-                      <p className="text-[10px] text-[#71717a] font-mono mt-1">Configured target parameters</p>
-                    </div>
-                    <div className="studio-card studio-card-amber p-5">
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block mb-1">Weekly Goal Achievement</span>
-                      <div className="text-3xl font-bold text-[#09090b]"><NumberTicker value={analytics.weeklyProdGoalAchieved} />%</div>
-                      <p className="text-[10px] text-[#71717a] font-mono mt-1">Goal compliance indicator</p>
-                    </div>
-                  </div>
-
-                  {/* HIGH-END VISUAL CHART BLOCKS */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    {/* Circle chart */}
-                    <div className="studio-card p-5 space-y-4">
-                      <div className="flex justify-between items-center border-b border-[#e4e4e7] pb-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                          App Distribution Share
-                        </h3>
-                        <span className="badge badge-indigo">Live Telemetry</span>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-2">
-                        <div className="relative w-44 h-44 shrink-0">
-                          <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
-                            <circle cx="18" cy="18" r="15.915" fill="none" stroke="#e4e4e7" strokeWidth="3" />
-
-                            {(() => {
-                              let currentOffset = 0;
-                              const colors = ["#2563eb", "#10b981", "#d97706", "#8b5cf6", "#ec4899", "#64748b", "#06b6d4", "#f97316"];
-                              return analytics.appBreakdown.map((item, id) => {
-                                const percentage = item.value;
-                                const strokeDashoffset = -currentOffset;
-                                currentOffset += percentage;
-                                const strokeColor = item.color || colors[id % colors.length];
-
-                                return (
-                                  <circle
-                                    key={id}
-                                    cx="18"
-                                    cy="18"
-                                    r="15.915"
-                                    fill="none"
-                                    stroke={strokeColor}
-                                    strokeWidth="3.5"
-                                    strokeDasharray={`${percentage} 100`}
-                                    strokeDashoffset={strokeDashoffset}
-                                    className="transition-all duration-500"
-                                  />
-                                );
-                              });
-                            })()}
-                          </svg>
-                          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
-                            <span className="text-2xl font-bold text-[#09090b]">
-                              {analytics.appBreakdown && analytics.appBreakdown.length > 0
-                                ? `${analytics.appBreakdown[0].value}%`
-                                : "0%"}
-                            </span>
-                            <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] mt-0.5 truncate max-w-[120px]">
-                              {analytics.appBreakdown && analytics.appBreakdown.length > 0
-                                ? `${analytics.appBreakdown[0].name}`
-                                : "No Data"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 flex-1 w-full sm:w-auto">
-                          {analytics.appBreakdown.map((item, id) => {
-                            const colors = ["#2563eb", "#10b981", "#d97706", "#8b5cf6", "#ec4899", "#64748b", "#06b6d4", "#f97316"];
-                            const color = item.color || colors[id % colors.length];
-                            return (
-                              <motion.div 
-                                key={id} 
-                                initial={{ opacity: 0, x: -10 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: id * 0.05, type: "spring", stiffness: 300 }}
-                                whileHover={{ scale: 1.02, x: 5, backgroundColor: "#f4f4f5" }}
-                                className="flex justify-between items-center text-xs p-1.5 rounded transition-colors cursor-default"
-                              >
-                                <div className="flex items-center space-x-2">
-                                  <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }}></span>
-                                  <span className="font-semibold text-[#09090b]">{item.name}</span>
-                                </div>
-                                <span className="font-mono text-xs font-bold text-[#09090b]"><NumberTicker value={item.value} />%</span>
-                              </motion.div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bar chart */}
-                    <div className="studio-card p-5 space-y-4">
-                      <div className="flex justify-between items-center border-b border-[#e4e4e7] pb-3">
-                        <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                          Weekly Focus Retention Score
-                        </h3>
-                        <span className="badge badge-emerald">Ideal Baseline</span>
-                      </div>
-
-                      <div className="space-y-3.5 pt-1">
-                        {analytics.focusScoreHistory.map((item, id) => (
-                          <motion.div 
-                            key={id} 
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: id * 0.1, type: "spring", stiffness: 200 }}
-                            className="space-y-1"
-                          >
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-semibold text-[#09090b]">{item.day}</span>
-                              <span className="font-mono text-[11px] text-[#71717a]">score: <strong className="text-[#09090b]"><NumberTicker value={item.score} />%</strong> / ideal {item.ideal}%</span>
-                            </div>
-                            <div className="h-2.5 w-full bg-[#f4f4f5] rounded-full border border-[#e4e4e7] overflow-hidden relative">
-                              <motion.div
-                                initial={{ width: 0 }}
-                                animate={{ width: `${item.score}%` }}
-                                transition={{ duration: 1, delay: 0.2 + (id * 0.1), ease: "easeOut" }}
-                                className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full"
-                              ></motion.div>
-                              <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-10"
-                                style={{ left: `${item.ideal}%` }}
-                                title="Goal baseline margin"
-                              ></div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </div>
-                    </div>
-
-                  </div>
+              {/* GOALS TAB VIEW */}
+              {activeTab === "goals" && (
+                <div className="goals-container w-full h-full p-0 m-0 relative -mx-4 sm:-mx-6 -my-6 bg-[#f8fafc]">
+                  <GoalsDashboard />
                 </div>
               )}
 
