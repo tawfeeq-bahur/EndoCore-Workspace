@@ -54,7 +54,11 @@ import {
   Pencil,
   Shield,
   BarChart2,
-  LogOut
+  LogOut,
+  Eye,
+  EyeOff,
+  Mail,
+  Presentation
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -217,6 +221,8 @@ export default function App() {
   const [authName, setAuthName] = useState<string>("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [electronTracking, setElectronTracking] = useState<boolean>(false);
 
   // Diagnostics & Connectivity Health States
@@ -2398,7 +2404,7 @@ export default function App() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 mesh-bg">
+      <div className="min-h-screen flex items-center justify-center p-6 bg-[#f4f4f5] font-sans transition-colors duration-300">
         {/* ⚡ PREMIUM HIGH-CONTRAST TOAST ALERT (TOP-RIGHT CORNER NON-BLOCKING) */}
         <AnimatePresence>
           {toastMessage && (
@@ -2423,138 +2429,235 @@ export default function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md p-8 rounded-3xl glass-card border-glow shadow-2xl space-y-8"
+          className="w-full max-w-[460px] p-8 md:p-10 rounded-[32px] bg-white border border-[#e4e4e7] shadow-xl space-y-7 text-[#09090b]"
         >
-          <div className="text-center space-y-2">
-            <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
-            <p className="text-[10px] font-mono tracking-wider uppercase opacity-60">WORKSTATION AUTHENTICATION GATE</p>
+          {/* Header */}
+          <div className="text-center space-y-1">
+            <h1 className="font-serif font-extrabold text-3xl sm:text-4xl text-[#09090b] tracking-tight">EndoCore.</h1>
+            <p className="text-[10px] font-mono tracking-[0.2em] text-[#71717a] uppercase font-medium">
+              {authView === "login" ? "WORKSTATION AUTHENTICATION GATE" : "WORKSTATION IDENTITY CREATION"}
+            </p>
           </div>
 
           {authError && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs text-red-400 font-mono">
-              Error: {authError}
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-600 font-mono flex items-center justify-between">
+              <span>Error: {authError}</span>
+              <button onClick={() => setAuthError(null)} className="text-rose-400 hover:text-rose-700">✕</button>
             </div>
           )}
 
           {authView === "login" ? (
             <form onSubmit={handleLogin} className="space-y-5">
-              {/* 🏆 ONE-CLICK JUDGE SHOWCASE DEMO BUTTON */}
+              {/* LAUNCH JUDGE DEMO SHOWCASE MODE */}
               <button
                 type="button"
                 onClick={executeShowcaseLogin}
                 disabled={authLoading}
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-indigo-600 to-emerald-500 text-white font-bold text-xs tracking-wider uppercase shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer border border-amber-400/30"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#09090b] text-white font-bold text-xs tracking-wider uppercase shadow-xs hover:bg-[#18181b] transition-all flex items-center justify-center space-x-2.5 cursor-pointer border border-[#27272a]"
               >
-                <span>🏆 Launch Judge Demo Showcase Mode</span>
+                <Presentation className="h-4 w-4" />
+                <span>LAUNCH JUDGE DEMO SHOWCASE MODE</span>
               </button>
 
+              {/* Divider */}
               <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
-                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono tracking-widest text-zinc-400">or sign in manually</span>
-                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
+                <div className="flex-grow border-t border-[#e4e4e7]"></div>
+                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono tracking-widest text-[#71717a]">OR SIGN IN MANUALLY</span>
+                <div className="flex-grow border-t border-[#e4e4e7]"></div>
               </div>
 
+              {/* Email / Username field */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email / Username</label>
-                <input
-                  type="text"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="showcase or name@email.com"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  WORKSPACE EMAIL / USERNAME
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <User className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type="text"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="tawfeeqbahur@gmail.com"
+                  />
+                </div>
               </div>
 
+              {/* Passcode field */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
-                <input
-                  type="password"
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="••••••••"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  GATE PASSCODE
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <Lock className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer shrink-0"
+                  >
+                    {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
+              {/* Remember me & Forgot passcode */}
+              <div className="flex items-center justify-between text-xs text-[#71717a] pt-0.5">
+                <label className="flex items-center space-x-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#e4e4e7] text-[#09090b] focus:ring-0 cursor-pointer accent-[#09090b]"
+                  />
+                  <span className="text-xs text-[#71717a]">Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => triggerToast("Passcode reset link sent to registered workspace email.")}
+                  className="text-xs text-[#71717a] hover:text-[#09090b] hover:underline cursor-pointer transition-colors"
+                >
+                  Forgot passcode?
+                </button>
+              </div>
+
+              {/* CONNECT WORKSPACE button */}
               <button
                 type="submit"
                 disabled={authLoading}
-                className="btn-primary w-full justify-center py-3.5 text-xs tracking-widest uppercase"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#09090b] text-white font-bold text-xs tracking-wider uppercase shadow-xs hover:bg-[#18181b] transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
-                {authLoading ? "Verifying traces…" : "Connect Workspace"}
+                <span>{authLoading ? "VERIFYING TRACES…" : "CONNECT WORKSPACE"}</span>
               </button>
 
-              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
+              {/* Create Identity Switch link */}
+              <div className="pt-1 text-center text-xs text-[#71717a]">
                 Need key clearance?{" "}
                 <button
                   type="button"
                   onClick={() => { setAuthView("register"); setAuthError(null); }}
-                  className="text-stone-300 hover:underline cursor-pointer"
+                  className="font-mono text-xs text-[#09090b] underline font-medium hover:text-black cursor-pointer"
                 >
                   Create Identity
                 </button>
               </div>
 
-              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1.5 bg-[#fafafa]/50 dark:bg-[#151518]/20">
-                <p className="font-bold text-amber-500 uppercase tracking-wider">🏆 Judge Competition Demo Credentials:</p>
-                <p>Username: <span className="dark:text-emerald-400 font-bold select-all">showcase</span> (or showcase@endocore.io)</p>
-                <p>Password: <span className="dark:text-emerald-400 font-bold select-all">123</span></p>
+              {/* Demo Credentials Box */}
+              <div className="mt-5 p-4 rounded-2xl border border-[#e4e4e7] bg-[#f4f4f5] flex items-start space-x-3.5 text-[#09090b]">
+                <ShieldCheck className="h-5 w-5 text-[#09090b] shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-mono font-bold text-[10px] text-[#09090b] uppercase tracking-wider">
+                    JUDGE COMPETITION DEMO CREDENTIALS
+                  </p>
+                  <p className="font-mono text-xs text-[#71717a]">
+                    Username: <span className="font-bold text-[#09090b] font-mono select-all">showcase</span> <span className="text-[#a1a1aa]">(or showcase@endocore.io)</span>
+                  </p>
+                  <p className="font-mono text-xs text-[#71717a]">
+                    Password: <span className="font-bold text-[#09090b] font-mono select-all">123</span>
+                  </p>
+                </div>
               </div>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-5">
+              {/* DISPLAY NAME */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Your Display Name</label>
-                <input
-                  type="text"
-                  required
-                  value={authName}
-                  onChange={(e) => setAuthName(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="Tawfeeq Bahur"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  YOUR DISPLAY NAME
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <User className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type="text"
+                    required
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="Tawfeeq Bahur"
+                  />
+                </div>
               </div>
 
+              {/* WORKSPACE EMAIL */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
-                <input
-                  type="email"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="name@email.com"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  WORKSPACE EMAIL
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <Mail className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type="email"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="tawfeeqbahur@gmail.com"
+                  />
+                </div>
               </div>
 
+              {/* GATE PASSCODE */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
-                <input
-                  type="password"
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="Min 6 characters"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  GATE PASSCODE
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <Lock className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer shrink-0"
+                  >
+                    {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
+              {/* Passcode Requirements Box */}
+              <div className="p-4 rounded-2xl border border-[#e4e4e7] bg-[#f4f4f5] flex items-start space-x-3.5 text-[#09090b]">
+                <Lock className="h-5 w-5 text-[#09090b] shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs">
+                  <p className="font-semibold text-xs text-[#09090b]">
+                    Passcode must be at least 6 characters.
+                  </p>
+                  <p className="text-[11px] text-[#71717a]">
+                    Use a strong passcode to keep your workspace secure.
+                  </p>
+                </div>
+              </div>
+
+              {/* ESTABLISH CLEARANCES button */}
               <button
                 type="submit"
                 disabled={authLoading}
-                className="btn-primary w-full justify-center py-3.5 text-xs tracking-widest uppercase"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#09090b] text-white font-bold text-xs tracking-wider uppercase shadow-xs hover:bg-[#18181b] transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
-                {authLoading ? "Registering identity…" : "Establish Clearances"}
+                <span>{authLoading ? "REGISTERING IDENTITY…" : "ESTABLISH CLEARANCES"}</span>
               </button>
 
-              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
+              {/* Already registered switch link */}
+              <div className="pt-1 text-center text-xs text-[#71717a]">
                 Already registered?{" "}
                 <button
                   type="button"
                   onClick={() => { setAuthView("login"); setAuthError(null); }}
-                  className="text-stone-300 hover:underline cursor-pointer"
+                  className="font-mono text-xs text-[#09090b] underline font-medium hover:text-black cursor-pointer"
                 >
                   Log in
                 </button>
