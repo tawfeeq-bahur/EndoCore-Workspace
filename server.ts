@@ -2138,11 +2138,13 @@ app.post("/api/my-activity", authenticateToken, async (req: any, res) => {
         }
       }
 
-      // 2. Set the current activity to the new app/project with durationSeconds = 0 in cache
+      // 2. Set the current activity to the new app/project
       activity.app = selectedApp !== undefined ? selectedApp : activity.app;
       activity.project = sanitizedProject !== undefined ? sanitizedProject : activity.project;
-      activity.durationSeconds = 0;
-      activity.startedAt = Date.now();
+      if (resetTimer === true) {
+        activity.durationSeconds = 0;
+        activity.startedAt = Date.now();
+      }
       activity.isPaused = isPaused !== undefined ? isPaused : (togglePause !== undefined ? togglePause : (wasOffline ? false : activity.isPaused));
       if (isPaused === false || req.body.isManual) {
         activity.isPaused = false;

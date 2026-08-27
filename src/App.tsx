@@ -777,7 +777,17 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data && !data.error) {
-          setMyActivity(data);
+          setMyActivity(prev => {
+            if (!prev) return data;
+            const isActive = !data.isPaused && data.app !== "Offline";
+            const safeDuration = isActive
+              ? Math.max(prev.durationSeconds || 0, data.durationSeconds || 0)
+              : (data.durationSeconds || 0);
+            return {
+              ...data,
+              durationSeconds: safeDuration
+            };
+          });
           return;
         }
       }
