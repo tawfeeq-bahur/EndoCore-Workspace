@@ -159,6 +159,13 @@ export default function App() {
   const [hubTab, setHubTab] = useState<"timeline" | "rooms">("timeline");
   const groupsRef = useRef<Group[]>([]);
 
+  // Intro calibration roll state (triggers on first load, login, or page refresh)
+  const [isIntroRolling, setIsIntroRolling] = useState<boolean>(true);
+  const [introValues, setIntroValues] = useState<{ focusHours: number; score: number }>({
+    focusHours: 0,
+    score: 0
+  });
+
   // Asynchronous Loading Flags
   const [loadingInsights, setLoadingInsights] = useState<boolean>(false);
   const [insightsError, setInsightsError] = useState<boolean>(false);
@@ -612,6 +619,48 @@ export default function App() {
       Notification.requestPermission().catch(() => {});
     }
   }, []);
+
+  // Intro calibration roll sequence: 3s 0 -> max, 3s max -> actual
+  useEffect(() => {
+    setIsIntroRolling(true);
+    const startTime = performance.now();
+    const durationUp = 3000;   // 3 seconds: 0 -> max target (e.g. 6.0 hrs / 100%)
+    const durationDown = 3000; // 3 seconds: max target -> actual
+    let animationFrameId: number;
+
+    const animateRoll = (now: number) => {
+      const elapsed = now - startTime;
+      const targetGoal = user?.productivityGoal || 6;
+      const actualFocusHours = parseFloat((Math.floor((myActivity?.durationSeconds || 0) / 60) * 0.1).toFixed(1));
+      const actualScore = Math.min(100, Math.round((actualFocusHours / targetGoal) * 100));
+
+      if (elapsed <= durationUp) {
+        // Phase 1: Roll UP from 0 to 100% / goal over 3s
+        const p = elapsed / durationUp;
+        setIntroValues({
+          focusHours: parseFloat((p * targetGoal).toFixed(1)),
+          score: Math.round(p * 100)
+        });
+        animationFrameId = requestAnimationFrame(animateRoll);
+      } else if (elapsed <= durationUp + durationDown) {
+        // Phase 2: Roll DOWN from 100% / goal to actual value over 3s
+        const p = (durationUp + durationDown - elapsed) / durationDown;
+        setIntroValues({
+          focusHours: parseFloat((actualFocusHours + p * (targetGoal - actualFocusHours)).toFixed(1)),
+          score: Math.round(actualScore + p * (100 - actualScore))
+        });
+        animationFrameId = requestAnimationFrame(animateRoll);
+      } else {
+        // Phase 3: Roll complete! Show actual live values
+        setIsIntroRolling(false);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(animateRoll);
+    return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    };
+  }, [user?.productivityGoal]);
 
   // Sync token and start tracking with Electron desktop agent if available
   useEffect(() => {
@@ -3210,13 +3259,19 @@ export default function App() {
                   <div className="grid grid-cols-12 gap-3 sm:gap-5">
                     {/* Focus Time Card */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
-                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Focus Time</span>
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Focus Time</span>
+                          {isIntroRolling && (
+                            <span className="text-[9px] font-mono text-indigo-600 font-bold animate-pulse">CALIBRATING...</span>
+                          )}
+                        </div>
                         <div className="space-y-1">
                           <div className="text-2xl font-display font-black text-black">
                             <NumberTicker 
-                              value={parseFloat((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1).toFixed(1))} 
+                              value={isIntroRolling ? introValues.focusHours : parseFloat((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1).toFixed(1))} 
                               decimals={1} 
+                              duration={isIntroRolling ? 0.05 : 0.8}
                             /> <span className="text-xs font-bold text-black">hrs</span>
                           </div>
                           <div className="text-[11px] text-black font-extrabold font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
@@ -3226,12 +3281,18 @@ export default function App() {
 
                     {/* Productivity Score */}
                     <TiltCard className="col-span-12 sm:col-span-6 lg:col-span-2">
-                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
-                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Productivity Score</span>
+                      <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full relative overflow-hidden">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Productivity Score</span>
+                          {isIntroRolling && (
+                            <span className="text-[9px] font-mono text-emerald-600 font-bold animate-pulse">CALIBRATING...</span>
+                          )}
+                        </div>
                         <div className="space-y-1">
                           <div className="text-2xl font-display font-black text-black">
                             <NumberTicker 
-                              value={Math.min(100, Math.round(((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1) / (user?.productivityGoal || 6)) * 100))} 
+                              value={isIntroRolling ? introValues.score : Math.min(100, Math.round(((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1) / (user?.productivityGoal || 6)) * 100))} 
+                              duration={isIntroRolling ? 0.05 : 0.8}
                             />%
                           </div>
                           <div className="text-[11px] text-black font-extrabold">Target achieved</div>
