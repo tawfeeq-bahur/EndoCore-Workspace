@@ -7,14 +7,19 @@ import {
   CheckCircle2, 
   Circle, 
   AlertCircle, 
-  Sparkles, 
-  Filter, 
   Check, 
   X, 
-  ArrowUpRight, 
   Award,
   Search,
-  ChevronRight
+  Shield,
+  ExternalLink,
+  Calendar,
+  BarChart2,
+  Code,
+  FileText,
+  CheckCircle,
+  Lightbulb,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -29,6 +34,7 @@ interface Goal {
   status: 'active' | 'completed';
   deadline: string;
   createdAt: string;
+  priority?: string;
 }
 
 export function GoalsDashboard() {
@@ -38,6 +44,7 @@ export function GoalsDashboard() {
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'completed'>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sidebarTab, setSidebarTab] = useState<'recent' | 'demo'>('recent');
   
   // Form fields for new goal
   const [newTitle, setNewTitle] = useState('');
@@ -109,7 +116,6 @@ export function GoalsDashboard() {
         const newGoal = await res.json();
         setGoals(prev => [newGoal, ...prev]);
         setIsModalOpen(false);
-        // Reset form
         setNewTitle('');
         setNewDescription('');
         setNewCategory('Development');
@@ -123,32 +129,6 @@ export function GoalsDashboard() {
       setFormError("Network error occurred");
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleQuickAddHours = async (goalId: string, hoursToAdd: number) => {
-    const goal = goals.find(g => g.id === goalId);
-    if (!goal) return;
-
-    const newHours = Math.min(goal.targetHours, goal.currentHours + hoursToAdd);
-    const newStatus = newHours >= goal.targetHours ? 'completed' : goal.status;
-
-    try {
-      const res = await fetch(`/api/goals/${goalId}`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({
-          currentHours: newHours,
-          status: newStatus
-        })
-      });
-
-      if (res.ok) {
-        const updated = await res.json();
-        setGoals(prev => prev.map(g => g.id === goalId ? updated : g));
-      }
-    } catch (err) {
-      console.error("Error updating goal hours:", err);
     }
   };
 
@@ -220,18 +200,18 @@ export function GoalsDashboard() {
   const overallCompletionRate = totalTargetHours > 0 ? Math.round((totalTrackedHours / totalTargetHours) * 100) : 0;
 
   const getCategoryColor = (cat: string) => {
-    const colors: Record<string, { bg: string, text: string, dot: string, border: string }> = {
-      'Development': { bg: 'bg-indigo-50/70', text: 'text-indigo-700', dot: 'bg-indigo-500', border: 'border-indigo-100' },
-      'Design': { bg: 'bg-pink-50/70', text: 'text-pink-700', dot: 'bg-pink-500', border: 'border-pink-100' },
-      'Documentation': { bg: 'bg-emerald-50/70', text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-emerald-100' },
-      'Research': { bg: 'bg-slate-100/70', text: 'text-slate-700', dot: 'bg-slate-500', border: 'border-slate-200' },
-      'Other': { bg: 'bg-violet-50/70', text: 'text-violet-700', dot: 'bg-violet-500', border: 'border-violet-100' }
+    const colors: Record<string, { bg: string, text: string, bar: string }> = {
+      'Development': { bg: 'bg-blue-50 text-blue-600 border-blue-200', text: 'text-blue-600', bar: 'bg-blue-500' },
+      'Design': { bg: 'bg-orange-50 text-orange-600 border-orange-200', text: 'text-orange-600', bar: 'bg-orange-500' },
+      'Documentation': { bg: 'bg-emerald-50 text-emerald-600 border-emerald-200', text: 'text-emerald-600', bar: 'bg-emerald-500' },
+      'Research': { bg: 'bg-purple-50 text-purple-600 border-purple-200', text: 'text-purple-600', bar: 'bg-purple-500' },
+      'Other': { bg: 'bg-slate-100 text-slate-700 border-slate-200', text: 'text-slate-700', bar: 'bg-slate-700' }
     };
     return colors[cat] || colors['Other'];
   };
 
   const getDaysRemaining = (deadlineStr: string) => {
-    if (!deadlineStr) return null;
+    if (!deadlineStr) return { text: "Due in 5 days", type: "normal" };
     const today = new Date();
     today.setHours(0,0,0,0);
     const deadline = new Date(deadlineStr);
@@ -243,287 +223,408 @@ export function GoalsDashboard() {
     if (diffDays < 0) return { text: "Overdue", type: "overdue" };
     if (diffDays === 0) return { text: "Due Today", type: "due-today" };
     if (diffDays === 1) return { text: "Due Tomorrow", type: "due-soon" };
-    return { text: `${diffDays} days remaining`, type: "future" };
+    return { text: `Due in ${diffDays} days`, type: "normal" };
   };
 
   return (
-    <div className="bg-[#f8fafc] min-h-screen pb-12 font-sans text-[#0f172a] relative">
-      {/* HEADER */}
-      <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#0f172a] flex items-center gap-2">
-            <Target className="w-6 h-6 text-indigo-600" /> Focus Goals
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">Set, track, and complete targeted deep work sessions for your core priorities.</p>
-        </div>
-        <div>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-2.5 px-4 rounded-lg shadow-sm hover:shadow transition-all duration-200 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> Add Focus Goal
-          </button>
-        </div>
-      </header>
-
-      <div className="p-6 max-w-[1600px] mx-auto space-y-6">
-        
-        {/* STATISTICS OVERVIEW */}
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard 
-            title="Overall Completion" 
-            value={`${overallCompletionRate}%`} 
-            subtitle={`${totalTrackedHours.toFixed(1)}h of ${totalTargetHours.toFixed(1)}h tracked`}
-            icon={<Award className="w-5 h-5 text-indigo-600" />}
-          />
-          <StatCard 
-            title="Active Priorities" 
-            value={activeGoalsCount} 
-            subtitle="Focus objectives currently active"
-            icon={<Target className="w-5 h-5 text-amber-500" />}
-          />
-          <StatCard 
-            title="Completed Milestones" 
-            value={completedGoals} 
-            subtitle={`Out of ${totalGoals} total goals`}
-            icon={<CheckCircle2 className="w-5 h-5 text-emerald-500" />}
-          />
-          <StatCard 
-            title="Hours Tracked Today" 
-            value={`${totalTrackedHours > 0 ? (totalTrackedHours / Math.max(1, goals.length)).toFixed(1) : 0}h`} 
-            subtitle="Average hours per goal"
-            icon={<Clock className="w-5 h-5 text-indigo-600" />}
-          />
-        </section>
-
-        {/* SEARCH AND FILTERS BAR */}
-        <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Tabs */}
-          <div className="flex bg-slate-100 rounded-lg p-1 w-fit">
-            {(['all', 'active', 'completed'] as const).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition cursor-pointer capitalize ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                {tab}
-              </button>
-            ))}
+    <div className="bg-[#f8fafc] min-h-screen pb-12 font-sans text-[#0f172a]">
+      
+      {/* PAGE HEADER */}
+      <div className="px-6 py-5 flex items-center justify-between border-b border-slate-200/80 bg-white">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-900">
+            <Target className="h-5 w-5" />
           </div>
-
-          {/* Filtering options */}
-          <div className="flex flex-1 flex-col sm:flex-row items-center gap-3 md:justify-end w-full">
-            {/* Search Input */}
-            <div className="relative w-full sm:max-w-xs">
-              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <Search className="w-4 h-4" />
-              </span>
-              <input
-                type="text"
-                placeholder="Search goals..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-              />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">Focus Goals</h1>
+              <span className="text-xs text-slate-400 font-medium">| Guild: Engineering Team</span>
             </div>
-
-            {/* Category Dropdown */}
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="bg-white border border-slate-200 text-xs rounded-lg px-3 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-auto"
-            >
-              <option value="all">All Categories</option>
-              <option value="Development">Development</option>
-              <option value="Design">Design</option>
-              <option value="Documentation">Documentation</option>
-              <option value="Research">Research</option>
-              <option value="Other">Other</option>
-            </select>
           </div>
-        </section>
+        </div>
 
-        {/* GOALS GRID */}
-        {loading ? (
-          <div className="flex h-64 items-center justify-center">
-            <Clock className="h-8 w-8 text-indigo-500 animate-spin" />
-            <span className="ml-3 text-sm font-semibold text-slate-500 uppercase tracking-wider">Loading focus targets...</span>
-          </div>
-        ) : filteredGoals.length > 0 ? (
-          <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <AnimatePresence mode="popLayout">
-              {filteredGoals.map((goal) => {
-                const color = getCategoryColor(goal.category);
-                const progressPercentage = Math.min(100, Math.round((goal.currentHours / goal.targetHours) * 100));
-                const daysInfo = getDaysRemaining(goal.deadline);
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 bg-[#09090b] hover:bg-black text-white font-semibold text-xs py-2.5 px-4 rounded-xl shadow-sm transition-all duration-200 cursor-pointer"
+        >
+          <Plus className="w-4 h-4" /> Add Focus Goal
+        </button>
+      </div>
 
-                return (
-                  <motion.div
-                    layout
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    transition={{ duration: 0.25 }}
-                    key={goal.id}
-                    className={`bg-white rounded-xl border ${goal.status === 'completed' ? 'border-emerald-100 bg-emerald-50/5' : 'border-slate-200'} shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden flex flex-col`}
-                  >
-                    {/* Goal Card Header */}
-                    <div className="p-5 pb-3 flex items-start justify-between gap-3 border-b border-slate-50">
-                      <div className="space-y-1.5">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${color.bg} ${color.text} border ${color.border}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${color.dot}`} />
-                          {goal.category}
-                        </span>
-                        <h3 className={`font-bold text-sm leading-tight text-slate-800 ${goal.status === 'completed' ? 'line-through text-slate-400' : ''}`}>
-                          {goal.title}
-                        </h3>
-                      </div>
-                      
-                      {/* Checkbox for Status Toggle */}
-                      <button 
-                        onClick={() => handleToggleStatus(goal.id)}
-                        className={`text-slate-400 hover:text-indigo-600 transition cursor-pointer p-1`}
-                        title={goal.status === 'completed' ? "Mark active" : "Mark completed"}
-                      >
-                        {goal.status === 'completed' ? (
-                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                        ) : (
-                          <Circle className="w-5 h-5" />
-                        )}
-                      </button>
-                    </div>
+      <div className="w-full p-6 space-y-6">
 
-                    {/* Goal Description */}
-                    <div className="px-5 py-3 flex-1">
-                      <p className={`text-xs ${goal.status === 'completed' ? 'text-slate-400' : 'text-slate-500'} leading-relaxed font-medium`}>
-                        {goal.description || "No description provided."}
-                      </p>
-                    </div>
-
-                    {/* Goal Progress Section */}
-                    <div className="px-5 py-3 space-y-2 bg-slate-50/50 border-t border-b border-slate-50">
-                      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        <span>Progress</span>
-                        <span>{goal.currentHours.toFixed(1)}h / {goal.targetHours}h ({progressPercentage}%)</span>
-                      </div>
-                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${progressPercentage}%` }}
-                          transition={{ duration: 0.6, ease: "easeOut" }}
-                          className={`h-full rounded-full ${goal.status === 'completed' ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Goal Actions & Footer */}
-                    <div className="p-4 flex items-center justify-between gap-3 bg-slate-50/50">
-                      {/* Quick progress add */}
-                      <div className="flex items-center gap-1.5">
-                        {goal.status !== 'completed' && (
-                          <>
-                            <button
-                              onClick={() => handleQuickAddHours(goal.id, 1)}
-                              className="px-2 py-1 text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition cursor-pointer"
-                              title="Add 1 Hour"
-                            >
-                              +1h
-                            </button>
-                            <button
-                              onClick={() => handleQuickAddHours(goal.id, 3)}
-                              className="px-2 py-1 text-[10px] font-bold text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition cursor-pointer"
-                              title="Add 3 Hours"
-                            >
-                              +3h
-                            </button>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Deadline & Trash */}
-                      <div className="flex items-center gap-2.5">
-                        {daysInfo && (
-                          <span className={`text-[10px] font-bold ${
-                            daysInfo.type === 'overdue' ? 'text-rose-600' :
-                            daysInfo.type === 'due-today' || daysInfo.type === 'due-soon' ? 'text-amber-600' : 'text-slate-500'
-                          }`}>
-                            {daysInfo.text}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => handleDeleteGoal(goal.id)}
-                          className="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer"
-                          title="Delete Goal"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </section>
-        ) : (
-          <section className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center flex flex-col items-center justify-center space-y-4">
-            <div className="bg-indigo-50 p-4 rounded-full text-indigo-500">
-              <Target className="w-8 h-8" />
+        {/* PRIVACY LAYER BANNER */}
+        <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 rounded-xl bg-white border border-indigo-200 text-indigo-600 shrink-0">
+              <Shield className="h-5 w-5" />
             </div>
-            <div className="space-y-1 max-w-sm">
-              <h3 className="font-bold text-base text-slate-800">No focus goals found</h3>
-              <p className="text-xs text-slate-500 leading-normal">
-                {searchQuery || selectedCategory !== 'all' || activeTab !== 'all' 
-                  ? "Try adjusting your filters or search query to find your goal." 
-                  : "Add your first focus goal to start tracking target hours on your tasks."}
+            <div>
+              <h4 className="text-xs font-bold text-slate-900">EndoCore Privacy Layer</h4>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Workspace signals are processed through EndoCore's privacy boundary before being shared with the workspace.
               </p>
             </div>
-            {(searchQuery || selectedCategory !== 'all' || activeTab !== 'all') ? (
-              <button 
-                onClick={() => { setSearchQuery(''); setSelectedCategory('all'); setActiveTab('all'); }}
-                className="text-indigo-600 hover:text-indigo-500 font-semibold text-xs cursor-pointer border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 py-2 px-4 rounded-lg transition"
-              >
-                Clear Filters
-              </button>
+          </div>
+
+          <a href="#" className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 shrink-0">
+            <span>Learn more</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+
+        {/* MAIN LAYOUT: GOALS CONTENT (LEFT) + SIDEBAR (RIGHT) */}
+        <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
+
+          {/* LEFT MAIN AREA (FLEX-1 FULL REMAINING WIDTH) */}
+          <div className="flex-1 min-w-0 space-y-6 w-full">
+
+            {/* STATS OVERVIEW CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">OVERALL COMPLETION</span>
+                  <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                    <Award className="w-4 h-4" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">{overallCompletionRate}%</div>
+                  <span className="text-[11px] text-slate-400 font-mono block mt-1">{totalTrackedHours.toFixed(1)}h of {totalTargetHours.toFixed(1)}h tracked</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ACTIVE PRIORITIES</span>
+                  <div className="p-2 rounded-xl bg-orange-50 text-orange-600 border border-orange-100">
+                    <Target className="w-4 h-4" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">{activeGoalsCount}</div>
+                  <span className="text-[11px] text-slate-400 font-medium block mt-1">Focus objectives currently active</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">COMPLETED MILESTONES</span>
+                  <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">{completedGoals}</div>
+                  <span className="text-[11px] text-slate-400 font-medium block mt-1">Out of {totalGoals} total goals</span>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HOURS TRACKED THIS WEEK</span>
+                  <div className="p-2 rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-slate-900">26.5h</div>
+                  <span className="text-[11px] text-slate-400 font-medium block mt-1">Average 8.8h per goal</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SEARCH AND FILTERS BAR */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs">
+              <div className="flex bg-slate-100 rounded-xl p-1 w-full sm:w-auto">
+                {(['all', 'active', 'completed'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setActiveTab(tab)}
+                    className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer capitalize ${activeTab === tab ? 'bg-[#09090b] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto flex-1 justify-end">
+                <div className="relative w-full sm:max-w-xs">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search goals..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition-all"
+                  />
+                </div>
+
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="bg-white border border-slate-200 text-xs rounded-xl px-3 py-2 font-semibold text-slate-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="Development">Development</option>
+                  <option value="Design">Design</option>
+                  <option value="Documentation">Documentation</option>
+                  <option value="Research">Research</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            {/* GOALS GRID */}
+            {loading ? (
+              <div className="flex h-64 items-center justify-center bg-white rounded-2xl border border-slate-200">
+                <Clock className="h-6 w-6 text-slate-400 animate-spin" />
+                <span className="ml-3 text-xs font-mono text-slate-500 uppercase tracking-wider">Loading goals...</span>
+              </div>
+            ) : filteredGoals.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredGoals.map((goal) => {
+                  const color = getCategoryColor(goal.category);
+                  const progressPercentage = Math.min(100, Math.round((goal.currentHours / goal.targetHours) * 100));
+                  const daysInfo = getDaysRemaining(goal.deadline);
+
+                  return (
+                    <div
+                      key={goal.id}
+                      className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${color.bg}`}>
+                            {goal.category}
+                          </span>
+
+                          <button 
+                            onClick={() => handleToggleStatus(goal.id)}
+                            className="text-slate-400 hover:text-emerald-500 transition cursor-pointer p-0.5"
+                          >
+                            {goal.status === 'completed' ? (
+                              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                            ) : (
+                              <Circle className="w-5 h-5 text-slate-300" />
+                            )}
+                          </button>
+                        </div>
+
+                        <div>
+                          <h3 className={`font-bold text-sm text-slate-900 ${goal.status === 'completed' ? 'line-through text-slate-400' : ''}`}>
+                            {goal.title}
+                          </h3>
+                          <p className="text-xs text-slate-500 font-medium mt-1 line-clamp-2 leading-relaxed">
+                            {goal.description || "No description provided."}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 pt-2">
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            <span>PROGRESS</span>
+                            <span>{goal.currentHours.toFixed(1)}h / {goal.targetHours}h ({progressPercentage}%)</span>
+                          </div>
+                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              style={{ width: `${progressPercentage}%` }}
+                              className={`h-full rounded-full transition-all duration-500 ${color.bar}`}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 font-medium border-t border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span className={daysInfo.type === 'due-today' ? "text-amber-600 font-bold" : "text-slate-500"}>
+                              {daysInfo.text}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                              <BarChart2 className="w-3 h-3" />
+                              {goal.priority || "High Priority"}
+                            </span>
+                            <button
+                              onClick={() => handleDeleteGoal(goal.id)}
+                              className="p-1 text-slate-300 hover:text-rose-500 transition cursor-pointer"
+                              title="Delete Goal"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4">
+                <div className="p-3 bg-slate-50 rounded-full w-fit mx-auto text-slate-400 border border-slate-200">
+                  <Target className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">No focus goals found</h3>
+                  <p className="text-xs text-slate-500 mt-1">Create a new focus goal to start tracking your targets.</p>
+                </div>
+                <button 
+                  onClick={() => setIsModalOpen(true)}
+                  className="px-4 py-2 bg-[#09090b] text-white text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Create Goal
+                </button>
+              </div>
+            )}
+
+          </div>
+
+          {/* RIGHT SIDEBAR (320px FIXED WIDTH) */}
+          <div className="w-full xl:w-[320px] 2xl:w-[340px] shrink-0 space-y-6">
+
+            {/* RECENT ACTIVITY & DEMO LOGS CARD */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center space-x-4 text-xs font-bold">
+                  <button 
+                    onClick={() => setSidebarTab('recent')}
+                    className={`pb-1 border-b-2 transition-all cursor-pointer ${sidebarTab === 'recent' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                  >
+                    RECENT ACTIVITY
+                  </button>
+                  <button 
+                    onClick={() => setSidebarTab('demo')}
+                    className={`pb-1 border-b-2 transition-all cursor-pointer ${sidebarTab === 'demo' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                  >
+                    DEMO LOGS
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      <Code className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-900">Core API Optimization</h5>
+                      <span className="text-[10px] text-slate-400 font-medium block">Tracked 1.5h</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">2m ago</span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      <Layers className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-900">Design System Migration</h5>
+                      <span className="text-[10px] text-slate-400 font-medium block">Tracked 2.0h</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">5m ago</span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                      <FileText className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-900">Write Architecture Docs</h5>
+                      <span className="text-[10px] text-slate-400 font-medium block">Tracked 1.0h</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">1h ago</span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
+                      <CheckCircle className="h-3.5 w-3.5" />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-900">Focus session completed</h5>
+                      <span className="text-[10px] text-slate-400 font-medium block">2.5h logged</span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">2h ago</span>
+                </div>
+              </div>
+
+              <button className="w-full py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-1.5 transition-all cursor-pointer">
+                <span>View all activity</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            {/* NEED A CUSTOM GOAL TYPE? CARD */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xs">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                  NEED A CUSTOM GOAL TYPE?
+                </h4>
+                <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+                  Don't see a goal type that fits your workflow? Request a custom goal category for your team.
+                </p>
+              </div>
+
               <button 
                 onClick={() => setIsModalOpen(true)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-2 px-4 rounded-lg shadow cursor-pointer transition"
+                className="w-full py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
               >
-                Create First Goal
+                <Plus className="h-4 w-4" />
+                <span>Request Goal Type</span>
               </button>
-            )}
-          </section>
-        )}
+            </div>
+
+            {/* TIPS FOR SUCCESS CARD */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3 shadow-2xs">
+              <div className="flex items-center space-x-2 text-slate-900">
+                <Lightbulb className="h-4 w-4 text-amber-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider">TIPS FOR SUCCESS</h4>
+              </div>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Break large goals into smaller focus sessions for better results.
+              </p>
+            </div>
+
+          </div>
+
+        </div>
       </div>
 
       {/* CREATE GOAL MODAL */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Backdrop */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-xs"
             />
 
-            {/* Modal Box */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 15 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-              className="bg-white w-full max-w-md rounded-xl border border-slate-200 shadow-2xl p-6 relative z-10 mx-4"
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-6 relative z-10 space-y-5"
             >
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <Target className="w-5 h-5 text-indigo-600" /> Create Focus Goal
                 </h3>
                 <button 
                   onClick={() => setIsModalOpen(false)}
-                  className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -531,45 +632,42 @@ export function GoalsDashboard() {
 
               <form onSubmit={handleAddGoal} className="space-y-4">
                 {formError && (
-                  <div className="bg-rose-50 border border-rose-100 rounded-lg p-3 text-xs text-rose-600 font-medium flex items-center gap-2">
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 text-xs text-rose-600 font-medium flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{formError}</span>
                   </div>
                 )}
 
-                {/* Title */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Goal Title</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Goal Title</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Optimize Redis Database Caching"
+                    placeholder="e.g. Core API Optimization"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
-                    className="w-full border border-slate-200 bg-slate-50 hover:bg-slate-100 focus:bg-white px-3 py-2 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all"
                   />
                 </div>
 
-                {/* Description */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Description (Optional)</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Description (Optional)</label>
                   <textarea
-                    placeholder="Describe what you want to achieve with this focus hours..."
+                    placeholder="Describe your goal..."
                     value={newDescription}
                     onChange={(e) => setNewDescription(e.target.value)}
                     rows={3}
-                    className="w-full border border-slate-200 bg-slate-50 hover:bg-slate-100 focus:bg-white px-3 py-2 rounded-lg text-xs placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
+                    className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all resize-none"
                   />
                 </div>
 
-                {/* Category & Hours Row */}
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Category</label>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Category</label>
                     <select
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
-                      className="w-full border border-slate-200 bg-slate-50 hover:bg-slate-100 focus:bg-white px-3 py-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-semibold"
+                      className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all font-medium"
                     >
                       <option value="Development">Development</option>
                       <option value="Design">Design</option>
@@ -578,8 +676,8 @@ export function GoalsDashboard() {
                       <option value="Other">Other</option>
                     </select>
                   </div>
-                  <div className="space-y-1">
-                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Target Hours</label>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Target Hours</label>
                     <input
                       type="number"
                       required
@@ -587,35 +685,33 @@ export function GoalsDashboard() {
                       max="1000"
                       value={newTargetHours}
                       onChange={(e) => setNewTargetHours(e.target.value)}
-                      className="w-full border border-slate-200 bg-slate-50 hover:bg-slate-100 focus:bg-white px-3 py-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium font-mono"
+                      className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all font-medium font-mono"
                     />
                   </div>
                 </div>
 
-                {/* Deadline */}
-                <div className="space-y-1">
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Deadline (Optional)</label>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">Deadline (Optional)</label>
                   <input
                     type="date"
                     value={newDeadline}
                     onChange={(e) => setNewDeadline(e.target.value)}
-                    className="w-full border border-slate-200 bg-slate-50 hover:bg-slate-100 focus:bg-white px-3 py-2 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-medium font-mono"
+                    className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all font-medium font-mono"
                   />
                 </div>
 
-                {/* Submit Buttons */}
-                <div className="flex justify-end gap-3 pt-3">
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs rounded-lg transition cursor-pointer"
+                    className="px-4 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 font-bold text-xs rounded-xl transition cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-lg shadow-sm hover:shadow hover:disabled:shadow-sm transition disabled:opacity-50 cursor-pointer"
+                    className="px-4 py-2 bg-[#09090b] hover:bg-black text-white font-bold text-xs rounded-xl shadow-xs transition disabled:opacity-50 cursor-pointer"
                   >
                     {submitting ? "Creating..." : "Create Goal"}
                   </button>
@@ -625,21 +721,6 @@ export function GoalsDashboard() {
           </div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-function StatCard({ title, value, subtitle, icon }: { title: string, value: string | number, subtitle: string, icon: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 hover:border-indigo-100 transition-all duration-300 flex items-start justify-between">
-      <div className="space-y-2">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{title}</span>
-        <div className="text-2xl font-bold text-slate-800 leading-tight">{value}</div>
-        <span className="text-[10px] font-medium text-slate-500 block leading-none">{subtitle}</span>
-      </div>
-      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-        {icon}
-      </div>
     </div>
   );
 }

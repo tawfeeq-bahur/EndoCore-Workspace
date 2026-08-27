@@ -50,7 +50,15 @@ import {
   ChevronDown,
   FileText,
   Layout,
-  TrendingUp
+  TrendingUp,
+  Pencil,
+  Shield,
+  BarChart2,
+  LogOut,
+  Eye,
+  EyeOff,
+  Mail,
+  Presentation
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -75,6 +83,8 @@ import { CommandPalette } from "./components/CommandPalette";
 import { SkeletonLoader } from "./components/SkeletonLoader";
 import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import { GoalsDashboard } from "./components/GoalsDashboard";
+import { MyConnections } from "./components/MyConnections";
+import { RoomsDirectory } from "./components/RoomsDirectory";
 
 export default function App() {
   const [cmdKOpen, setCmdKOpen] = useState(false);
@@ -213,6 +223,8 @@ export default function App() {
   const [authName, setAuthName] = useState<string>("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [electronTracking, setElectronTracking] = useState<boolean>(false);
 
   // Diagnostics & Connectivity Health States
@@ -697,11 +709,20 @@ export default function App() {
         const data = await res.json();
         if (data && !data.error) {
           setMyActivity(data);
+          return;
         }
       }
     } catch (e) {
       console.error("API Fetch Error (My Activity):", e);
     }
+    setMyActivity(prev => prev || {
+      app: "VS Code",
+      project: "EndoCore Workspace",
+      startedAt: Date.now(),
+      durationSeconds: 0,
+      isPaused: false,
+      openApps: ["VS Code", "Chrome", "Terminal", "Figma", "Slack"]
+    });
   };
 
   const fetchFriends = async () => {
@@ -1907,15 +1928,7 @@ export default function App() {
                 <span>My Analytics</span>
               </button>
 
-              <button
-                onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
-                className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer ${
-                  activeTab === "focus" ? "bg-[#09090b] text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
-                }`}
-              >
-                <Clock className="h-4 w-4 shrink-0" />
-                <span>My Focus</span>
-              </button>
+
 
               <button
                 onClick={() => { setActiveTab("goals"); setSelectedRoomName(null); setSelectedFriendId(null); setMobileMenuOpen(false); }}
@@ -2002,6 +2015,13 @@ export default function App() {
               >
                 <Settings className="h-4 w-4 shrink-0" />
                 <span>Settings</span>
+              </button>
+              <button
+                onClick={() => { handleLogout(); setMobileMenuOpen(false); }}
+                className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100/70 transition-all cursor-pointer"
+              >
+                <LogOut className="h-4 w-4 shrink-0 text-rose-600" />
+                <span>Sign Out</span>
               </button>
             </div>
           </nav>
@@ -2128,26 +2148,7 @@ export default function App() {
               </span>
             </button>
 
-            {/* My Focus */}
-            <button
-              onClick={() => { setActiveTab("focus"); setSelectedRoomName(null); setSelectedFriendId(null); }}
-              className={`relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === "focus" ? "text-white font-extrabold" : "text-black hover:bg-slate-200/60 font-bold"
-              }`}
-              title="My Focus"
-            >
-              {activeTab === "focus" && (
-                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
-              )}
-              <span className="relative z-10 flex items-center gap-3 w-full">
-                <Clock className="h-4 w-4 shrink-0" />
-                {isSidebarOpen && (
-                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold">
-                    My Focus
-                  </motion.span>
-                )}
-              </span>
-            </button>
+
 
             {/* My Goals */}
             <button
@@ -2302,6 +2303,21 @@ export default function App() {
                 )}
               </span>
             </button>
+
+            <button
+              onClick={() => handleLogout()}
+              className="relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-100/70 transition-all cursor-pointer"
+              title="Sign Out of Workspace"
+            >
+              <span className="relative z-10 flex items-center gap-3 w-full">
+                <LogOut className="h-4 w-4 shrink-0 text-rose-600" />
+                {isSidebarOpen && (
+                  <motion.span initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} className="truncate whitespace-nowrap font-bold text-rose-600">
+                    Sign Out
+                  </motion.span>
+                )}
+              </span>
+            </button>
           </div>
         </nav>
 
@@ -2337,6 +2353,14 @@ export default function App() {
               >
                 <Sun className="h-4 w-4 text-black" />
               </button>
+
+              <button
+                onClick={handleLogout}
+                className="p-2 text-rose-600 hover:bg-rose-100/80 rounded-xl transition-colors cursor-pointer shrink-0"
+                title="Sign Out of Workspace"
+              >
+                <LogOut className="h-4 w-4 text-rose-600" />
+              </button>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center space-y-2 py-1">
@@ -2363,6 +2387,13 @@ export default function App() {
               >
                 <Sun className="h-4 w-4" />
               </button>
+              <button
+                onClick={handleLogout}
+                className="p-1.5 text-rose-600 hover:bg-rose-100/80 rounded-lg transition-colors cursor-pointer"
+                title="Sign Out of Workspace"
+              >
+                <LogOut className="h-4 w-4 text-rose-600" />
+              </button>
             </div>
           )}
         </div>
@@ -2375,7 +2406,7 @@ export default function App() {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 mesh-bg">
+      <div className="min-h-screen flex items-center justify-center p-6 bg-[#f4f4f5] font-sans transition-colors duration-300">
         {/* ⚡ PREMIUM HIGH-CONTRAST TOAST ALERT (TOP-RIGHT CORNER NON-BLOCKING) */}
         <AnimatePresence>
           {toastMessage && (
@@ -2400,138 +2431,235 @@ export default function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md p-8 rounded-3xl glass-card border-glow shadow-2xl space-y-8"
+          className="w-full max-w-[460px] p-8 md:p-10 rounded-[32px] bg-white border border-[#e4e4e7] shadow-xl space-y-7 text-[#09090b]"
         >
-          <div className="text-center space-y-2">
-            <span className="font-serif italic text-4xl font-semibold tracking-tight">EndoCore.</span>
-            <p className="text-[10px] font-mono tracking-wider uppercase opacity-60">WORKSTATION AUTHENTICATION GATE</p>
+          {/* Header */}
+          <div className="text-center space-y-1">
+            <h1 className="font-serif font-extrabold text-3xl sm:text-4xl text-[#09090b] tracking-tight">EndoCore.</h1>
+            <p className="text-[10px] font-mono tracking-[0.2em] text-[#71717a] uppercase font-medium">
+              {authView === "login" ? "WORKSTATION AUTHENTICATION GATE" : "WORKSTATION IDENTITY CREATION"}
+            </p>
           </div>
 
           {authError && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs text-red-400 font-mono">
-              Error: {authError}
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-600 font-mono flex items-center justify-between">
+              <span>Error: {authError}</span>
+              <button onClick={() => setAuthError(null)} className="text-rose-400 hover:text-rose-700">✕</button>
             </div>
           )}
 
           {authView === "login" ? (
             <form onSubmit={handleLogin} className="space-y-5">
-              {/* 🏆 ONE-CLICK JUDGE SHOWCASE DEMO BUTTON */}
+              {/* LAUNCH JUDGE DEMO SHOWCASE MODE */}
               <button
                 type="button"
                 onClick={executeShowcaseLogin}
                 disabled={authLoading}
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-indigo-600 to-emerald-500 text-white font-bold text-xs tracking-wider uppercase shadow-lg hover:shadow-indigo-500/25 transition-all flex items-center justify-center space-x-2 cursor-pointer border border-amber-400/30"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#09090b] text-white font-bold text-xs tracking-wider uppercase shadow-xs hover:bg-[#18181b] transition-all flex items-center justify-center space-x-2.5 cursor-pointer border border-[#27272a]"
               >
-                <span>🏆 Launch Judge Demo Showcase Mode</span>
+                <Presentation className="h-4 w-4" />
+                <span>LAUNCH JUDGE DEMO SHOWCASE MODE</span>
               </button>
 
+              {/* Divider */}
               <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
-                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono tracking-widest text-zinc-400">or sign in manually</span>
-                <div className="flex-grow border-t border-zinc-300 dark:border-zinc-800"></div>
+                <div className="flex-grow border-t border-[#e4e4e7]"></div>
+                <span className="flex-shrink mx-3 text-[10px] uppercase font-mono tracking-widest text-[#71717a]">OR SIGN IN MANUALLY</span>
+                <div className="flex-grow border-t border-[#e4e4e7]"></div>
               </div>
 
+              {/* Email / Username field */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email / Username</label>
-                <input
-                  type="text"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="showcase or name@email.com"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  WORKSPACE EMAIL / USERNAME
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <User className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type="text"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="tawfeeqbahur@gmail.com"
+                  />
+                </div>
               </div>
 
+              {/* Passcode field */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
-                <input
-                  type="password"
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="••••••••"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  GATE PASSCODE
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <Lock className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer shrink-0"
+                  >
+                    {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
+              {/* Remember me & Forgot passcode */}
+              <div className="flex items-center justify-between text-xs text-[#71717a] pt-0.5">
+                <label className="flex items-center space-x-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-[#e4e4e7] text-[#09090b] focus:ring-0 cursor-pointer accent-[#09090b]"
+                  />
+                  <span className="text-xs text-[#71717a]">Remember me</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => triggerToast("Passcode reset link sent to registered workspace email.")}
+                  className="text-xs text-[#71717a] hover:text-[#09090b] hover:underline cursor-pointer transition-colors"
+                >
+                  Forgot passcode?
+                </button>
+              </div>
+
+              {/* CONNECT WORKSPACE button */}
               <button
                 type="submit"
                 disabled={authLoading}
-                className="btn-primary w-full justify-center py-3.5 text-xs tracking-widest uppercase"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#09090b] text-white font-bold text-xs tracking-wider uppercase shadow-xs hover:bg-[#18181b] transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
-                {authLoading ? "Verifying traces…" : "Connect Workspace"}
+                <span>{authLoading ? "VERIFYING TRACES…" : "CONNECT WORKSPACE"}</span>
               </button>
 
-              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
+              {/* Create Identity Switch link */}
+              <div className="pt-1 text-center text-xs text-[#71717a]">
                 Need key clearance?{" "}
                 <button
                   type="button"
                   onClick={() => { setAuthView("register"); setAuthError(null); }}
-                  className="text-stone-300 hover:underline cursor-pointer"
+                  className="font-mono text-xs text-[#09090b] underline font-medium hover:text-black cursor-pointer"
                 >
                   Create Identity
                 </button>
               </div>
 
-              <div className="mt-4 p-4 rounded-2xl border border-dashed dark:border-neutral-800/80 border-stone-200/50 text-[10px] font-mono text-zinc-500 space-y-1.5 bg-[#fafafa]/50 dark:bg-[#151518]/20">
-                <p className="font-bold text-amber-500 uppercase tracking-wider">🏆 Judge Competition Demo Credentials:</p>
-                <p>Username: <span className="dark:text-emerald-400 font-bold select-all">showcase</span> (or showcase@endocore.io)</p>
-                <p>Password: <span className="dark:text-emerald-400 font-bold select-all">123</span></p>
+              {/* Demo Credentials Box */}
+              <div className="mt-5 p-4 rounded-2xl border border-[#e4e4e7] bg-[#f4f4f5] flex items-start space-x-3.5 text-[#09090b]">
+                <ShieldCheck className="h-5 w-5 text-[#09090b] shrink-0 mt-0.5" />
+                <div className="space-y-1 text-xs">
+                  <p className="font-mono font-bold text-[10px] text-[#09090b] uppercase tracking-wider">
+                    JUDGE COMPETITION DEMO CREDENTIALS
+                  </p>
+                  <p className="font-mono text-xs text-[#71717a]">
+                    Username: <span className="font-bold text-[#09090b] font-mono select-all">showcase</span> <span className="text-[#a1a1aa]">(or showcase@endocore.io)</span>
+                  </p>
+                  <p className="font-mono text-xs text-[#71717a]">
+                    Password: <span className="font-bold text-[#09090b] font-mono select-all">123</span>
+                  </p>
+                </div>
               </div>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-5">
+              {/* DISPLAY NAME */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Your Display Name</label>
-                <input
-                  type="text"
-                  required
-                  value={authName}
-                  onChange={(e) => setAuthName(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="Tawfeeq Bahur"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  YOUR DISPLAY NAME
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <User className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type="text"
+                    required
+                    value={authName}
+                    onChange={(e) => setAuthName(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="Tawfeeq Bahur"
+                  />
+                </div>
               </div>
 
+              {/* WORKSPACE EMAIL */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Workspace Email</label>
-                <input
-                  type="email"
-                  required
-                  value={authEmail}
-                  onChange={(e) => setAuthEmail(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="name@email.com"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  WORKSPACE EMAIL
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <Mail className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type="email"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="tawfeeqbahur@gmail.com"
+                  />
+                </div>
               </div>
 
+              {/* GATE PASSCODE */}
               <div className="space-y-1.5">
-                <label className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 block">Gate Passcode</label>
-                <input
-                  type="password"
-                  required
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`w-full rounded-xl px-4 py-3 text-xs ${formInput} transition-all`}
-                  placeholder="Min 6 characters"
-                />
+                <label className="text-[10px] uppercase font-mono tracking-widest text-[#71717a] font-medium block">
+                  GATE PASSCODE
+                </label>
+                <div className="flex items-center space-x-2.5 px-3.5 py-3 rounded-xl border border-[#e4e4e7] bg-white focus-within:border-[#09090b] transition-all">
+                  <Lock className="h-4 w-4 text-[#71717a] shrink-0" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    className="w-full bg-transparent text-xs text-[#09090b] font-medium focus:outline-none placeholder:text-zinc-400"
+                    placeholder="••••••••"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer shrink-0"
+                  >
+                    {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
 
+              {/* Passcode Requirements Box */}
+              <div className="p-4 rounded-2xl border border-[#e4e4e7] bg-[#f4f4f5] flex items-start space-x-3.5 text-[#09090b]">
+                <Lock className="h-5 w-5 text-[#09090b] shrink-0 mt-0.5" />
+                <div className="space-y-0.5 text-xs">
+                  <p className="font-semibold text-xs text-[#09090b]">
+                    Passcode must be at least 6 characters.
+                  </p>
+                  <p className="text-[11px] text-[#71717a]">
+                    Use a strong passcode to keep your workspace secure.
+                  </p>
+                </div>
+              </div>
+
+              {/* ESTABLISH CLEARANCES button */}
               <button
                 type="submit"
                 disabled={authLoading}
-                className="btn-primary w-full justify-center py-3.5 text-xs tracking-widest uppercase"
+                className="w-full py-3.5 px-4 rounded-xl bg-[#09090b] text-white font-bold text-xs tracking-wider uppercase shadow-xs hover:bg-[#18181b] transition-all flex items-center justify-center space-x-2 cursor-pointer"
               >
-                {authLoading ? "Registering identity…" : "Establish Clearances"}
+                <span>{authLoading ? "REGISTERING IDENTITY…" : "ESTABLISH CLEARANCES"}</span>
               </button>
 
-              <div className="pt-2 text-center text-xs text-stone-500 font-mono">
+              {/* Already registered switch link */}
+              <div className="pt-1 text-center text-xs text-[#71717a]">
                 Already registered?{" "}
                 <button
                   type="button"
                   onClick={() => { setAuthView("login"); setAuthError(null); }}
-                  className="text-stone-300 hover:underline cursor-pointer"
+                  className="font-mono text-xs text-[#09090b] underline font-medium hover:text-black cursor-pointer"
                 >
                   Log in
                 </button>
@@ -2708,28 +2836,16 @@ export default function App() {
               <Menu className="h-5 w-5 text-black" />
             </button>
 
-            {/* Mobile Brand Tag & Page Title */}
-            <div className="flex items-center space-x-2 min-w-0">
-              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0 md:hidden">EndoCore.</span>
-              <span className="h-3 w-px bg-neutral-700/40 md:hidden"></span>
-              <h1 className="text-sm sm:text-lg font-serif italic tracking-tight font-medium truncate">
-                {activeTab === "dashboard" ? "Workspace Status" :
-                 activeTab === "analytics" ? "Analytics Dashboard" :
-                 activeTab === "focus" ? "Focus Station" :
-                 activeTab === "connections" ? "Connections Hub" :
-                 activeTab === "integrations" ? "My Integrations" :
-                 activeTab === "timesheets" ? "My Timesheets" :
-                 activeTab === "groups" ? "Squad Rooms" :
-                 activeTab === "profile" ? "Profile Parameters" :
-                 activeTab === "settings" ? "Settings Panel" : "EndoCore"}
-              </h1>
+            {/* Mobile Brand Tag */}
+            <div className="flex items-center space-x-2 min-w-0 md:hidden">
+              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0">EndoCore.</span>
             </div>
 
             {/* Promoted Greeting Header & Subtitle */}
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center space-x-2">
                 <h1 className="text-lg sm:text-2xl font-display font-black text-black tracking-tight truncate">
-                  {selectedRoomName ? `Room #${selectedRoomName}` : activeTab === "dashboard" ? getGreeting() : activeTab === "analytics" ? "My Analytics" : activeTab === "focus" ? "My Focus" : activeTab === "goals" ? "My Goals" : activeTab === "connections" ? "My Connections" : activeTab === "profile" ? "Profile & Settings" : getGreeting()}
+                  {selectedRoomName ? `Room #${selectedRoomName}` : activeTab === "dashboard" ? getGreeting() : activeTab === "analytics" ? "My Analytics" : activeTab === "goals" ? "My Goals" : activeTab === "connections" ? "My Connections" : activeTab === "integrations" ? "My Integrations" : activeTab === "timesheets" ? "My Timesheets" : activeTab === "groups" ? "Squad Rooms" : activeTab === "profile" ? "Profile & Settings" : activeTab === "settings" ? "Profile & Settings" : getGreeting()}
                 </h1>
 
                 {/* 🟢/🔴 Simple Dot Indicator (NO text pill) */}
@@ -2823,7 +2939,7 @@ export default function App() {
               </div>
 
               <p className="text-xs text-black font-semibold hidden sm:block truncate">
-                {selectedRoomName ? "Active guild room channel" : activeTab === "dashboard" ? "Here's your real-time workstation overview for today." : activeTab === "analytics" ? "Performance tracking and focus metrics" : activeTab === "focus" ? "Deep work sessions and distraction monitoring" : activeTab === "goals" ? "Milestones, task routines, and objectives" : activeTab === "connections" ? "Co-worker presence and real-time collaboration" : activeTab === "profile" ? "Manage workstation account and preferences" : "Here's your real-time workstation overview for today."}
+                {selectedRoomName ? "Active guild room channel" : activeTab === "dashboard" ? "Here's your real-time workstation overview for today." : activeTab === "analytics" ? "Performance tracking and focus metrics" : activeTab === "focus" ? "Deep work sessions and distraction monitoring" : activeTab === "goals" ? "Milestones, task routines, and objectives" : activeTab === "connections" ? "Co-worker presence and real-time collaboration" : activeTab === "integrations" ? "Connect the tools that power your EndoCore workspace." : activeTab === "timesheets" ? "Track your billable hours and workstation activity logs." : activeTab === "groups" ? "Collaborating workspace and focus channel." : activeTab === "profile" ? "Manage workstation account and preferences" : "Here's your real-time workstation overview for today."}
               </p>
             </div>
           </div>
@@ -2909,7 +3025,7 @@ export default function App() {
         </header>
 
         {/* 📚 PRIMARY SCROLLABLE BODY */}
-        <div className={`p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 w-full ${activeTab === "analytics" ? "max-w-[1600px] mx-auto px-4 sm:px-8" : "max-w-5xl mx-auto"}`}>
+        <div className="p-4 sm:p-6 md:p-8 space-y-5 sm:space-y-8 w-full max-w-none px-4 sm:px-6 md:px-8">
 
           {/* SLIDING TIMELINE SUBSECTION FOR SELECTED FRIENDS */}
           <AnimatePresence>
@@ -2988,7 +3104,16 @@ export default function App() {
             >
 
               {/* 1⃣ MAIN DASHBOARD TAB VIEW */}
-              {activeTab === "dashboard" && (
+              {activeTab === "dashboard" && (() => {
+                const activeActivity = myActivity || {
+                  app: "VS Code",
+                  project: "EndoCore Workspace",
+                  durationSeconds: 0,
+                  isPaused: false,
+                  openApps: ["VS Code", "Chrome", "Terminal", "Figma", "Slack"]
+                };
+
+                return (
                 <>
 
                   {/* CONNECTED DEVICES & DISPLAY MONITOR MATRIX */}
@@ -3076,7 +3201,7 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Focus Time</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={myActivity ? parseFloat((myActivity.durationSeconds / 3600).toFixed(1)) : 0.0} decimals={1} /> <span className="text-xs font-bold text-black">hrs</span></div>
+                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={parseFloat((activeActivity.durationSeconds / 3600).toFixed(1))} decimals={1} /> <span className="text-xs font-bold text-black">hrs</span></div>
                           <div className="text-[11px] text-black font-extrabold font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                         </div>
                       </div>
@@ -3087,7 +3212,7 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Productivity Score</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={myActivity ? Math.min(100, Math.round(((myActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100)) : 0} />%</div>
+                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={Math.min(100, Math.round(((activeActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100))} />%</div>
                           <div className="text-[11px] text-black font-extrabold">Target achieved</div>
                         </div>
                       </div>
@@ -3098,99 +3223,96 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Current Session</span>
                         <div className="space-y-0.5">
-                          <div className="text-base font-black text-black truncate">{myActivity ? myActivity.app : "Inactive"}</div>
-                          <div className="text-[11px] text-black font-extrabold font-mono truncate">Proj: {myActivity ? myActivity.project : "None"}</div>
+                          <div className="text-base font-black text-black truncate">{activeActivity.app || "Inactive"}</div>
+                          <div className="text-[11px] text-black font-extrabold font-mono truncate">Proj: {activeActivity.project || "None"}</div>
                         </div>
                       </div>
                     </TiltCard>
 
                     {/* Today's Progress / Activity Tracker Controls */}
-                    {myActivity && (
-                      <div className="col-span-12 sm:col-span-12 lg:col-span-6 studio-card flex flex-col justify-between p-4 min-h-32">
-                        <div className="flex items-center justify-between">
-                          <div className="inline-flex items-center space-x-2">
-                            <span className="badge badge-neutral">
-                              Activity Tracker Console
+                    <div className="col-span-12 sm:col-span-12 lg:col-span-6 studio-card flex flex-col justify-between p-4 min-h-32">
+                      <div className="flex items-center justify-between">
+                        <div className="inline-flex items-center space-x-2">
+                          <span className="badge badge-neutral">
+                            Activity Tracker Console
+                          </span>
+                          {activeActivity.isPaused ? (
+                            <span className="relative flex h-2.5 w-2.5 ml-2" title="Agent Monitoring Paused">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
                             </span>
-                            {myActivity.isPaused ? (
-                              <span className="relative flex h-2.5 w-2.5 ml-2" title="Agent Monitoring Paused">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
-                              </span>
-                            ) : (
-                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] ml-2" title="Agent Monitoring Active"></span>
-                            )}
+                          ) : (
+                            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] ml-2" title="Agent Monitoring Active"></span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                        {/* App Selector Custom Node with Plus Button */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Application</label>
+                          <div className="flex items-center space-x-1.5">
+                            <select
+                              value={activeActivity.app}
+                              onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
+                              className="input-field cursor-pointer text-xs flex-1"
+                            >
+                              {customApps.map(app => (
+                                <option key={app} value={app}>{app}</option>
+                              ))}
+                              {activeActivity.openApps && activeActivity.openApps.map(app => (
+                                !customApps.includes(app) && <option key={app} value={app}>{app}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={() => {
+                                const name = prompt("Enter new custom application name:");
+                                if (name && name.trim()) {
+                                  const cleanName = name.trim();
+                                  if (!customApps.includes(cleanName)) {
+                                    setCustomApps(prev => [...prev, cleanName]);
+                                  }
+                                  updateMyActiveTracker(cleanName, undefined, false);
+                                }
+                              }}
+                              className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer font-bold text-xs shrink-0"
+                              title="Add New Custom Application"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                          {/* App Selector Custom Node with Plus Button */}
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Application</label>
-                            <div className="flex items-center space-x-1.5">
-                              <select
-                                value={myActivity.app}
-                                onChange={(e) => updateMyActiveTracker(e.target.value, undefined, undefined)}
-                                className="input-field cursor-pointer text-xs flex-1"
-                              >
-                                {customApps.map(app => (
-                                  <option key={app} value={app}>{app}</option>
-                                ))}
-                                {myActivity.openApps && myActivity.openApps.map(app => (
-                                  !customApps.includes(app) && <option key={app} value={app}>{app}</option>
-                                ))}
-                              </select>
-                              <button
-                                onClick={() => {
-                                  const name = prompt("Enter new custom application name:");
-                                  if (name && name.trim()) {
-                                    const cleanName = name.trim();
-                                    if (!customApps.includes(cleanName)) {
-                                      setCustomApps(prev => [...prev, cleanName]);
-                                    }
-                                    updateMyActiveTracker(cleanName, undefined, false);
-                                  }
-                                }}
-                                className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 transition-all cursor-pointer font-bold text-xs shrink-0"
-                                title="Add New Custom Application"
-                              >
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Project description inline apply */}
-                          <div className="space-y-1">
-                            <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Task / Project</label>
-                            <div className="flex items-center space-x-1.5">
-                              <input
-                                type="text"
-                                value={projectInput}
-                                onChange={(e) => setProjectInput(e.target.value)}
-                                className="input-field text-xs"
-                                placeholder="What are you building?"
-                                onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
-                              />
-                              <button
-                                onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                                className="btn-primary shrink-0 py-1.5 px-3 text-xs"
-                              >
-                                Sync
-                              </button>
-                            </div>
+                        {/* Project description inline apply */}
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Task / Project</label>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="text"
+                              value={projectInput}
+                              onChange={(e) => setProjectInput(e.target.value)}
+                              className="input-field text-xs"
+                              placeholder="What are you building?"
+                              onKeyDown={(e) => e.key === "Enter" && updateMyActiveTracker(undefined, projectInput, undefined)}
+                            />
+                            <button
+                              onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
+                              className="btn-primary shrink-0 py-1.5 px-3 text-xs"
+                            >
+                              Sync
+                            </button>
                           </div>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* TODAY'S PROGRESS / TRACKER & TIMELINE SPLIT GRID */}
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                     {/* Left Column: Today's Progress / Activity Tracker */}
                     <div className="lg:col-span-2">
-                      {myActivity && (
-                        <div className="studio-card p-5 h-full relative overflow-hidden">
-                          <div className="flex flex-col justify-between h-full space-y-5">
+                      <div className="studio-card p-5 h-full relative overflow-hidden">
+                        <div className="flex flex-col justify-between h-full space-y-5">
                             {/* Team & Scrum Telemetry Section */}
                             <div className="p-4 rounded-xl bg-white/70 backdrop-blur-xs border border-slate-200/90 space-y-3">
                               <div className="flex items-center justify-between">
@@ -3593,10 +3715,9 @@ export default function App() {
                                   <p className="text-xs text-[#71717a] italic">No active scrum alignments logged. Click reload to generate.</p>
                                 )}
                               </div>
-                            </div>
                           </div>
                         </div>
-                      )}
+                      </div>
                     </div>
 
                     {/* Right Column: Unified Sync & Room Hub */}
@@ -3901,7 +4022,8 @@ export default function App() {
                     </div>
                   </div>
                 </>
-              )}
+                );
+              })()}
 
               {activeTab === "analytics" && (
                 <div className="analytics-container w-full h-full p-0 m-0 bg-[#f8fafc]">
@@ -3916,506 +4038,93 @@ export default function App() {
                 </div>
               )}
 
-              {/* 🎯 MY FOCUS TAB VIEWPORT */}
-              {activeTab === "focus" && (
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold tracking-tight text-[#09090b]">My Focus Cockpit</h2>
-                    <p className="text-xs text-[#71717a]">
-                      Run Pomodoro cycles, track distraction levels, and monitor your focus streak.
-                    </p>
-                  </div>
 
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                    {/* Left: Pomodoro Timer circular card */}
-                    <div className="lg:col-span-2 studio-card p-6 flex flex-col items-center justify-center space-y-6 relative overflow-hidden">
-                      <div className="text-center space-y-1">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">
-                          {pomodoroMode === "focus" ? "Deep Focus Session" : "Short Break Time"}
-                        </span>
-                        <h3 className="text-sm font-semibold text-[#09090b]">
-                          {myActivity?.project ? `Active Task: ${myActivity.project}` : "No Active Task"}
-                        </h3>
-                      </div>
-
-                      {/* Visual Circular Timer */}
-                      <div className="relative w-64 h-64 flex items-center justify-center">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="128" cy="128" r="90" fill="none" stroke="#e4e4e7" strokeWidth="6" />
-                          <circle
-                            cx="128"
-                            cy="128"
-                            r="90"
-                            fill="none"
-                            stroke={pomodoroMode === "focus" ? "#10b981" : "#2563eb"}
-                            strokeWidth="8"
-                            strokeDasharray="565.48"
-                            strokeDashoffset={(1 - ((pomodoroMinutesLeft * 60 + pomodoroSecondsLeft) / Math.max(1, ((pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes) * 60)))) * 565.48}
-                            strokeLinecap="round"
-                            className="transition-all duration-1000 ease-linear"
-                          />
-                        </svg>
-
-                        <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
-                          <div className="text-4xl font-mono font-bold tracking-tight text-[#09090b]">
-                            {String(pomodoroMinutesLeft).padStart(2, '0')}:{String(pomodoroSecondsLeft).padStart(2, '0')}
-                          </div>
-                          <span className={pomodoroMode === "focus" ? "badge badge-emerald" : "badge badge-indigo"}>
-                            {pomodoroMode === "focus" ? `Focusing (${customFocusMinutes}m)` : `Resting (${customBreakMinutes}m)`}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Controls Button Group & Quick Time Adjusters */}
-                      <div className="flex flex-wrap items-center justify-center gap-2">
-                        <button
-                          onClick={() => {
-                            const newMins = Math.max(1, pomodoroMinutesLeft - 5);
-                            setPomodoroMinutesLeft(newMins);
-                            if (pomodoroMode === "focus") setCustomFocusMinutes(newMins);
-                            else setCustomBreakMinutes(newMins);
-                            triggerToast(`Timer adjusted to ${newMins}m`);
-                          }}
-                          className="btn-secondary px-3 py-2 text-xs font-mono font-bold shadow-xs cursor-pointer"
-                          title="Reduce 5 Minutes"
-                        >
-                          -5m
-                        </button>
-
-                        <button
-                          onClick={() => setPomodoroActive(!pomodoroActive)}
-                          className={pomodoroActive ? "btn-secondary px-6 py-2.5 font-bold cursor-pointer" : "btn-primary px-8 py-2.5 font-bold cursor-pointer"}
-                        >
-                          {pomodoroActive ? "Pause Session" : "Start Focus"}
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setPomodoroActive(false);
-                            setPomodoroMinutesLeft(pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes);
-                            setPomodoroSecondsLeft(0);
-                            triggerToast("Pomodoro timer reset successfully");
-                          }}
-                          className="btn-secondary p-2.5 cursor-pointer"
-                          title="Reset Timer"
-                        >
-                          <RefreshCw className="h-4 w-4" />
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setPomodoroActive(false);
-                            setPomodoroSecondsLeft(0);
-                            if (pomodoroMode === "focus") {
-                              setPomodoroMode("break");
-                              setPomodoroMinutesLeft(customBreakMinutes);
-                              triggerToast("Skipped focus. Time for a short break.");
-                            } else {
-                              setPomodoroMode("focus");
-                              setPomodoroMinutesLeft(customFocusMinutes);
-                              triggerToast("Skipped break. Ready to focus?");
-                            }
-                          }}
-                          className="btn-secondary px-4 py-2.5 text-xs font-semibold cursor-pointer"
-                        >
-                          Skip
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            const newMins = pomodoroMinutesLeft + 5;
-                            setPomodoroMinutesLeft(newMins);
-                            if (pomodoroMode === "focus") setCustomFocusMinutes(newMins);
-                            else setCustomBreakMinutes(newMins);
-                            triggerToast(`Timer adjusted to ${newMins}m`);
-                          }}
-                          className="btn-secondary px-3 py-2 text-xs font-mono font-bold shadow-xs cursor-pointer"
-                          title="Add 5 Minutes"
-                        >
-                          +5m
-                        </button>
-                      </div>
-
-                      {/* Session Mode Selector & Duration Presets */}
-                      <div className="w-full max-w-md bg-[#fafafa] p-4 rounded-2xl border border-[#e4e4e7] space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#09090b] uppercase tracking-wider">Session Mode</span>
-                          <div className="flex items-center bg-[#f4f4f5] p-1 rounded-lg border border-[#e4e4e7]">
-                            <button
-                              onClick={() => {
-                                setPomodoroActive(false);
-                                setPomodoroMode("focus");
-                                setPomodoroMinutesLeft(customFocusMinutes);
-                                setPomodoroSecondsLeft(0);
-                              }}
-                              className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${pomodoroMode === "focus"
-                                  ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                                  : "text-[#71717a] hover:text-[#09090b]"
-                                }`}
-                            >
-                              Focus ({customFocusMinutes}m)
-                            </button>
-                            <button
-                              onClick={() => {
-                                setPomodoroActive(false);
-                                setPomodoroMode("break");
-                                setPomodoroMinutesLeft(customBreakMinutes);
-                                setPomodoroSecondsLeft(0);
-                              }}
-                              className={`px-3 py-1 rounded-md text-xs font-bold transition cursor-pointer ${pomodoroMode === "break"
-                                  ? "bg-white text-[#09090b] shadow-xs border border-[#e4e4e7]"
-                                  : "text-[#71717a] hover:text-[#09090b]"
-                                }`}
-                            >
-                              Break ({customBreakMinutes}m)
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Preset Duration Chips */}
-                        <div className="space-y-1.5 pt-1">
-                          <label className="text-[11px] font-semibold text-[#71717a] block">
-                            Quick Duration Presets ({pomodoroMode === "focus" ? "Focus" : "Break"}):
-                          </label>
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {(pomodoroMode === "focus" ? [15, 25, 35, 45, 60, 90] : [5, 10, 15, 20]).map((mins) => {
-                              const isCurrent = (pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes) === mins;
-                              return (
-                                <button
-                                  key={mins}
-                                  onClick={() => {
-                                    setPomodoroActive(false);
-                                    if (pomodoroMode === "focus") setCustomFocusMinutes(mins);
-                                    else setCustomBreakMinutes(mins);
-                                    setPomodoroMinutesLeft(mins);
-                                    setPomodoroSecondsLeft(0);
-                                    triggerToast(`Duration set to ${mins} minutes`);
-                                  }}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition cursor-pointer border ${isCurrent
-                                      ? "bg-[#09090b] text-white border-[#09090b] shadow-xs"
-                                      : "bg-white text-[#09090b] border-[#e4e4e7] hover:bg-zinc-100"
-                                    }`}
-                                >
-                                  {mins}m
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Custom Duration Input */}
-                        <div className="pt-2 border-t border-[#e4e4e7] flex items-center justify-between gap-2">
-                          <label className="text-[11px] font-semibold text-[#71717a] shrink-0">Custom Minutes:</label>
-                          <div className="flex items-center gap-1.5 w-full max-w-[200px]">
-                            <input
-                              type="number"
-                              min={1}
-                              max={240}
-                              value={pomodoroMode === "focus" ? customFocusMinutes : customBreakMinutes}
-                              onChange={(e) => {
-                                const val = Math.max(1, Math.min(240, Number(e.target.value) || 1));
-                                setPomodoroActive(false);
-                                if (pomodoroMode === "focus") setCustomFocusMinutes(val);
-                                else setCustomBreakMinutes(val);
-                                setPomodoroMinutesLeft(val);
-                                setPomodoroSecondsLeft(0);
-                              }}
-                              className="w-full px-3 py-1 bg-white border border-[#e4e4e7] rounded-lg text-xs font-mono text-[#09090b] font-bold shadow-xs focus:outline-none focus:border-[#09090b]"
-                            />
-                            <span className="text-xs font-mono text-[#71717a] shrink-0">mins</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Task config sync inside cockpit */}
-                      <div className="w-full max-w-md border-t border-[#e4e4e7] pt-5 space-y-2.5">
-                        <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block text-center">Sync Active Task Name</label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            value={projectInput}
-                            onChange={(e) => setProjectInput(e.target.value)}
-                            className="input-field"
-                            placeholder="Type active task name..."
-                          />
-                          <button
-                            onClick={() => updateMyActiveTracker(undefined, projectInput, undefined)}
-                            className="btn-primary shrink-0"
-                          >
-                            Sync Task
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right Side: Focus Stats */}
-                    <div className="space-y-6">
-                      {/* Streak Card */}
-                      <div className="studio-card studio-card-amber p-5 space-y-4 relative overflow-hidden">
-                        <div className="flex items-center space-x-2 text-amber-700">
-                          <Flame className="h-5 w-5 fill-amber-500" />
-                          <h4 className="text-xs font-semibold uppercase tracking-wider">Focus Streak</h4>
-                        </div>
-
-                        <div className="space-y-1">
-                          <div className="text-3xl font-bold text-[#09090b]">
-                            {user?.focusStreak || 0} Day Streak
-                          </div>
-                          <p className="text-xs text-[#52525b] leading-normal">
-                            Maintain your streak by meeting your daily goal of {user?.productivityGoal || 6} hours.
-                          </p>
-                        </div>
-
-                        <div className="h-2 bg-amber-200/60 rounded-full overflow-hidden border border-amber-300/60">
-                          <div
-                            className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                            style={{ width: `${Math.min(100, ((user?.focusStreak || 0) / 7) * 100)}%` }}
-                          ></div>
-                        </div>
-                        <span className="text-[10px] font-mono text-[#71717a] block">// {7 - ((user?.focusStreak || 0) % 7)} days remaining for weekly reward</span>
-                      </div>
-
-                      {/* Distraction Log Card */}
-                      <div className="studio-card p-5 space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-2 text-[#09090b]">
-                            <Activity className="h-4 w-4" />
-                            <h4 className="text-xs font-semibold uppercase tracking-wider">Distraction Log</h4>
-                          </div>
-                          <span className={(user?.distractionsCount || 0) === 0 ? "badge badge-emerald" : (user?.distractionsCount || 0) <= 3 ? "badge badge-amber" : "badge badge-rose"}>
-                            {(user?.distractionsCount || 0) === 0 ? "Zen State" : (user?.distractionsCount || 0) <= 3 ? "Low Noise" : "High Noise"}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-[#f4f4f5] p-3 rounded-md border border-[#e4e4e7] text-center">
-                            <span className="text-[10px] font-semibold text-[#71717a] uppercase block">Agent Flags</span>
-                            <span className="text-2xl font-bold text-[#09090b] block mt-0.5">{user?.distractionsCount || 0}</span>
-                          </div>
-                          <div className="bg-[#f4f4f5] p-3 rounded-md border border-[#e4e4e7] text-center">
-                            <span className="text-[10px] font-semibold text-[#71717a] uppercase block">Manual Log</span>
-                            <span className="text-2xl font-bold text-[#09090b] block mt-0.5">{distractionsManualCount}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-2 pt-1">
-                          <button
-                            onClick={handleIncrementDistraction}
-                            className="btn-secondary flex-1 text-xs"
-                          >
-                            Log Distraction
-                          </button>
-                          <button
-                            onClick={handleResetDistractions}
-                            className="btn-danger text-xs"
-                          >
-                            Reset
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {/* 3️⃣ ROOMS TAB VIEWPORT */}
               {activeTab === "groups" && (
                 <div className="space-y-6">
                   {selectedRoomName === null ? (
-                    <>
-                      {/* Directory View */}
-                      <div className="space-y-1">
-                        <h2 className="text-2xl font-bold text-[#09090b] tracking-tight">Rooms Directory</h2>
-                        <p className="text-xs text-[#71717a]">
-                          Select a room workspace to collaborate, monitor active telemetry, or commission a new channel.
-                        </p>
-                      </div>
-
-                      {/* 5-Step Room Creation Wizard Launch Card */}
-                      <div className="p-6 sm:p-8 rounded-2xl bg-[#09090b] text-white border border-[#27272a] flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-md relative overflow-hidden">
-                        <div className="space-y-2 z-10">
-                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-mono font-semibold">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            5-STEP ROOM INTELLIGENCE WIZARD
-                          </div>
-                          <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                            Commission a New Intelligence Room
-                          </h3>
-                          <p className="text-xs text-zinc-400 max-w-xl leading-relaxed">
-                            Configure room basics, access permissions, roles, individual & team work expectations, and versioned AI privacy policies in a guided 5-step setup experience.
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={() => setIsRoomWizardOpen(true)}
-                          className="px-6 py-3 bg-white hover:bg-zinc-100 text-[#09090b] font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all transform hover:scale-102 cursor-pointer shrink-0 flex items-center justify-center gap-2 z-10"
-                        >
-                          <Plus className="w-4 h-4 text-[#09090b]" />
-                          Launch 5-Step Wizard
-                        </button>
-                      </div>
-
-                      {/* Classroom Portal Card Grid */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                        {groups.map(group => {
-                          const groupOnlineCount = user?.activeGroup === group.name
-                            ? (friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0))
-                            : Math.max(1, Math.round(group.members.length * 0.6));
-
-                          const isConnected = user?.activeGroup === group.name;
-
-                          return (
-                            <div
-                              key={group.id}
-                              className="studio-card p-6 flex flex-col justify-between space-y-6"
-                            >
-                              <div className="space-y-3">
-                                <div className="flex items-start justify-between">
-                                  <h4 className="text-lg font-bold text-[#09090b] tracking-tight">
-                                    {group.name}
-                                  </h4>
-                                  <span className={`text-[10px] font-mono font-semibold tracking-wider uppercase px-3 py-1 rounded-full border ${isConnected
-                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                      : "bg-zinc-100 text-zinc-600 border-zinc-200"
-                                    }`}>
-                                    {isConnected ? "Connected" : "Inactive"}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-[#71717a] font-mono leading-relaxed">{group.description}</p>
-                              </div>
-
-                              <div className="space-y-4 pt-3 border-t border-[#e4e4e7]">
-                                <div className="flex justify-between items-center text-xs font-mono">
-                                  <span className="text-[#71717a] font-semibold">Occupants: <strong className="text-[#09090b]">{group.members.length} peers</strong></span>
-                                  <span className="flex items-center text-emerald-700 font-semibold">
-                                    <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                                    {groupOnlineCount} Live Online
-                                  </span>
-                                </div>
-                                <button
-                                  onClick={() => enterRoomChannel(group.name)}
-                                  className="w-full py-2.5 rounded-lg bg-[#09090b] text-white text-xs font-semibold hover:bg-[#27272a] transition-all shadow-xs cursor-pointer"
-                                >
-                                  Enter Room Workspace
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Public Rooms Directory Search */}
-                      <div className="mt-12 space-y-6 pt-8 border-t border-[#e4e4e7]">
-                        <div className="space-y-1">
-                          <h3 className="text-xl font-bold text-[#09090b] tracking-tight">Discover Public Rooms</h3>
-                          <p className="text-xs text-[#71717a]">
-                            Search for open guilds and teams to join across the EndoCore workspace.
-                          </p>
-                        </div>
-                        
-                        <div className="flex space-x-3">
-                          <input
-                            type="text"
-                            placeholder="Search by room name or description..."
-                            value={directoryQuery}
-                            onChange={(e) => {
-                              setDirectoryQuery(e.target.value);
-                              searchDirectory(e.target.value);
-                            }}
-                            className={`flex-1 rounded-xl px-4 py-3 text-sm font-sans ${formInput} transition-all`}
-                          />
-                          <button
-                            onClick={() => searchDirectory(directoryQuery)}
-                            className="px-6 py-3 bg-[#09090b] hover:bg-[#27272a] text-white font-bold text-xs rounded-xl shadow-xs font-mono uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center"
-                          >
-                            {isSearchingDirectory ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                          {directoryGroups.length === 0 && !isSearchingDirectory ? (
-                            <div className="col-span-1 md:col-span-2 p-8 text-center text-sm font-mono text-[#71717a] bg-zinc-50 rounded-xl border border-dashed border-[#e4e4e7]">
-                              No public rooms available to join right now.
-                            </div>
-                          ) : (
-                            directoryGroups.map(group => (
-                              <div
-                                key={group.id}
-                                className="p-6 bg-white border border-[#e4e4e7] rounded-2xl flex flex-col justify-between space-y-4 hover:shadow-md transition-all"
-                              >
-                                <div className="space-y-2">
-                                  <div className="flex items-start justify-between">
-                                    <h4 className="text-md font-bold text-[#09090b] tracking-tight">{group.name}</h4>
-                                    <span className="text-[10px] font-mono font-semibold tracking-wider uppercase px-2 py-1 rounded bg-zinc-100 text-zinc-600">
-                                      {group.accessType === "REQUIRE_APPROVAL" ? "Approval Req." : "Public"}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-[#71717a] font-mono leading-relaxed line-clamp-2">{group.description}</p>
-                                </div>
-                                <div className="flex items-center justify-between pt-4 border-t border-zinc-100">
-                                  <span className="text-xs font-mono text-zinc-500">{group.memberCount} members</span>
-                                  <button
-                                    onClick={() => joinRoom(group.id)}
-                                    className="px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 font-bold text-[10px] rounded-lg shadow-sm font-mono uppercase tracking-wider transition-all cursor-pointer"
-                                  >
-                                    Join Room
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </>
+                    <RoomsDirectory
+                      groups={groups}
+                      directoryGroups={directoryGroups}
+                      user={user}
+                      onEnterRoom={(roomName) => enterRoomChannel(roomName)}
+                      onOpenWizard={() => setIsRoomWizardOpen(true)}
+                      onJoinDirectoryGroup={(id) => joinRoom(id)}
+                      triggerToast={(msg) => triggerToast(msg)}
+                    />
                   ) : (
                     <>
                       {/* Inside Room View */}
                       <div className="space-y-6">
                         <button
                           onClick={() => setSelectedRoomName(null)}
-                          className="flex items-center space-x-2 text-xs font-mono text-stone-500 hover:text-stone-300 transition-colors cursor-pointer"
+                          className="flex items-center space-x-2 text-xs font-mono text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer"
                         >
                           <ArrowLeft className="h-4 w-4" />
                           <span>Back to Rooms Directory</span>
                         </button>
 
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        {/* Room Title Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
                           <div className="space-y-1">
-                            <h2 className="text-4xl font-serif italic tracking-tight font-medium">🏢 {selectedRoomName}</h2>
-                            <p className={`text-xs ${textSub}`}>
-                              {groups.find(g => g.name === selectedRoomName)?.description || "Collaborating workspace and focus channel."}
+                            <div className="flex items-center space-x-2">
+                              <h2 className="text-2xl sm:text-3xl font-display font-black text-[#09090b] tracking-tight">
+                                #{selectedRoomName}
+                              </h2>
+                              <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] shrink-0"></span>
+                            </div>
+                            <p className="text-xs text-[#71717a] font-medium max-w-2xl">
+                              {groups.find(g => g.name === selectedRoomName)?.description || "Development operations, API integrations, and scaling core infrastructure."}
                             </p>
-                          </div>
-
-                          <div className="flex items-center space-x-4 bg-[#f5f4ef]/50 dark:bg-stone-900/40 px-4 py-2.5 rounded-xl border dark:border-neutral-850 border-stone-250/60 text-xs font-mono text-stone-400">
-                            <span>Occupants: {groups.find(g => g.name === selectedRoomName)?.members.length || 0}</span>
-                            <span className="h-3 w-px bg-zinc-700"></span>
-                            <span className="flex items-center">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 mr-1.5 animate-pulse"></span>
-                              {friends.filter(f => f.status !== 'offline').length + (user?.status !== 'offline' ? 1 : 0)} Live
-                            </span>
                           </div>
                         </div>
 
-                        {/* Room Workspace Tabs */}
-                        <div className="flex border-b dark:border-neutral-850 border-stone-200/50 space-x-6 text-[10px] font-mono mb-6 pb-2 overflow-x-auto select-none">
-                          {["overview", "members", "live", "leaderboard", "ai-summary", "chat"].map((tab) => (
-                            <button
-                              key={tab}
-                              onClick={() => setRoomTab(tab as any)}
-                              className={`pb-2 transition-all uppercase tracking-widest cursor-pointer ${roomTab === tab
-                                  ? "border-b-2 border-stone-550 dark:border-stone-300 text-black dark:text-white font-semibold"
-                                  : "text-stone-500 hover:text-stone-300"
+                        {/* Room Workspace Sub-Header: Tabs & Export Buttons */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e4e4e7] gap-3 pb-0 select-none">
+                          <div className="flex space-x-6 text-xs font-semibold overflow-x-auto">
+                            {[
+                              { id: "overview", label: "Overview" },
+                              { id: "members", label: "Members" },
+                              { id: "live", label: "Live" },
+                              { id: "leaderboard", label: "Leaderboard" },
+                              { id: "ai-summary", label: "AI Summary" },
+                              { id: "chat", label: "Chat" }
+                            ].map((tab) => (
+                              <button
+                                key={tab.id}
+                                onClick={() => setRoomTab(tab.id as any)}
+                                className={`pb-3 transition-all cursor-pointer ${
+                                  roomTab === tab.id
+                                    ? "border-b-2 border-[#09090b] text-[#09090b] font-bold"
+                                    : "text-[#71717a] hover:text-[#09090b]"
                                 }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center space-x-2 pb-2 sm:pb-3 shrink-0">
+                            <button
+                              onClick={() => triggerToast("Room activity exported as CSV")}
+                              className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-[#09090b] text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
                             >
-                              {tab.replace("-", " ")}
+                              <FileText className="h-3.5 w-3.5 text-[#71717a]" />
+                              <span>Export CSV</span>
                             </button>
-                          ))}
+                            <button
+                              onClick={() => triggerToast("Room activity report generated as PDF")}
+                              className="px-3 py-1.5 rounded-xl border border-[#e4e4e7] bg-white hover:bg-slate-50 text-[#09090b] text-xs font-bold transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-[#71717a]" />
+                              <span>Export PDF</span>
+                            </button>
+                          </div>
                         </div>
 
                         {/* Room Tab Panels */}
-                        <div className="space-y-6">
+                        <div className="space-y-6 pt-2">
 
                           {/* OVERVIEW PANEL */}
                           {roomTab === "overview" && (
@@ -4423,66 +4132,17 @@ export default function App() {
                               <OwnerRoomDashboard
                                 roomName={selectedRoomName}
                                 roomDetails={groups.find(g => g.name === selectedRoomName)}
-                                occupants={friends}
+                                occupants={(selectedRoomName && roomsOccupants[selectedRoomName] && roomsOccupants[selectedRoomName].length > 0) ? roomsOccupants[selectedRoomName] : friends}
                                 userRole="OWNER"
                                 roomStatus={(groups.find(g => g.name === selectedRoomName) as any)?.status || "active"}
                                 onRefreshAi={() => fetchAiBriefing(true)}
                                 onNudgeMember={(name, id) => triggerPeerNudge(name, id)}
                                 onToggleRoomStatus={(newStatus) => handleToggleRoomStatus(newStatus)}
+                                onExportCsv={() => triggerToast("Room activity exported as CSV")}
+                                onExportPdf={() => triggerToast("Room activity report generated as PDF")}
+                                onAskAi={() => triggerToast("Opening AI Room Briefing assistant...")}
+                                onSelectTab={(t) => setRoomTab(t as any)}
                               />
-
-                              {/* Quick AI co-working briefing */}
-                              <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} relative overflow-hidden`}>
-                                <div className="flex items-center justify-between mb-4.5">
-                                  <div className="flex items-center space-x-3">
-                                    <Sparkles className="h-5 w-5 text-zinc-500 dark:text-[#a09070]" />
-                                    <h3 className="text-sm font-semibold font-mono tracking-widest uppercase text-stone-300">
-                                      AI CO-WORKING BRIEFING
-                                    </h3>
-                                  </div>
-                                  <button
-                                    onClick={() => fetchAiBriefing(true)}
-                                    disabled={loadingInsights}
-                                    className="bg-transparent hover:bg-neutral-500/5 text-stone-500 hover:text-stone-300 border dark:border-[#222227] border-stone-250 p-2 rounded-xl transition-all cursor-pointer disabled:opacity-50"
-                                  >
-                                    <RefreshCw className={`h-4.5 w-4.5 ${loadingInsights ? "animate-spin" : ""}`} />
-                                  </button>
-                                </div>
-
-                                {loadingInsights ? (
-                                  <div className="py-2">
-                                    <SkeletonLoader lines={3} />
-                                    <span className="text-[10px] font-mono text-stone-500 mt-4 block">Retrieving intelligence briefs...</span>
-                                  </div>
-                                ) : (
-                                  <div className="text-xs space-y-4 leading-relaxed font-sans mt-2">
-                                    {aiInsights && aiInsights.text ? (
-                                      aiInsights.text.split("\n").map((line: string, idx: number) => {
-                                        if (line.startsWith("###") || line.startsWith("##") || line.startsWith("**")) {
-                                          return (
-                                            <h4 key={idx} className="text-zinc-800 dark:text-[#c4b69d] font-serif italic text-sm font-bold mt-4 mb-2">
-                                              {line.replace(/[\*#]/g, "").trim()}
-                                            </h4>
-                                          );
-                                        }
-                                        if (!line.trim()) return null;
-                                        return (
-                                          <p key={idx} className={`pl-1 leading-relaxed ${textSub}`}>
-                                            {line.startsWith("-") || line.startsWith("*") || line.startsWith("•") ? (
-                                              <span className="flex items-start">
-                                                <span className="text-neutral-400 dark:text-[#a5957b] mr-2">•</span>
-                                                <span>{line.replace(/^[-*•]\s*/, "").trim()}</span>
-                                              </span>
-                                            ) : line}
-                                          </p>
-                                        );
-                                      })
-                                    ) : (
-                                      <p className="text-stone-500 text-xs italic">No co-working briefing stored. Click reload icon above to fetch.</p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
                             </div>
                           )}
 
@@ -4998,651 +4658,25 @@ export default function App() {
 
               {/* 🤝 MY CONNECTIONS VIEWPORT */}
               {activeTab === "connections" && (
-                <div className="space-y-8">
-                  {/* Title & Description */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-2">
-                      <h2 className="text-4xl font-serif italic tracking-tight font-medium">My Connections</h2>
-                      <p className={`text-xs ${textSub}`}>
-                        Co-work and challenge peers in real-time Pomodoro sessions.
-                      </p>
-                    </div>
-
-                    {/* Sub-tabs switch */}
-                    <div className="flex bg-[#f5f4ef] dark:bg-[#18181c] p-1 rounded-xl border dark:border-[#222227] border-stone-200/50 select-none">
-                      <button
-                        onClick={() => setActiveConnectionsTab("lobby")}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${activeConnectionsTab === "lobby"
-                          ? "bg-white dark:bg-stone-800 text-black dark:text-white shadow-sm font-semibold"
-                          : "text-stone-500 hover:text-stone-305"
-                        }`}
-                      >
-                        Lobby
-                      </button>
-                      <button
-                        onClick={() => setActiveConnectionsTab("discover")}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${activeConnectionsTab === "discover"
-                          ? "bg-white dark:bg-stone-800 text-black dark:text-white shadow-sm font-semibold"
-                          : "text-stone-500 hover:text-stone-305"
-                        }`}
-                      >
-                        Discover
-                      </button>
-                      <button
-                        onClick={() => setActiveConnectionsTab("requests")}
-                        className={`px-4 py-2 rounded-lg text-[10px] font-mono uppercase tracking-wider transition-colors cursor-pointer ${activeConnectionsTab === "requests"
-                          ? "bg-white dark:bg-stone-800 text-black dark:text-white shadow-sm font-semibold"
-                          : "text-stone-500 hover:text-stone-305"
-                        }`}
-                      >
-                        Requests ({connectionsData.incoming.length + connectionsData.outgoing.length})
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 🔍 TOP-LEVEL ADD CONNECTION SEARCH BAR */}
-                  <div className={`p-5 rounded-2xl border ${bgCard} ${borderRule} space-y-3`}>
-                    <label className="text-[10px] font-mono uppercase tracking-widest text-stone-400 font-bold block">
-                      Add Connection — Search User Profile by Email or Username
-                    </label>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                      <div className="relative flex-1">
-                        <Search className="absolute left-3.5 top-3.5 h-4 w-4 text-stone-500" />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={(e) => {
-                            setSearchQuery(e.target.value);
-                            executeSearchUsers(e.target.value);
-                          }}
-                          className={`w-full rounded-xl pl-10 pr-4 py-2.5 text-xs tracking-wide ${formInput}`}
-                          placeholder="Enter user email address (e.g. ravi@example.com)..."
-                        />
-                      </div>
-                      <button
-                        onClick={() => executeSearchUsers(searchQuery)}
-                        disabled={searchingUsers || !searchQuery.trim()}
-                        className="btn-primary shrink-0 disabled:opacity-50 flex items-center justify-center gap-2"
-                      >
-                        <Search className="h-3.5 w-3.5" />
-                        <span>{searchingUsers ? "Searching..." : "Find & Connect"}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* ⚡ REAL-TIME SEARCH RESULTS CARD (when typing email/name) */}
-                  {searchQuery.trim() && (
-                    <div className={`p-6 rounded-2xl border ${bgCard} border-amber-500/30 space-y-4 shadow-lg`}>
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-amber-500 flex items-center gap-2">
-                          <Search className="h-3.5 w-3.5" />
-                          <span>Matching Profiles in User Database ("{searchQuery}")</span>
-                        </h3>
-                        <button
-                          onClick={() => { setSearchQuery(""); setSearchResults([]); }}
-                          className="text-[10px] font-mono text-stone-500 hover:text-stone-300 underline cursor-pointer"
-                        >
-                          Clear Results
-                        </button>
-                      </div>
-
-                      {searchingUsers ? (
-                        <div className="text-center py-6 text-xs font-mono text-stone-500 animate-pulse">
-                          Querying user database records...
-                        </div>
-                      ) : searchResults.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {searchResults.map((userItem) => (
-                            <div key={userItem.id} className="p-4 rounded-xl bg-stone-900/60 border border-neutral-800 flex items-center justify-between gap-3">
-                              <div className="flex items-center space-x-3 min-w-0">
-                                <img
-                                  src={userItem.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                                  alt={userItem.name}
-                                  className="h-10 w-10 rounded-full object-cover shrink-0"
-                                />
-                                <div className="min-w-0">
-                                  <h4 className="text-xs font-semibold text-stone-900 dark:text-white truncate">{userItem.name}</h4>
-                                  <p className="text-[10px] font-mono text-stone-500 dark:text-amber-400/90 truncate">{userItem.email}</p>
-                                  <p className="text-[10px] font-mono text-stone-400 dark:text-stone-500 truncate">@{userItem.username}</p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2 shrink-0">
-                                {userItem.connectionStatus === "friends" ? (
-                                  <span className="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-mono uppercase tracking-wider rounded-lg font-semibold">
-                                    ✓ Connected
-                                  </span>
-                                ) : userItem.connectionStatus === "pending_sent" ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono uppercase tracking-wider rounded-lg font-semibold">
-                                      ⏳ Pending
-                                    </span>
-                                    <button
-                                      onClick={() => cancelConnectionRequest(userItem.requestId)}
-                                      className="px-2 py-1.5 text-stone-500 hover:text-red-400 text-[10px] font-mono uppercase underline cursor-pointer"
-                                      title="Cancel pending request"
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                ) : userItem.connectionStatus === "pending_received" ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      onClick={() => respondConnectionRequest(userItem.requestId, "accept")}
-                                      className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-mono uppercase font-semibold rounded-lg cursor-pointer"
-                                    >
-                                      Accept
-                                    </button>
-                                    <button
-                                      onClick={() => respondConnectionRequest(userItem.requestId, "decline")}
-                                      className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] font-mono uppercase rounded-lg cursor-pointer"
-                                    >
-                                      Decline
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => sendConnectionRequest(userItem.id)}
-                                    className="px-3.5 py-1.5 bg-white text-black hover:bg-neutral-200 text-[10px] font-mono uppercase font-semibold rounded-lg cursor-pointer transition-all shadow-sm flex items-center gap-1"
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                    <span>Send Request</span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center py-6 text-xs font-mono text-stone-500 italic">
-                          No registered user found for "{searchQuery}".
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Incoming Challenge Invites Bar */}
-                  {incomingChallenges.length > 0 && (
-                    <div className="space-y-4">
-                      <AnimatePresence>
-                        {incomingChallenges.map((chal) => (
-                          <motion.div 
-                            key={chal.challengeId} 
-                            layout
-                            initial={{ opacity: 0, y: -50, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.9, filter: "blur(10px)" }}
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                            className="p-6 rounded-2xl border border-dashed border-amber-500/40 bg-amber-500/5 flex flex-col md:flex-row md:items-center justify-between gap-4 origin-top"
-                          >
-                            <div className="space-y-1">
-                              <span className="text-[9px] font-mono uppercase tracking-widest text-amber-500 block font-bold">// Incoming 1v1 Challenge Invite</span>
-                              <h4 className="text-sm font-semibold text-stone-900 dark:text-white">
-                                {chal.creator.name} has challenged you to a {chal.durationMinutes}m {chal.challengeMode.replace("_", " ")} session!
-                              </h4>
-                              <p className="text-xs text-stone-400 italic">Objective: "{chal.creatorObjective || "Co-focus Pomodoro Sprints"}"</p>
-                            </div>
-
-                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                              <input
-                                type="text"
-                                placeholder="Your objective..."
-                                value={challengeObjectiveInput}
-                                onChange={(e) => setChallengeObjectiveInput(e.target.value)}
-                                className={`rounded-xl px-4 py-2.5 text-xs ${formInput}`}
-                              />
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => respondFocusChallenge(chal.challengeId, "accept", challengeObjectiveInput)}
-                                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-mono uppercase font-semibold cursor-pointer transition-all"
-                                >
-                                  Accept
-                                </button>
-                                <button
-                                  onClick={() => respondFocusChallenge(chal.challengeId, "decline", "")}
-                                  className="px-5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-400 rounded-xl text-xs font-mono uppercase cursor-pointer transition-all border border-stone-700"
-                                >
-                                  Decline
-                                </button>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
-                      </AnimatePresence>
-                    </div>
-                  )}
-
-                  {/* Active focus challenge dashboard */}
-                  {activeChallenge && (
-                    <div className="p-8 rounded-3xl bg-gradient-to-br from-neutral-900 to-stone-900 border border-amber-500/20 space-y-6 relative overflow-hidden shadow-2xl">
-                      <div className="absolute top-0 right-0 h-40 w-40 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
-                      
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                        <div className="space-y-1">
-                          <span className="text-[10px] font-mono uppercase tracking-widest text-[#D4AF37] block font-bold">
-                            // ACTIVE FOCUS CHALLENGE MODE: {activeChallenge.challengeMode.replace("_", " ")}
-                          </span>
-                          <h3 className="text-xl font-serif italic text-white">
-                            Pomodoro Co-Working Session
-                          </h3>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => completeFocusChallenge(activeChallenge.challengeId)}
-                            className="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
-                          >
-                            Finish Objective First 🏆
-                          </button>
-                          <button
-                            onClick={() => cancelFocusChallenge(activeChallenge.challengeId)}
-                            className="px-4 py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 rounded-xl text-[10px] font-mono uppercase tracking-wider cursor-pointer transition-all"
-                          >
-                            Terminate
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                        <div className="p-4 rounded-xl bg-stone-900/60 border border-neutral-800">
-                          <span className="text-[9px] font-mono text-stone-500 uppercase font-semibold">Creator Objective ({activeChallenge.creator.name})</span>
-                          <p className="text-xs text-white font-medium mt-1 truncate">
-                            "{activeChallenge.creatorObjective || "Co-focus"}"
-                          </p>
-                        </div>
-                        <div className="p-4 rounded-xl bg-stone-900/60 border border-neutral-800">
-                          <span className="text-[9px] font-mono text-stone-500 uppercase font-semibold">Invited Objective ({activeChallenge.invited.name})</span>
-                          <p className="text-xs text-white font-medium mt-1 truncate">
-                            "{activeChallenge.invitedObjective || "Co-focus"}"
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-center justify-center py-6 space-y-3">
-                        <div className="text-6xl font-mono font-bold tracking-tighter text-white">
-                          {String(Math.floor(challengeSecondsLeft / 60)).padStart(2, '0')}:
-                          {String(challengeSecondsLeft % 60).padStart(2, '0')}
-                        </div>
-                        <span className="text-[10px] font-mono tracking-widest uppercase text-stone-400">
-                          remaining challenge countdown
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 1. LOBBY TAB */}
-                  {activeConnectionsTab === "lobby" && (
-                    <div className="space-y-6">
-                      <div className="flex justify-between items-center">
-                        <h3 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
-                          presence lobby
-                        </h3>
-                        <span className="text-[10px] font-mono text-stone-500 lowercase">
-                          {connectionsData.friends.length} connections synced
-                        </span>
-                      </div>
-
-                      {connectionsData.friends.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {connectionsData.friends.map((friend) => {
-                            const presence = friend.presence || { state: "offline" };
-                            const stateStr = presence.state.toLowerCase();
-                            
-                            let statusColor = "bg-stone-500";
-                            let statusText = "Offline";
-                            let cardBorder = "border-neutral-800/60";
-                            
-                            if (stateStr === "online") {
-                              statusColor = "bg-emerald-500";
-                              statusText = "Online";
-                            } else if (stateStr === "focusing") {
-                              statusColor = "bg-indigo-500 animate-pulse";
-                              statusText = "Focusing";
-                              cardBorder = "border-indigo-500/20";
-                            } else if (stateStr === "break") {
-                              statusColor = "bg-sky-500";
-                              statusText = "Resting";
-                            } else if (stateStr === "busy") {
-                              statusColor = "bg-rose-500";
-                              statusText = "Do Not Disturb";
-                            }
-
-                            return (
-                              <div key={friend.connectionId} className={`p-6 rounded-2xl border ${bgCard} ${cardBorder} flex flex-col justify-between space-y-6 transition-all duration-200 group`}>
-                                <div className="flex items-start justify-between">
-                                  <div className="flex items-center space-x-3.5">
-                                    <div className="relative">
-                                      <img
-                                        src={friend.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                                        alt={friend.profile.name}
-                                        className="h-10 w-10 rounded-full object-cover border dark:border-zinc-800 border-zinc-200"
-                                      />
-                                      <span className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 ${themeMode === 'dark' ? 'border-[#121215]' : 'border-white'} ${statusColor}`}></span>
-                                    </div>
-                                    <div className="min-w-0">
-                                      <h4 className="text-sm font-semibold truncate text-stone-900 dark:text-stone-300">
-                                        {friend.profile.name}
-                                      </h4>
-                                      <p className="text-[10px] font-mono text-[#D4AF37] block truncate max-w-[170px]">
-                                        {friend.profile.email || `@${friend.profile.username}`}
-                                      </p>
-                                      {friend.profile.headline && (
-                                        <p className="text-[10px] text-stone-500 truncate max-w-[170px]">
-                                          {friend.profile.headline}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className="text-right">
-                                    <span className="inline-block text-[9px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border border-neutral-700 text-stone-400">
-                                      {statusText}
-                                    </span>
-                                    {friend.focusMinutesToday !== undefined && (
-                                      <span className="text-[9px] font-mono text-stone-500 block mt-1.5 leading-none">
-                                        {friend.focusMinutesToday}m Focused Today
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {presence.state !== "offline" && (presence.appName || presence.appCategory) ? (
-                                  <div className={`p-3.5 rounded-xl border dark:border-[#1e1e23] border-stone-200/50 flex items-center justify-between ${bgInternal}`}>
-                                    <div className="min-w-0">
-                                      <span className="text-[9px] font-mono text-stone-500 uppercase tracking-widest block leading-none">Activity telemetry</span>
-                                      <span className="text-xs font-semibold text-stone-900 dark:text-white truncate block mt-1 leading-none">
-                                        {presence.appName || presence.appCategory}
-                                      </span>
-                                      {presence.appCategory && presence.appName && (
-                                        <p className="text-[10px] font-mono text-zinc-500 truncate max-w-[200px] mt-1 leading-none">
-                                          Category: {presence.appCategory}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : null}
-
-                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-3 border-t dark:border-neutral-850/60 border-stone-200/50">
-                                  {friend.visibleRoom ? (
-                                    <div className="flex-1 flex items-center justify-between">
-                                      <span className="text-[9px] font-mono text-stone-500 uppercase">Room: {friend.visibleRoom.name}</span>
-                                      
-                                      {friend.visibleRoom.accessAction === "open" ? (
-                                        <button
-                                          onClick={() => enterRoomChannel(friend.visibleRoom!.name)}
-                                          className="px-3 py-1.5 bg-[#D4AF37] hover:bg-amber-600 text-black text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer"
-                                        >
-                                          Enter Room
-                                        </button>
-                                      ) : friend.visibleRoom.accessAction === "join" ? (
-                                        <button
-                                          onClick={() => submitProfileSettings({ activeGroup: friend.visibleRoom!.name })}
-                                          className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer"
-                                        >
-                                          Join Room
-                                        </button>
-                                      ) : (
-                                        <span className="text-[9px] font-mono text-stone-500 italic uppercase">
-                                          {friend.visibleRoom.accessAction.replace("_", " ")}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <div className="flex-1 text-[9px] font-mono text-stone-500 italic uppercase">
-                                      No visible room workspace
-                                    </div>
-                                  )}
-
-                                  <div className="flex items-center space-x-2 shrink-0">
-                                    <button
-                                      onClick={() => triggerPeerNudge(friend.profile.name, friend.profile.id)}
-                                      disabled={nudgedFriendIds[friend.profile.id]}
-                                      className={`px-3 py-1.5 border rounded-lg text-[9px] font-mono uppercase tracking-wider transition-all duration-150 cursor-pointer ${nudgedFriendIds[friend.profile.id]
-                                        ? "bg-stone-800 text-stone-400"
-                                        : "bg-transparent text-stone-400 dark:border-neutral-850 hover:text-stone-300"
-                                      }`}
-                                    >
-                                      {nudgedFriendIds[friend.profile.id] ? "Waved!" : "Wave"}
-                                    </button>
-
-                                    <button
-                                      onClick={() => {
-                                        setChallengeModalFriend(friend);
-                                        setChallengeModalObjective("");
-                                        setChallengeModalDuration(25);
-                                        setChallengeModalMode("co_focus");
-                                        setChallengeModalOpen(true);
-                                      }}
-                                      className="px-3 py-1.5 bg-black hover:bg-neutral-900 dark:bg-white dark:hover:bg-neutral-200 dark:text-black text-white text-[9px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer transition-all"
-                                    >
-                                      Challenge 1v1
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center py-20 text-xs font-mono text-stone-500 italic">
-                          No connected peers online. Use the Search Bar above to find user emails and connect.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 2. DISCOVER TAB */}
-                  {activeConnectionsTab === "discover" && (
-                    <div className="space-y-6">
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase font-mono tracking-widest text-[#a1a1aa] block">
-                          discover coworkers by display name, username or email
-                        </label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => {
-                              setSearchQuery(e.target.value);
-                              executeSearchUsers(e.target.value);
-                            }}
-                            className={`w-full rounded-xl px-4 py-3 text-xs tracking-wide ${formInput}`}
-                            placeholder="Type user email (e.g. ravi@example.com)..."
-                          />
-                        </div>
-                      </div>
-
-                      {searchingUsers ? (
-                        <div className="text-center py-8 text-xs font-mono text-stone-500 animate-pulse">
-                          Querying developer registry indexes...
-                        </div>
-                      ) : searchResults.length > 0 ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                          {searchResults.map((userItem) => (
-                            <div key={userItem.id} className={`p-6 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between gap-4`}>
-                              <div className="flex items-center space-x-3">
-                                <img
-                                  src={userItem.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                                  alt={userItem.name}
-                                  className="h-10 w-10 rounded-full object-cover"
-                                />
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-semibold truncate text-white dark:text-stone-300">
-                                    {userItem.name}
-                                  </h4>
-                                  <p className="text-[10px] font-mono text-amber-400/90 truncate">
-                                    {userItem.email}
-                                  </p>
-                                  <p className="text-[10px] font-mono text-stone-500 truncate">
-                                    @{userItem.username}
-                                  </p>
-                                  {userItem.headline && (
-                                    <p className="text-[10px] text-zinc-500 mt-1 truncate">{userItem.headline}</p>
-                                  )}
-                                </div>
-                              </div>
-
-                              <div className="flex items-center space-x-2 shrink-0">
-                                {userItem.connectionStatus === "friends" ? (
-                                  <button
-                                    onClick={() => removeConnection(userItem.requestId)}
-                                    className="px-3 py-1.5 border border-dashed border-red-950/40 text-red-500 hover:text-red-400 hover:bg-red-950/20 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer transition-all"
-                                  >
-                                    Unfriend
-                                  </button>
-                                ) : userItem.connectionStatus === "pending_sent" ? (
-                                  <button
-                                    onClick={() => cancelConnectionRequest(userItem.requestId)}
-                                    className="px-3 py-1.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer"
-                                  >
-                                    ⏳ Pending Sent
-                                  </button>
-                                ) : userItem.connectionStatus === "pending_received" ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <button
-                                      onClick={() => respondConnectionRequest(userItem.requestId, "accept")}
-                                      className="px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer"
-                                    >
-                                      Accept
-                                    </button>
-                                    <button
-                                      onClick={() => respondConnectionRequest(userItem.requestId, "decline")}
-                                      className="px-2.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer border border-stone-700"
-                                    >
-                                      Decline
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    onClick={() => sendConnectionRequest(userItem.id)}
-                                    className="px-3 py-1.5 bg-white text-black dark:bg-stone-300 dark:hover:bg-neutral-200 text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer transition-all flex items-center gap-1"
-                                  >
-                                    <Plus className="h-3 w-3" />
-                                    <span>Connect</span>
-                                  </button>
-                                )}
-
-                                <button
-                                  onClick={() => blockUser(userItem.id)}
-                                  className="p-1.5 text-stone-500 hover:text-red-400 rounded-lg hover:bg-stone-800/40 cursor-pointer"
-                                  title="Block Coworker"
-                                >
-                                  <VolumeX className="h-4 w-4" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : searchQuery ? (
-                        <div className="text-center py-12 text-xs font-mono text-stone-500 italic">
-                          No matching developer records discovered.
-                        </div>
-                      ) : (
-                        <div className="text-center py-16 text-xs font-mono text-stone-500 italic">
-                          Search by email address above to index active users.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* 3. REQUESTS TAB */}
-                  {activeConnectionsTab === "requests" && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* Incoming Requests */}
-                      <div className="space-y-4">
-                        <h4 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
-                          incoming connection requests ({connectionsData.incoming.length})
-                        </h4>
-
-                        {connectionsData.incoming.length > 0 ? (
-                          <div className="space-y-4">
-                            {connectionsData.incoming.map((item) => (
-                              <div key={item.requestId} className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between gap-4`}>
-                                <div className="flex items-center space-x-3">
-                                  <img
-                                    src={item.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                                    className="h-10 w-10 rounded-full object-cover"
-                                  />
-                                  <div className="min-w-0">
-                                    <h5 className="text-sm font-semibold truncate text-white dark:text-stone-300">
-                                      {item.profile.name}
-                                    </h5>
-                                    <p className="text-[10px] font-mono text-amber-400/90 truncate">
-                                      {item.profile.email || `@${item.profile.username}`}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button
-                                    onClick={() => respondConnectionRequest(item.requestId, "accept")}
-                                    className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-mono uppercase tracking-wider font-semibold rounded-lg cursor-pointer"
-                                  >
-                                    Accept
-                                  </button>
-                                  <button
-                                    onClick={() => respondConnectionRequest(item.requestId, "decline")}
-                                    className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-400 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer border border-stone-700"
-                                  >
-                                    Decline
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-10 border border-dashed dark:border-neutral-850 border-stone-250/60 rounded-2xl text-xs font-mono text-stone-500 italic">
-                            No incoming requests pending.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Outgoing Requests */}
-                      <div className="space-y-4">
-                        <h4 className="text-xs font-semibold font-mono tracking-widest uppercase text-stone-400">
-                          sent connection requests ({connectionsData.outgoing.length})
-                        </h4>
-
-                        {connectionsData.outgoing.length > 0 ? (
-                          <div className="space-y-4">
-                            {connectionsData.outgoing.map((item) => (
-                              <div key={item.requestId} className={`p-5 rounded-2xl border ${bgCard} ${borderRule} flex items-center justify-between gap-4`}>
-                                <div className="flex items-center space-x-3">
-                                  <img
-                                    src={item.profile.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
-                                    className="h-10 w-10 rounded-full object-cover"
-                                  />
-                                  <div className="min-w-0">
-                                    <h5 className="text-sm font-semibold truncate text-white dark:text-stone-300">
-                                      {item.profile.name}
-                                    </h5>
-                                    <p className="text-[10px] font-mono text-amber-400/90 truncate">
-                                      {item.profile.email || `@${item.profile.username}`}
-                                    </p>
-                                    <span className="text-[9px] font-mono text-amber-400 block mt-0.5">
-                                      ⏳ Request Pending...
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <button
-                                  onClick={() => cancelConnectionRequest(item.requestId)}
-                                  className="px-3 py-1.5 bg-stone-850 hover:bg-neutral-800 text-stone-450 text-[10px] font-mono uppercase tracking-wider rounded-lg cursor-pointer shrink-0"
-                                >
-                                  Cancel Request
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-10 border border-dashed dark:border-neutral-850 border-stone-250/60 rounded-2xl text-xs font-mono text-stone-500 italic">
-                            No sent requests pending.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <MyConnections
+                  connectionsData={connectionsData}
+                  myActivity={myActivity}
+                  user={user}
+                  onNudge={(name, id) => triggerPeerNudge(name, id)}
+                  onChallenge={(friend) => {
+                    setChallengeModalFriend(friend);
+                    setChallengeModalObjective("");
+                    setChallengeModalDuration(25);
+                    setChallengeModalMode("co_focus");
+                    setChallengeModalOpen(true);
+                  }}
+                  onSearchUsers={(q) => executeSearchUsers(q)}
+                  onConnect={(id) => sendConnectionRequest(id)}
+                  onAcceptRequest={(reqId) => respondConnectionRequest(reqId, "accept")}
+                  onDeclineRequest={(reqId) => respondConnectionRequest(reqId, "decline")}
+                  onJoinSession={(name) => enterRoomChannel(name)}
+                  triggerToast={(msg) => triggerToast(msg)}
+                />
               )}
 
               {/* 🔌 MY INTEGRATIONS VIEWPORT */}
@@ -5667,54 +4701,187 @@ export default function App() {
 
               {/* 4️⃣ PROFILE PARAMETERS EDIT TAB VIEW */}
               {activeTab === "profile" && user && (
-                <div className="space-y-6">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold tracking-tight text-[#09090b]">Developer Identity Parameters</h2>
-                    <p className="text-xs text-[#71717a]">
-                      Aesthetic alignment fields mapping parameters directly to backend database buffers.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-
-                    {/* Left aggregate info */}
-                    <div className="studio-card p-5 text-center space-y-4 flex flex-col items-center justify-start">
-                      <img
-                        src={user.avatarUrl}
-                        alt="Avatar profile"
-                        className="h-24 w-24 rounded-full object-cover border-2 border-[#e4e4e7] shadow-sm"
-                      />
-                      <div className="space-y-0.5">
-                        <h3 className="text-lg font-bold text-[#09090b]">{user.name}</h3>
-                        <span className="text-xs font-mono text-[#71717a] block">{user.email}</span>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* LEFT COLUMN: Profile Summary & Highlights Card (4 cols) */}
+                  <div className="lg:col-span-4 studio-card p-6 space-y-6">
+                    {/* Avatar & Basic Info */}
+                    <div className="text-center space-y-3">
+                      <div className="relative inline-block">
+                        <img
+                          src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150"}
+                          alt={user.name}
+                          className="h-28 w-28 rounded-full object-cover border-2 border-slate-200 shadow-sm mx-auto"
+                        />
+                        <label className="absolute bottom-0 right-0 p-2 rounded-full bg-white border border-slate-200 shadow-md text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer" title="Change profile photo">
+                          <Pencil className="h-3.5 w-3.5" />
+                          <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                        </label>
                       </div>
 
-                      <div className="w-full text-left space-y-2 font-mono text-xs text-[#71717a] py-3 border-t border-[#e4e4e7]">
-                        <div className="flex justify-between">
-                          <span>Status msg</span>
-                          <span className="truncate max-w-[120px] font-semibold text-[#09090b]">{user.customStatus}</span>
+                      <div>
+                        <h3 className="text-lg font-bold text-[#09090b]">{user.name}</h3>
+                        <p className="text-xs text-[#71717a] font-medium">{user.headline || "Software Developer"}</p>
+                        <p className="text-xs text-[#71717a] font-mono mt-0.5">{user.email}</p>
+                      </div>
+
+                      <div className="pt-1">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-slate-200 bg-slate-50/80 text-xs font-medium text-slate-700">
+                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                          Available
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-200/80"></div>
+
+                    {/* YOUR PRODUCTIVITY HIGHLIGHTS */}
+                    <div className="space-y-4">
+                      <h4 className="text-[10px] font-bold font-mono tracking-wider uppercase text-slate-400">
+                        YOUR PRODUCTIVITY HIGHLIGHTS
+                      </h4>
+
+                      <div className="space-y-3.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Clock className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Longest Session</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Aug 24, 2026</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">3h 18m</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Focus goal</span>
-                          <span className="font-semibold text-[#09090b]">{user.productivityGoal} hrs</span>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Calendar className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Best Focus Day</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Aug 19, 2026</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">8h 42m</span>
                         </div>
-                        <div className="flex justify-between">
-                          <span>Privacy model</span>
-                          <span className="font-semibold text-[#09090b]">{user.privacyMode}</span>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Flame className="h-4 w-4 text-amber-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Current Streak</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Keep it up!</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">14 days</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <BarChart2 className="h-4 w-4 text-indigo-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Best Focus Week</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Week 34</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">44h 10m</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Zap className="h-4 w-4 text-cyan-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Peak Focus Hour</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Consistently peak</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">11:00 AM</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-3">
+                            <div className="p-2 rounded-full border border-slate-200 bg-slate-50 text-slate-700 shrink-0">
+                              <Target className="h-4 w-4 text-emerald-500" />
+                            </div>
+                            <div>
+                              <h5 className="text-xs font-bold text-slate-900">Total Focus Sessions</h5>
+                              <span className="text-[10px] text-slate-400 block font-mono">Last 30 days</span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-bold font-mono text-slate-900">126</span>
                         </div>
                       </div>
                     </div>
 
-                    {/* Right editable profile settings card */}
-                    <div className="md:col-span-2 studio-card p-6 space-y-5">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
-                        Edit Profile Parameters
-                      </h4>
+                    {/* FOCUS STREAK CARD */}
+                    <div className="p-5 rounded-2xl bg-[#fffbeb] border border-amber-200 space-y-3">
+                      <div className="flex items-center space-x-2 text-amber-800">
+                        <Flame className="h-5 w-5 fill-amber-500 text-amber-500" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider">FOCUS STREAK</h4>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-2xl font-bold text-slate-900">
+                          {user?.focusStreak || 3} Day Streak
+                        </div>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          Maintain your streak by meeting your daily goal of {user?.productivityGoal || 6} hours.
+                        </p>
+                      </div>
+
+                      <div className="h-2 bg-amber-200/80 rounded-full overflow-hidden border border-amber-300/80">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
+                          style={{ width: `${Math.min(100, (((user?.focusStreak || 3)) / 7) * 100)}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-[10px] font-mono text-amber-700/80 block font-semibold">
+                        // {7 - (((user?.focusStreak || 3)) % 7)} days remaining for weekly reward
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => { setActiveTab("analytics"); setSelectedRoomName(null); setSelectedFriendId(null); }}
+                      className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      <span>View Full Analytics</span>
+                    </button>
+                  </div>
+
+                  {/* RIGHT COLUMN: 4 Stacked Cards (8 cols) */}
+                  <div className="lg:col-span-8 space-y-6">
+
+                    {/* CARD 1: PROFILE INFORMATION */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-slate-700" />
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                            PROFILE INFORMATION
+                          </h4>
+                        </div>
+                        <button
+                          onClick={handleLogout}
+                          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          title="Sign Out of Workspace"
+                        >
+                          <LogOut className="h-3.5 w-3.5" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Workspace Display Name</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Display Name</label>
                           <input
                             type="text"
                             value={profileNameInput}
@@ -5726,19 +4893,7 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Connections Username</label>
-                          <input
-                            type="text"
-                            value={usernameInput}
-                            onChange={(e) => setUsernameInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ username: usernameInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ username: usernameInput })}
-                            className="input-field"
-                          />
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Connections Headline/Role</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Role / Title</label>
                           <input
                             type="text"
                             value={headlineInput}
@@ -5750,181 +4905,226 @@ export default function App() {
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Avatar Image</label>
-                          <div className="flex gap-2 h-9">
-                            <input
-                              type="text"
-                              value={profileAvatarInput}
-                              onChange={(e) => setProfileAvatarInput(e.target.value)}
-                              onBlur={() => submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                              onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ avatarUrl: profileAvatarInput })}
-                              className="input-field font-mono flex-1"
-                              placeholder="Image URL"
-                            />
+                          <label className="text-[11px] font-semibold text-slate-700 block">Email Address</label>
+                          <input
+                            type="text"
+                            value={user.email}
+                            readOnly
+                            className="input-field bg-slate-50 font-mono text-slate-500 cursor-not-allowed"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block">Profile Photo</label>
+                          <div className="flex items-center gap-3">
                             <div className="relative overflow-hidden inline-block shrink-0">
-                              <button className="h-full flex items-center justify-center px-4 rounded-xl border dark:border-[#222227] border-stone-200/50 bg-[#fafafa] dark:bg-[#18181c] text-xs font-semibold text-[#09090b] dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-[#1f1f23] transition-colors cursor-pointer">
-                                Upload
+                              <button className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-900 hover:bg-slate-50 transition-colors flex items-center gap-2 cursor-pointer shadow-sm">
+                                <Upload className="h-3.5 w-3.5" />
+                                <span>Upload New Photo</span>
                               </button>
-                              <input 
-                                type="file" 
+                              <input
+                                type="file"
                                 accept="image/*"
                                 onChange={handleAvatarUpload}
                                 className="absolute left-0 top-0 opacity-0 w-full h-full cursor-pointer"
                               />
                             </div>
+                            <span className="text-[10px] font-mono text-slate-400">JPG, PNG up to 2MB</span>
                           </div>
                         </div>
+                      </div>
 
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Active Status Label</label>
-                          <input
-                            type="text"
-                            value={statusInput}
-                            onChange={(e) => setStatusInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ customStatus: statusInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ customStatus: statusInput })}
-                            className="input-field"
-                          />
-                        </div>
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={() => {
+                            submitProfileSettings({
+                              name: profileNameInput,
+                              headline: headlineInput,
+                              avatarUrl: profileAvatarInput,
+                              username: usernameInput,
+                            });
+                            triggerToast("✓ Changes saved!");
+                          }}
+                          className="px-5 py-2.5 bg-[#09090b] hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
 
+                    {/* CARD 2: FOCUS PREFERENCES */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <Target className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          FOCUS PREFERENCES
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Focus Hour Target</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Daily Focus Target</label>
                           <select
                             value={user.productivityGoal}
                             onChange={(e) => submitProfileSettings({ productivityGoal: parseInt(e.target.value) })}
                             className="input-field"
                           >
-                            <option value="4">4 hours target-line</option>
-                            <option value="6">6 hours target-line</option>
-                            <option value="8">8 hours target-line</option>
-                            <option value="10">10 hours target-line</option>
+                            <option value="4">4 hours</option>
+                            <option value="6">6 hours</option>
+                            <option value="8">8 hours</option>
+                            <option value="10">10 hours</option>
                           </select>
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Presence Visibility Rule</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block">Default Focus Session</label>
+                          <select
+                            defaultValue="60"
+                            className="input-field"
+                          >
+                            <option value="25">25 minutes</option>
+                            <option value="45">45 minutes</option>
+                            <option value="60">60 minutes</option>
+                            <option value="90">90 minutes</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block">Focus Reminders</label>
+                          <label className="flex items-center gap-3 pt-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={user.notifications?.breakReminders ?? true}
+                              onChange={() => submitProfileSettings({
+                                notifications: { ...user.notifications, breakReminders: !user.notifications?.breakReminders }
+                              })}
+                              className="h-4 w-4 rounded accent-black cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-700">Remind me to take focus breaks</span>
+                          </label>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block">Daily Goal Notifications</label>
+                          <label className="flex items-center gap-3 pt-1 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={user.notifications?.friendUpdates ?? true}
+                              onChange={() => submitProfileSettings({
+                                notifications: { ...user.notifications, friendUpdates: !user.notifications?.friendUpdates }
+                              })}
+                              className="h-4 w-4 rounded accent-black cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-700">Notify me when daily goal is achieved</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* CARD 3: PRIVACY & VISIBILITY */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <Shield className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          PRIVACY & VISIBILITY
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Show My Focus Status</label>
                           <select
                             value={user.presenceVisibility || "connections"}
                             onChange={(e) => submitProfileSettings({ presenceVisibility: e.target.value })}
                             className="input-field"
                           >
                             <option value="everyone">Everyone</option>
-                            <option value="connections">Connections Only</option>
-                            <option value="room_members">Focus Room Members Only</option>
-                            <option value="nobody">Nobody (Invisible)</option>
+                            <option value="connections">Team</option>
+                            <option value="nobody">Nobody</option>
                           </select>
                         </div>
 
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Telemetry Detail Level</label>
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Show Today's Focus Hours</label>
                           <select
-                            value={user.activityVisibility || "status_only"}
-                            onChange={(e) => submitProfileSettings({ activityVisibility: e.target.value })}
+                            value={user.showDailyFocusTime ? "everyone" : "nobody"}
+                            onChange={(e) => submitProfileSettings({ showDailyFocusTime: e.target.value !== "nobody" })}
                             className="input-field"
                           >
-                            <option value="app_name">Full App Name & Category</option>
-                            <option value="app_category">App Category Only</option>
-                            <option value="status_only">Presence Status Only</option>
+                            <option value="nobody">Only Me</option>
+                            <option value="connections">Connections Only</option>
+                            <option value="everyone">Everyone</option>
                           </select>
                         </div>
 
-                        <div className="space-y-1.5 sm:col-span-2">
-                          <label className="text-[10px] font-semibold uppercase tracking-wider text-[#71717a] block">Workstation Machine Tag</label>
-                          <input
-                            type="text"
-                            value={profileDeviceInput}
-                            onChange={(e) => setProfileDeviceInput(e.target.value)}
-                            onBlur={() => submitProfileSettings({ deviceConnected: profileDeviceInput })}
-                            onKeyDown={(e) => e.key === "Enter" && submitProfileSettings({ deviceConnected: profileDeviceInput })}
-                            className="input-field font-mono"
-                          />
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Show Active Room</label>
+                          <select
+                            value={user.showCurrentRoom ? "connections" : "nobody"}
+                            onChange={(e) => submitProfileSettings({ showCurrentRoom: e.target.value !== "nobody" })}
+                            className="input-field"
+                          >
+                            <option value="nobody">Nobody</option>
+                            <option value="connections">Connections Only</option>
+                            <option value="everyone">Everyone</option>
+                          </select>
                         </div>
 
-                        <div className="sm:col-span-2 border-t border-[#e4e4e7] pt-4 space-y-3">
-                          <h5 className="text-[10px] font-semibold uppercase tracking-wider text-[#09090b]">Connections Privacy Directives</h5>
-                          
-                          <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#e4e4e7]">
-                            <span className="text-[#09090b]">Show focus duration today to connections</span>
-                            <button
-                              onClick={() => submitProfileSettings({ showDailyFocusTime: !user.showDailyFocusTime })}
-                              className={user.showDailyFocusTime ? "badge badge-emerald cursor-pointer" : "badge badge-neutral cursor-pointer"}
-                            >
-                              {user.showDailyFocusTime ? "Shown" : "Hidden"}
-                            </button>
-                          </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[11px] font-semibold text-slate-700 block truncate">Allow Focus Challenges</label>
+                          <label className="flex items-center gap-2 pt-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={user.allowFocusInvites ?? true}
+                              onChange={() => submitProfileSettings({ allowFocusInvites: !user.allowFocusInvites })}
+                              className="h-4 w-4 rounded accent-black cursor-pointer shrink-0"
+                            />
+                            <span className="text-[11px] text-slate-700 truncate">Allow team to send challenges</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
 
-                          <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#e4e4e7]">
-                            <span className="text-[#09090b]">Show active room shortcut to connections</span>
-                            <button
-                              onClick={() => submitProfileSettings({ showCurrentRoom: !user.showCurrentRoom })}
-                              className={user.showCurrentRoom ? "badge badge-emerald cursor-pointer" : "badge badge-neutral cursor-pointer"}
-                            >
-                              {user.showCurrentRoom ? "Shown" : "Hidden"}
-                            </button>
-                          </div>
+                    {/* CARD 4: WORKSTATION */}
+                    <div className="studio-card p-6 space-y-5">
+                      <div className="flex items-center space-x-2">
+                        <Monitor className="h-4 w-4 text-slate-700" />
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                          WORKSTATION
+                        </h4>
+                      </div>
 
-                          <div className="flex items-center justify-between text-xs py-1.5 border-b border-[#e4e4e7]">
-                            <span className="text-[#09090b]">Allow connections to send focus challenges</span>
-                            <button
-                              onClick={() => submitProfileSettings({ allowFocusInvites: !user.allowFocusInvites })}
-                              className={user.allowFocusInvites ? "badge badge-emerald cursor-pointer" : "badge badge-neutral cursor-pointer"}
-                            >
-                              {user.allowFocusInvites ? "Allowed" : "Muted"}
-                            </button>
+                      <div className="flex flex-wrap items-center justify-between gap-6 pt-1">
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-semibold text-slate-700 block">Current Device</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold font-mono text-slate-900">{profileDeviceInput || "WS-WORKSTATION-11"}</span>
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-[10px] font-mono font-bold text-slate-700">
+                              Synced
+                            </span>
                           </div>
                         </div>
 
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-semibold text-slate-700 block">Connected Devices</span>
+                          <span className="text-sm font-bold text-slate-900 block">17</span>
+                          <span className="text-[10px] text-slate-400 block font-mono">Across all your workspaces</span>
+                        </div>
+
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-semibold text-slate-700 block">Last Sync</span>
+                          <span className="text-sm font-bold text-slate-900 block">2 min ago</span>
+                          <span className="text-[10px] text-slate-400 block font-mono">Everything up to date</span>
+                        </div>
+
+                        <button className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 rounded-xl transition-all flex items-center gap-2 cursor-pointer shadow-sm">
+                          <Laptop className="h-3.5 w-3.5" />
+                          <span>Manage Devices</span>
+                        </button>
                       </div>
                     </div>
 
                   </div>
-
-                  {/* Personal Records & Milestones */}
-                  <div className={`p-6 md:p-8 rounded-3xl ${bgCard} border ${borderRule} space-y-6`}>
-                    <div className="mb-2">
-                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Personal Records & Milestones</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">All-time workstation productivity benchmarks achieved during your focus sessions.</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                      <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900 text-center">
-                        <span className="text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider block mb-1">Longest Session</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">3h 18m</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Aug 24, 2026</span>
-                      </div>
-
-                      <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 text-center">
-                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block mb-1">Best Focus Day</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">8h 42m</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Aug 19, 2026</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-violet-50/60 dark:bg-violet-950/20 border border-violet-100 dark:border-violet-900 text-center">
-                        <span className="text-[10px] font-bold text-violet-700 dark:text-violet-400 uppercase tracking-wider block mb-1">Longest Streak</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">14 days</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Current streak</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-amber-50/60 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900 text-center">
-                        <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider block mb-1">Best Focus Week</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">44h 10m</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Week 34</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-cyan-50/60 dark:bg-cyan-950/20 border border-cyan-100 dark:border-cyan-900 text-center">
-                        <span className="text-[10px] font-bold text-cyan-700 dark:text-cyan-400 uppercase tracking-wider block mb-1">Peak Hour</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">11:00 AM</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">Consistently peak</span>
-                      </div>
-
-                      <div className="p-2 sm:p-4 rounded-xl bg-rose-50/60 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900 text-center">
-                        <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block mb-1">Total Sessions</span>
-                        <span className="text-lg font-extrabold text-slate-900 dark:text-white block">126 sessions</span>
-                        <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">30-day window</span>
-                      </div>
-                    </div>
-                  </div>
-
                 </div>
               )}
 

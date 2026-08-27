@@ -181,7 +181,7 @@ export default function MyIntegrations({
       const res = await apiFetch("/api/integrations");
       if (res.ok) {
         const data = await res.json();
-        setIntegrations(data);
+        setIntegrations(Array.isArray(data) ? data : []);
       }
     } catch (err) {
       console.error("Error loading integrations:", err);
