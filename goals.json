@@ -106,5 +106,41 @@
     "status": "completed",
     "deadline": "2026-08-26",
     "createdAt": "2026-08-23T21:15:33.357Z"
+  },
+  {
+    "id": "g1",
+    "userId": "7771ef06-7f2b-437c-8f8b-0dec522e704b",
+    "title": "Design System Migration",
+    "description": "Migrate legacy component styles to V2 Tailwind/Monochrome system",
+    "category": "Design",
+    "targetHours": 15,
+    "currentHours": 12.5,
+    "status": "active",
+    "deadline": "2026-09-01",
+    "createdAt": "2026-08-27T02:19:34.966Z"
+  },
+  {
+    "id": "g2",
+    "userId": "7771ef06-7f2b-437c-8f8b-0dec522e704b",
+    "title": "Core API Optimization",
+    "description": "Improve server response times by caching heavy queries in Redis",
+    "category": "Development",
+    "targetHours": 20,
+    "currentHours": 8,
+    "status": "active",
+    "deadline": "2026-09-06",
+    "createdAt": "2026-08-27T02:19:34.966Z"
+  },
+  {
+    "id": "g3",
+    "userId": "7771ef06-7f2b-437c-8f8b-0dec522e704b",
+    "title": "Write Architecture Docs",
+    "description": "Document multi-device identity pairing & WebSocket events sync flow",
+    "category": "Documentation",
+    "targetHours": 8,
+    "currentHours": 8,
+    "status": "completed",
+    "deadline": "2026-08-27",
+    "createdAt": "2026-08-24T02:19:34.966Z"
   }
 ]

@@ -415,6 +415,17 @@ export default function App() {
       }
     }, 8000);
 
+    // Active Focus live ticker interval (increments durationSeconds by +1 every second when active)
+    const activeFocusTicker = setInterval(() => {
+      setMyActivity(prev => {
+        if (!prev || prev.isPaused || prev.app === "Offline") return prev;
+        return {
+          ...prev,
+          durationSeconds: (prev.durationSeconds || 0) + 1
+        };
+      });
+    }, 1000);
+
     // Initialize Socket.io connection
     const socket = io({
       auth: { token }
@@ -587,6 +598,7 @@ export default function App() {
       clearInterval(clockInterval);
       clearInterval(healthInterval);
       clearInterval(dataSyncInterval);
+      clearInterval(activeFocusTicker);
       if (socket) {
         socket.disconnect();
       }
@@ -3201,7 +3213,12 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Focus Time</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={parseFloat((activeActivity.durationSeconds / 3600).toFixed(1))} decimals={1} /> <span className="text-xs font-bold text-black">hrs</span></div>
+                          <div className="text-2xl font-display font-black text-black">
+                            <NumberTicker 
+                              value={parseFloat((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1).toFixed(1))} 
+                              decimals={1} 
+                            /> <span className="text-xs font-bold text-black">hrs</span>
+                          </div>
                           <div className="text-[11px] text-black font-extrabold font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                         </div>
                       </div>
@@ -3212,7 +3229,11 @@ export default function App() {
                       <div className="studio-card flex flex-col justify-between p-4 h-28 sm:h-32 w-full h-full">
                         <span className="text-[10px] font-extrabold uppercase tracking-wider text-black">Productivity Score</span>
                         <div className="space-y-1">
-                          <div className="text-2xl font-display font-black text-black"><NumberTicker value={Math.min(100, Math.round(((activeActivity.durationSeconds / 3600) / (user?.productivityGoal || 6)) * 100))} />%</div>
+                          <div className="text-2xl font-display font-black text-black">
+                            <NumberTicker 
+                              value={Math.min(100, Math.round(((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1) / (user?.productivityGoal || 6)) * 100))} 
+                            />%
+                          </div>
                           <div className="text-[11px] text-black font-extrabold">Target achieved</div>
                         </div>
                       </div>
