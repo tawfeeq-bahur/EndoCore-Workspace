@@ -88,10 +88,6 @@ async function safeRedisGet(key: string): Promise<string | null> {
       isRedisConnected = false;
     }
   }
-  return safeMemoryGet_Fallback(key);
-}
-
-function safeRedisGet_Fallback(key: string): string | null {
   return safeMemoryGet(key);
 }
 
