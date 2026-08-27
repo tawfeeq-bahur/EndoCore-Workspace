@@ -620,12 +620,13 @@ export default function App() {
     }
   }, []);
 
-  // Intro calibration roll sequence: 3s 0 -> max, 3s max -> actual
+  // Intro calibration roll sequence: 3s 0 -> max, 1s hold at max, 3s max -> actual
   useEffect(() => {
     setIsIntroRolling(true);
     const startTime = performance.now();
     const durationUp = 3000;   // 3 seconds: 0 -> max target (e.g. 6.0 hrs / 100%)
-    const durationDown = 3000; // 3 seconds: max target -> actual
+    const durationHold = 1000; // 1 second: HOLD at max target (6.0 hrs / 100%)
+    const durationDown = 3000; // 3 seconds: max target -> actual initial value
     let animationFrameId: number;
 
     const animateRoll = (now: number) => {
@@ -642,16 +643,23 @@ export default function App() {
           score: Math.round(p * 100)
         });
         animationFrameId = requestAnimationFrame(animateRoll);
-      } else if (elapsed <= durationUp + durationDown) {
-        // Phase 2: Roll DOWN from 100% / goal to actual value over 3s
-        const p = (durationUp + durationDown - elapsed) / durationDown;
+      } else if (elapsed <= durationUp + durationHold) {
+        // Phase 2: HOLD at MAX value (6.0 hrs / 100%) for 1 second
+        setIntroValues({
+          focusHours: targetGoal,
+          score: 100
+        });
+        animationFrameId = requestAnimationFrame(animateRoll);
+      } else if (elapsed <= durationUp + durationHold + durationDown) {
+        // Phase 3: Roll DOWN from 100% / goal to actual initial value over 3s
+        const p = (durationUp + durationHold + durationDown - elapsed) / durationDown;
         setIntroValues({
           focusHours: parseFloat((actualFocusHours + p * (targetGoal - actualFocusHours)).toFixed(1)),
           score: Math.round(actualScore + p * (100 - actualScore))
         });
         animationFrameId = requestAnimationFrame(animateRoll);
       } else {
-        // Phase 3: Roll complete! Show actual live values
+        // Phase 4: Roll complete! Show actual live values
         setIsIntroRolling(false);
       }
     };
