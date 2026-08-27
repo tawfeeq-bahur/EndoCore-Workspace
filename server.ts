@@ -20,18 +20,100 @@ import { exec } from "child_process";
 
 dotenv.config();
 
-// Connect to Redis Cache
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+// Connect to Redis Cache with resilient in-memory fallback
+let isRedisConnected = false;
+let redisWarned = false;
+
+const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379", {
+  maxRetriesPerRequest: 1,
+  retryStrategy(times) {
+    if (times > 3) return null;
+    return Math.min(times * 1000, 3000);
+  },
+  enableOfflineQueue: false
+});
+
+const inMemoryStore = new Map<string, { value: string; expiresAt?: number }>();
+
 redis.on("connect", () => {
+  isRedisConnected = true;
+  redisWarned = false;
   console.log("🚀 Connected to Redis successfully");
 });
+
 redis.on("error", (err) => {
-  console.error("❌ Redis Connection Error:", err);
+  if (isRedisConnected || !redisWarned) {
+    console.warn("⚠️ Redis server not available at " + (process.env.REDIS_URL || "redis://localhost:6379") + ". Operating with in-memory cache fallback.");
+    redisWarned = true;
+  }
+  isRedisConnected = false;
 });
+
+async function safeRedisGet(key: string): Promise<string | null> {
+  if (isRedisConnected) {
+    try {
+      return await redis.get(key);
+    } catch (e) {
+      isRedisConnected = false;
+    }
+  }
+  const item = inMemoryStore.get(key);
+  if (item) {
+    if (item.expiresAt && Date.now() > item.expiresAt) {
+      inMemoryStore.delete(key);
+      return null;
+    }
+    return item.value;
+  }
+  return null;
+}
+
+async function safeRedisSet(key: string, value: string, mode?: string, duration?: number): Promise<void> {
+  let expiresAt: number | undefined;
+  if (mode === "EX" && typeof duration === "number") {
+    expiresAt = Date.now() + duration * 1000;
+  }
+  inMemoryStore.set(key, { value, expiresAt });
+
+  if (isRedisConnected) {
+    try {
+      if (mode && duration) {
+        await redis.set(key, value, mode as any, duration);
+      } else {
+        await redis.set(key, value);
+      }
+    } catch (e) {
+      isRedisConnected = false;
+    }
+  }
+}
+
+async function safeRedisKeys(pattern: string): Promise<string[]> {
+  if (isRedisConnected) {
+    try {
+      return await redis.keys(pattern);
+    } catch (e) {
+      isRedisConnected = false;
+    }
+  }
+  const prefix = pattern.replace(/\*$/, "");
+  const now = Date.now();
+  const matchedKeys: string[] = [];
+  for (const [key, item] of inMemoryStore.entries()) {
+    if (item.expiresAt && now > item.expiresAt) {
+      inMemoryStore.delete(key);
+      continue;
+    }
+    if (key.startsWith(prefix)) {
+      matchedKeys.push(key);
+    }
+  }
+  return matchedKeys;
+}
 
 // Redis Caching Helpers
 async function getPresence(userId: string): Promise<any> {
-  const cached = await redis.get(`presence:user:${userId}`);
+  const cached = await safeRedisGet(`presence:user:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -42,7 +124,7 @@ async function getPresence(userId: string): Promise<any> {
 
 async function setPresence(userId: string, data: any) {
   // Save with 60s expiration (TTL)
-  await redis.set(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
+  await safeRedisSet(`presence:user:${userId}`, JSON.stringify(data), "EX", 60);
 }
 
 async function syncPresenceToRedis(userId: string, activity: any, userStatus: string, activeGroup: string) {
@@ -71,7 +153,7 @@ async function syncPresenceToRedis(userId: string, activity: any, userStatus: st
 }
 
 async function getUserActiveActivity(userId: string) {
-  const cached = await redis.get(`user:active:${userId}`);
+  const cached = await safeRedisGet(`user:active:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -107,16 +189,16 @@ async function getUserActiveActivity(userId: string) {
     lastHeartbeat: Date.now()
   };
 
-  await redis.set(`user:active:${userId}`, JSON.stringify(result));
+  await safeRedisSet(`user:active:${userId}`, JSON.stringify(result));
   return result;
 }
 
 async function setUserActiveActivity(userId: string, activity: any) {
-  await redis.set(`user:active:${userId}`, JSON.stringify(activity));
+  await safeRedisSet(`user:active:${userId}`, JSON.stringify(activity));
 }
 
 async function getUserOpenApps(userId: string): Promise<string[]> {
-  const cached = await redis.get(`user:openapps:${userId}`);
+  const cached = await safeRedisGet(`user:openapps:${userId}`);
   if (cached) {
     try {
       return JSON.parse(cached);
@@ -126,7 +208,7 @@ async function getUserOpenApps(userId: string): Promise<string[]> {
 }
 
 async function setUserOpenApps(userId: string, openApps: string[]) {
-  await redis.set(`user:openapps:${userId}`, JSON.stringify(openApps));
+  await safeRedisSet(`user:openapps:${userId}`, JSON.stringify(openApps));
 }
 
 const app = express();
@@ -580,12 +662,12 @@ async function broadcastActivityUpdate(userId: string) {
 // 1. Ticker for Redis active activities (runs every 5 seconds)
 setInterval(async () => {
   try {
-    const keys = await redis.keys("user:active:*");
+    const keys = await safeRedisKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
       if (!userId) continue;
 
-      const data = await redis.get(key);
+      const data = await safeRedisGet(key);
       if (!data) continue;
 
       const act = JSON.parse(data);
@@ -598,7 +680,7 @@ setInterval(async () => {
       }
 
       if (changed) {
-        await redis.set(key, JSON.stringify(act));
+        await safeRedisSet(key, JSON.stringify(act));
         broadcastActivityUpdate(userId);
       }
     }
@@ -610,12 +692,12 @@ setInterval(async () => {
 // 2. Periodic sync of Redis active sessions to PostgreSQL (runs every 60 seconds)
 setInterval(async () => {
   try {
-    const keys = await redis.keys("user:active:*");
+    const keys = await safeRedisKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
       if (!userId) continue;
 
-      const data = await redis.get(key);
+      const data = await safeRedisGet(key);
       if (!data) continue;
 
       const act = JSON.parse(data);
@@ -4211,8 +4293,8 @@ async function startServer() {
   const hasDist = fs.existsSync(path.join(distPath, "index.html"));
   const isDevMode = process.env.NODE_ENV === "development";
 
-  if (hasDist && process.env.NODE_ENV === "production") {
-    // Production Mode: Serve static dist assets
+  if (hasDist && !isDevMode) {
+    // Serve static built frontend when dist exists and not explicitly in dev mode
     console.log("📦 Serving built static frontend from:", distPath);
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
@@ -4221,16 +4303,34 @@ async function startServer() {
   } else {
     // Development Mode: Use Vite dev middleware
     console.log("⚡ Running in Vite Dev Middleware mode");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true, hmr: { port: 24679 } },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (viteErr) {
+      console.warn("⚠️ Vite dev server middleware warning:", viteErr);
+    }
   }
 
-  server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 EndoCore Workspace express server running at http://localhost:${PORT}`);
-  });
+  function listenOnPort(p: number) {
+    server.removeAllListeners("error");
+    server.on("error", (err: any) => {
+      if (err.code === "EADDRINUSE") {
+        console.warn(`⚠️ Port ${p} is already in use. Trying port ${p + 1}...`);
+        listenOnPort(p + 1);
+      } else {
+        console.error("Server error:", err);
+      }
+    });
+
+    server.listen(p, "0.0.0.0", () => {
+      console.log(`🚀 EndoCore Workspace express server running at http://localhost:${p}`);
+    });
+  }
+
+  listenOnPort(PORT);
 }
 
 startServer();
