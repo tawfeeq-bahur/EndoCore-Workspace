@@ -145,7 +145,14 @@ export default function App() {
   const [pomodoroMode, setPomodoroMode] = useState<"focus" | "break">("focus");
   const [pomodoroSessionCount, setPomodoroSessionCount] = useState<number>(0);
   const [distractionsManualCount, setDistractionsManualCount] = useState<number>(0);
-  const [themeMode] = useState<"light" | "dark">("light");
+  const [themeMode, setThemeMode] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("endocore_theme") as "light" | "dark";
+      if (saved) return saved;
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+    }
+    return "light";
+  });
 
   // Server-state synchronize mirrors
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -1735,13 +1742,20 @@ export default function App() {
   };
 
   const handleManualThemeChange = (newTheme: "dark" | "light") => {
-    // Disabled
+    setThemeMode(newTheme);
+    localStorage.setItem("endocore_theme", newTheme);
+    triggerToast(`Switched to ${newTheme === "dark" ? "Dark Glass" : "Light Slate"} Theme`);
   };
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", "light");
-    document.documentElement.classList.remove("dark");
-  }, []);
+    if (themeMode === "dark") {
+      document.documentElement.classList.add("dark");
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+  }, [themeMode]);
 
   // Dynamic status-colored indicator dots for editorial aesthetics
   const getStatusNodeMeta = (status: "online" | "busy" | "away" | "focus" | "offline") => {
@@ -2423,14 +2437,11 @@ export default function App() {
               )}
 
               <button
-                onClick={() => {
-                  document.documentElement.classList.toggle("dark");
-                  triggerToast("Theme toggled");
-                }}
+                onClick={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
                 className="p-2 text-black hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer shrink-0"
-                title="Toggle Light/Dark Theme"
+                title={`Switch to ${themeMode === "dark" ? "Light Slate" : "Dark Glass"} Theme`}
               >
-                <Sun className="h-4 w-4 text-black" />
+                {themeMode === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
               </button>
 
               <button
@@ -2457,14 +2468,11 @@ export default function App() {
                 </button>
               )}
               <button
-                onClick={() => {
-                  document.documentElement.classList.toggle("dark");
-                  triggerToast("Theme toggled");
-                }}
+                onClick={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
                 className="p-1.5 text-[#71717a] hover:text-[#09090b] rounded-lg hover:bg-stone-200/60 transition-colors cursor-pointer"
-                title="Toggle Light/Dark Theme"
+                title={`Switch to ${themeMode === "dark" ? "Light Slate" : "Dark Glass"} Theme`}
               >
-                <Sun className="h-4 w-4" />
+                {themeMode === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
               </button>
               <button
                 onClick={handleLogout}
@@ -5296,6 +5304,32 @@ export default function App() {
                     </div>
 
                     <div className="pt-2 space-y-3">
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-black">
+                        Appearance & Visual Theme
+                      </h3>
+                      <div className="flex items-center justify-between p-3.5 studio-panel">
+                        <div>
+                          <span className="text-xs font-semibold text-black block">Theme Aesthetic</span>
+                          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Switch between Arctic Light Slate and Charcoal Dark Glass aesthetics.</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleManualThemeChange("light")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${themeMode === "light" ? "bg-black text-white dark:bg-white dark:text-black" : "bg-zinc-200 text-zinc-800 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300"}`}
+                          >
+                            <Sun className="h-3.5 w-3.5 text-amber-500" /> Light
+                          </button>
+                          <button
+                            onClick={() => handleManualThemeChange("dark")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${themeMode === "dark" ? "bg-indigo-600 text-white" : "bg-zinc-200 text-zinc-800 hover:bg-zinc-300 dark:bg-zinc-800 dark:text-zinc-300"}`}
+                          >
+                            <Moon className="h-3.5 w-3.5 text-indigo-400" /> Dark
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 space-y-3">
                       <h3 className="text-xs font-semibold uppercase tracking-wider text-[#09090b]">
                         Co-Working Pipeline Overview
                       </h3>
@@ -5303,7 +5337,7 @@ export default function App() {
                         <p className="font-semibold text-[#71717a] mb-1">Workspace Details:</p>
                         <p>Express Socket: <span className="font-bold">ws://localhost:3000/rtime-pipeline</span></p>
                         <p>Database Engine: <span className="font-bold">In-memory dynamic simulated ticks</span></p>
-                        <p>Aesthetic System: <span className="font-bold">Arctic Slate Studio (Light Mode)</span></p>
+                        <p>Aesthetic System: <span className="font-bold">EndoCore Studio ({themeMode === "dark" ? "Dark Glass" : "Light Slate"})</span></p>
                         <p>Session ID: <span className="font-bold">3c832fe5-3b56-440d-91da-8d3c67a9f</span></p>
                       </div>
                     </div>
