@@ -1,11 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { getSocket } from "../services/socketManager";
 import { 
   Users, Target, Clock, TrendingUp, Sparkles, RefreshCw, 
   AlertTriangle, Check, ArrowRight, Trophy, Download, FileText,
-  Lock, CheckCircle2, ChevronRight, Activity, Laptop, MessageSquare
+  Lock, CheckCircle2, ChevronRight, Activity, Laptop, MessageSquare,
+  ExternalLink, GitCommit, GitPullRequest, CircleDot, CheckSquare
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NumberTicker } from "./NumberTicker";
+import { ActivityItem } from "../types";
 
 interface OwnerRoomDashboardProps {
   roomName: string;
@@ -20,6 +23,7 @@ interface OwnerRoomDashboardProps {
   onExportPdf?: () => void;
   onAskAi?: () => void;
   onSelectTab?: (tab: string) => void;
+  apiFetch?: (url: string, options?: any) => Promise<Response>;
 }
 
 export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
@@ -34,7 +38,8 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
   onExportCsv,
   onExportPdf,
   onAskAi,
-  onSelectTab
+  onSelectTab,
+  apiFetch
 }) => {
   const isAdminOrOwner = userRole === "OWNER" || userRole === "ADMIN" || userRole === "admin";
   const isClosed = roomStatus === "closed" || roomStatus === "completed";
@@ -197,20 +202,105 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
   // Top Performer
   const topPerformer = mergedMembers.reduce((top, m) => (m.focusScore > top.focusScore ? m : top), mergedMembers[0]);
 
-  // Timeline events dynamically sourced
-  const rawTimelineLogs = Array.isArray(occupants) 
-    ? occupants.flatMap(o => (o.timeline || []).map((t: any) => ({ ...t, user: o.name })))
-    : [];
+  // Unified Activity Timeline State (Desktop + External GitHub)
+  const [unifiedTimeline, setUnifiedTimeline] = useState<ActivityItem[]>([]);
+  const [loadingTimeline, setLoadingTimeline] = useState<boolean>(false);
+  const [githubHealth, setGithubHealth] = useState<string | null>(null);
 
-  const timelineLogs = rawTimelineLogs.length > 0
-    ? rawTimelineLogs.slice(0, 5).map((t: any) => ({
-        time: t.time || "—",
-        user: t.user || "Member",
-        detail: `${t.app || "Workstation"} — ${t.project || "Workspace"}`,
-        duration: t.duration || "—",
-        color: "bg-emerald-500"
-      }))
-    : [];
+  const fetchTimeline = useCallback(async () => {
+    if (!apiFetch) return;
+    setLoadingTimeline(true);
+    try {
+      const roomIdParam = roomDetails?.id ? `&roomId=${roomDetails.id}` : "";
+      const res = await apiFetch(`/api/activity/timeline?limit=10${roomIdParam}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.items)) {
+          setUnifiedTimeline(data.items);
+        }
+      }
+
+      // Also fetch integration health for dashboard monitoring
+      const statusRes = await apiFetch("/api/integrations/GITHUB/status");
+      if (statusRes.ok) {
+        const statusData = await statusRes.json();
+        setGithubHealth(statusData.connected ? statusData.health : "DISCONNECTED");
+      }
+    } catch (err) {
+      console.error("Error fetching room activity timeline:", err);
+    } finally {
+      setLoadingTimeline(false);
+    }
+  }, [apiFetch, roomDetails?.id]);
+
+  useEffect(() => {
+    fetchTimeline();
+  }, [fetchTimeline]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (socket) {
+      const handleExternalActivity = (data: { userId: string; activity: ActivityItem }) => {
+        if (data && data.activity) {
+          setUnifiedTimeline((prev) => {
+            if (prev.some((item) => item.id === data.activity.id)) {
+              return prev;
+            }
+            return [data.activity, ...prev].slice(0, 10);
+          });
+        }
+      };
+
+      const handleHealthUpdate = (data: any) => {
+        if (data.provider === "GITHUB") {
+          setGithubHealth(data.health);
+        }
+      };
+
+      const handleReconnected = (data: any) => {
+        if (data.provider === "GITHUB") {
+          setGithubHealth(data.healthStatus || "HEALTHY");
+          fetchTimeline();
+        }
+      };
+
+      const handleReconciled = (data: any) => {
+        if (data.provider === "GITHUB") {
+          fetchTimeline();
+        }
+      };
+
+      socket.on("activity-external-update", handleExternalActivity);
+      socket.on("integration-health-update", handleHealthUpdate);
+      socket.on("integration-reconnected", handleReconnected);
+      socket.on("integration-reconciled", handleReconciled);
+
+      return () => {
+        socket.off("activity-external-update", handleExternalActivity);
+        socket.off("integration-health-update", handleHealthUpdate);
+        socket.off("integration-reconnected", handleReconnected);
+        socket.off("integration-reconciled", handleReconciled);
+      };
+    }
+  }, [fetchTimeline]);
+
+  const renderEventIcon = (item: ActivityItem) => {
+    if (item.source === "DESKTOP") {
+      return <Laptop className="h-3.5 w-3.5 text-slate-600 shrink-0" />;
+    }
+    switch (item.activityType) {
+      case "GITHUB_COMMIT":
+        return <GitCommit className="h-3.5 w-3.5 text-emerald-600 shrink-0" />;
+      case "GITHUB_PULL_REQUEST":
+        return <GitPullRequest className="h-3.5 w-3.5 text-purple-600 shrink-0" />;
+      case "GITHUB_ISSUE":
+        return <CircleDot className="h-3.5 w-3.5 text-amber-600 shrink-0" />;
+      case "GITHUB_REVIEW":
+        return <CheckSquare className="h-3.5 w-3.5 text-blue-600 shrink-0" />;
+      default:
+        return <Activity className="h-3.5 w-3.5 text-indigo-600 shrink-0" />;
+    }
+  };
 
   return (
     <div className="space-y-6 font-sans text-[#09090b]">
@@ -294,18 +384,28 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
               </div>
             </div>
 
-            {/* Card 4: FORECAST STATUS */}
+            {/* Card 4: FORECAST & INTEGRATION HEALTH */}
             <div className="p-4 rounded-2xl bg-white border border-[#e4e4e7] shadow-xs space-y-3 flex flex-col justify-between">
               <div className="flex items-center justify-between text-[#71717a]">
-                <span className="text-[10px] font-bold uppercase tracking-wider font-mono">FORECAST STATUS</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider font-mono">FORECAST & INTEGRATIONS</span>
                 <TrendingUp className="h-4 w-4 text-[#71717a]" />
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <div className={`text-sm font-black ${forecastColor} tracking-tight flex items-center gap-1.5 uppercase`}>
                   <span className={`h-2 w-2 rounded-full ${forecastDot} animate-pulse`}></span>
                   {forecastStatus}
                 </div>
-                <p className="text-[11px] text-[#71717a] font-medium">Delivery {forecastStatus === "AT RISK" ? "at risk" : "on schedule"}</p>
+                <div className="flex items-center justify-between pt-0.5 border-t border-zinc-100 text-[10px]">
+                  <span className="text-zinc-500 font-mono">GitHub:</span>
+                  <span className={`font-bold font-mono px-1.5 py-0.5 rounded ${
+                    githubHealth === "HEALTHY" ? "bg-emerald-100 text-emerald-800" :
+                    githubHealth === "RATE_LIMITED" ? "bg-amber-100 text-amber-800" :
+                    githubHealth === "AUTH_REQUIRED" ? "bg-rose-100 text-rose-800" :
+                    "bg-zinc-100 text-zinc-600"
+                  }`}>
+                    {githubHealth || "CONNECTED"}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -437,20 +537,48 @@ export const OwnerRoomDashboard: React.FC<OwnerRoomDashboardProps> = ({
               </div>
 
               <div className="space-y-3 font-mono text-xs">
-                {timelineLogs.length > 0 ? timelineLogs.map((log, idx) => (
-                  <div key={idx} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-0">
-                    <div className="flex items-center space-x-2 min-w-0">
-                      <span className={`h-2 w-2 rounded-full shrink-0 ${log.color}`}></span>
-                      <span className="text-[10px] text-[#71717a] shrink-0 font-bold">{log.time}</span>
-                      <span className="font-bold text-[#09090b] shrink-0 text-xs">{log.user}</span>
-                      <span className="text-[#71717a] truncate text-xs">{log.detail}</span>
+                {unifiedTimeline.length > 0 ? (
+                  unifiedTimeline.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0 gap-2">
+                      <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                        {renderEventIcon(item)}
+                        <span className="text-[10px] text-[#71717a] shrink-0 font-bold">
+                          {item.occurredAt ? new Date(item.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "—"}
+                        </span>
+                        <span className="font-bold text-[#09090b] shrink-0 text-xs truncate max-w-[90px]">
+                          {item.userName || "Member"}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[10px] font-semibold text-slate-700 shrink-0">
+                          {item.application}
+                        </span>
+                        <span className="text-[#71717a] truncate text-xs flex-1" title={item.summary}>
+                          {item.summary}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2 shrink-0">
+                        {item.durationSeconds ? (
+                          <span className="text-[10px] text-[#71717a] font-mono font-semibold">
+                            {Math.floor(item.durationSeconds / 60)}m
+                          </span>
+                        ) : null}
+                        {item.externalUrl && (
+                          <a
+                            href={item.externalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-indigo-600 hover:underline font-mono flex items-center gap-0.5"
+                          >
+                            <span>Link</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-[10px] text-[#71717a] font-semibold shrink-0 ml-2">{log.duration}</span>
-                  </div>
-                )) : (
+                  ))
+                ) : (
                   <div className="p-6 text-center text-[#71717a] font-sans">
                     <p className="text-xs font-medium">No activity logged yet.</p>
-                    <p className="text-[10px] mt-1">Room timeline will populate as members start working.</p>
+                    <p className="text-[10px] mt-1">Room timeline will populate as members work on desktop or push code to GitHub.</p>
                   </div>
                 )}
               </div>

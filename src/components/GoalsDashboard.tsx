@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getSocket } from '../services/socketManager';
 import { 
   Target, 
   Clock, 
@@ -19,7 +20,12 @@ import {
   FileText,
   CheckCircle,
   Lightbulb,
-  Layers
+  Layers,
+  GitBranch,
+  RefreshCw,
+  Zap,
+  GitCommit,
+  GitPullRequest
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -31,10 +37,16 @@ interface Goal {
   category: string;
   targetHours: number;
   currentHours: number;
-  status: 'active' | 'completed';
+  status: 'active' | 'completed' | 'IN_PROGRESS' | 'NOT_STARTED';
   deadline: string;
   createdAt: string;
   priority?: string;
+  externalProvider?: string;
+  externalResourceId?: string;
+  externalRepository?: string;
+  verificationCriteria?: string;
+  autoVerifyEnabled?: boolean;
+  integrationLinks?: any[];
 }
 
 export function GoalsDashboard() {
@@ -46,6 +58,18 @@ export function GoalsDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'recent' | 'demo'>('recent');
   
+  // Integration resources state
+  const [repositories, setRepositories] = useState<any[]>([]);
+  const [isGitHubConnected, setIsGitHubConnected] = useState<boolean>(true);
+  const [loadingRepos, setLoadingRepos] = useState<boolean>(false);
+  const [verifyingGoalId, setVerifyingGoalId] = useState<string | null>(null);
+
+  // Integration linking form state
+  const [linkIntegration, setLinkIntegration] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState('GITHUB');
+  const [selectedRepoId, setSelectedRepoId] = useState('');
+  const [selectedCriteria, setSelectedCriteria] = useState('PULL_REQUEST_MERGED');
+
   // Form fields for new goal
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
@@ -54,10 +78,6 @@ export function GoalsDashboard() {
   const [newDeadline, setNewDeadline] = useState('');
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    fetchGoals();
-  }, []);
 
   const getHeaders = () => {
     const token = localStorage.getItem("token") || localStorage.getItem("endocore_token");
@@ -84,6 +104,61 @@ export function GoalsDashboard() {
     }
   };
 
+  const fetchGitHubResources = async () => {
+    setLoadingRepos(true);
+    try {
+      const res = await fetch('/api/integrations/github/resources', { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setRepositories(data);
+        setIsGitHubConnected(true);
+        if (data.length > 0 && !selectedRepoId) {
+          setSelectedRepoId(data[0].id);
+        }
+      } else {
+        setIsGitHubConnected(false);
+        setRepositories([]);
+      }
+    } catch {
+      setIsGitHubConnected(false);
+      setRepositories([]);
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchGoals();
+    fetchGitHubResources();
+
+    const socket = getSocket();
+    if (socket) {
+      const handleGoalProgressUpdate = (data: any) => {
+        if (data && data.goalId) {
+          setGoals((prev) =>
+            prev.map((g) =>
+              g.id === data.goalId
+                ? {
+                    ...g,
+                    status: data.status,
+                    currentHours: data.currentHours,
+                    externalProvider: data.externalProvider || g.externalProvider,
+                    externalRepository: data.externalRepository || g.externalRepository
+                  }
+                : g
+            )
+          );
+        }
+      };
+
+      socket.on("goal-progress-update", handleGoalProgressUpdate);
+
+      return () => {
+        socket.off("goal-progress-update", handleGoalProgressUpdate);
+      };
+    }
+  }, []);
+
   const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) {
@@ -99,6 +174,8 @@ export function GoalsDashboard() {
     setSubmitting(true);
     setFormError('');
 
+    const targetRepoObj = repositories.find(r => r.id === selectedRepoId);
+
     try {
       const res = await fetch('/api/goals', {
         method: 'POST',
@@ -108,7 +185,14 @@ export function GoalsDashboard() {
           description: newDescription,
           category: newCategory,
           targetHours: target,
-          deadline: newDeadline || undefined
+          deadline: newDeadline || undefined,
+          ...(linkIntegration && {
+            externalProvider: selectedProvider,
+            externalResourceId: selectedRepoId || undefined,
+            externalRepository: targetRepoObj?.identifier || targetRepoObj?.name || undefined,
+            verificationCriteria: { type: selectedCriteria },
+            autoVerifyEnabled: true
+          })
         })
       });
 
@@ -121,6 +205,7 @@ export function GoalsDashboard() {
         setNewCategory('Development');
         setNewTargetHours('10');
         setNewDeadline('');
+        setLinkIntegration(false);
       } else {
         const errData = await res.json();
         setFormError(errData.error || "Failed to create goal");
@@ -136,7 +221,7 @@ export function GoalsDashboard() {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
 
-    const newStatus = goal.status === 'active' ? 'completed' : 'active';
+    const newStatus = (goal.status === 'completed' || goal.status as string === 'COMPLETED') ? 'active' : 'completed';
     const newHours = newStatus === 'completed' ? goal.targetHours : Math.min(goal.currentHours, goal.targetHours - 1);
 
     try {
@@ -155,6 +240,26 @@ export function GoalsDashboard() {
       }
     } catch (err) {
       console.error("Error toggling goal status:", err);
+    }
+  };
+
+  const handleManualVerify = async (goalId: string) => {
+    setVerifyingGoalId(goalId);
+    try {
+      const res = await fetch(`/api/goals/${goalId}/verify`, {
+        method: 'POST',
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.goal) {
+          setGoals(prev => prev.map(g => g.id === goalId ? data.goal : g));
+        }
+      }
+    } catch (err) {
+      console.error("Error manually verifying goal:", err);
+    } finally {
+      setVerifyingGoalId(null);
     }
   };
 
@@ -177,24 +282,25 @@ export function GoalsDashboard() {
 
   // Filter & Search Goals
   const filteredGoals = goals.filter(goal => {
+    const isCompleted = goal.status === 'completed' || (goal.status as string) === 'COMPLETED';
     const matchesTab = 
       activeTab === 'all' || 
-      (activeTab === 'active' && goal.status === 'active') || 
-      (activeTab === 'completed' && goal.status === 'completed');
+      (activeTab === 'active' && !isCompleted) || 
+      (activeTab === 'completed' && isCompleted);
       
     const matchesCategory = selectedCategory === 'all' || goal.category === selectedCategory;
     
     const matchesSearch = 
       goal.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-      goal.description.toLowerCase().includes(searchQuery.toLowerCase());
+      (goal.description || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesTab && matchesCategory && matchesSearch;
   });
 
   // Calculate Statistics
   const totalGoals = goals.length;
-  const completedGoals = goals.filter(g => g.status === 'completed').length;
-  const activeGoalsCount = goals.filter(g => g.status === 'active').length;
+  const completedGoals = goals.filter(g => g.status === 'completed' || (g.status as string) === 'COMPLETED').length;
+  const activeGoalsCount = goals.filter(g => g.status !== 'completed' && (g.status as string) !== 'COMPLETED').length;
   const totalTargetHours = goals.reduce((acc, g) => acc + g.targetHours, 0);
   const totalTrackedHours = goals.reduce((acc, g) => acc + g.currentHours, 0);
   const overallCompletionRate = totalTargetHours > 0 ? Math.round((totalTrackedHours / totalTargetHours) * 100) : 0;
@@ -226,6 +332,19 @@ export function GoalsDashboard() {
     return { text: `Due in ${diffDays} days`, type: "normal" };
   };
 
+  const getCriteriaLabel = (rawCriteria?: string) => {
+    if (!rawCriteria) return "Commit Created";
+    if (rawCriteria.includes("PULL_REQUEST_MERGED")) return "Pull Request Merged";
+    if (rawCriteria.includes("PULL_REQUEST_OPENED")) return "Pull Request Opened";
+    if (rawCriteria.includes("PULL_REQUEST_CLOSED")) return "Pull Request Closed";
+    if (rawCriteria.includes("ISSUE_CREATED")) return "Issue Created";
+    if (rawCriteria.includes("ISSUE_CLOSED")) return "Issue Closed";
+    if (rawCriteria.includes("REVIEW_SUBMITTED")) return "Review Submitted";
+    if (rawCriteria.includes("ACTIVITY_COUNT")) return "Activity Count";
+    if (rawCriteria.includes("HOURS_SPENT")) return "Hours Spent";
+    return "Commit Created";
+  };
+
   return (
     <div className="bg-[#f8fafc] min-h-screen pb-12 font-sans text-[#0f172a]">
       
@@ -244,360 +363,286 @@ export function GoalsDashboard() {
         </div>
 
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => {
+            fetchGitHubResources();
+            setIsModalOpen(true);
+          }}
           className="flex items-center gap-2 bg-[#09090b] hover:bg-black text-white font-semibold text-xs py-2.5 px-4 rounded-xl shadow-sm transition-all duration-200 cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Add Focus Goal
         </button>
       </div>
 
-      <div className="w-full p-6 space-y-6">
-
-        {/* PRIVACY LAYER BANNER */}
-        <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 flex flex-wrap items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 rounded-xl bg-white border border-indigo-200 text-indigo-600 shrink-0">
-              <Shield className="h-5 w-5" />
+      {/* MAIN CONTAINER */}
+      <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
+        
+        {/* STATS OVERVIEW CARDS */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">TOTAL GOALS</span>
+              <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                <Target className="w-4 h-4" />
+              </div>
             </div>
             <div>
-              <h4 className="text-xs font-bold text-slate-900">EndoCore Privacy Layer</h4>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Workspace signals are processed through EndoCore's privacy boundary before being shared with the workspace.
-              </p>
+              <div className="text-2xl font-bold text-slate-900">{totalGoals}</div>
+              <span className="text-[11px] text-slate-400 font-medium block mt-1">{activeGoalsCount} Active | {completedGoals} Completed</span>
             </div>
           </div>
 
-          <a href="#" className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 shrink-0">
-            <span>Learn more</span>
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">COMPLETION RATE</span>
+              <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
+                <Award className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900">{overallCompletionRate}%</div>
+              <span className="text-[11px] text-slate-400 font-medium block mt-1">Based on target vs actual hours</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">TRACKED HOURS</span>
+              <div className="p-2 rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900">{totalTrackedHours.toFixed(1)}h</div>
+              <span className="text-[11px] text-slate-400 font-medium block mt-1">Target: {totalTargetHours}h overall</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">GITHUB SYNC</span>
+              <div className="p-2 rounded-xl bg-slate-100 text-slate-900 border border-slate-200">
+                <Zap className="w-4 h-4 text-amber-500" />
+              </div>
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-slate-900">
+                {isGitHubConnected ? "Connected" : "Offline"}
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium block mt-1">
+                {repositories.length} synchronized repositories
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* MAIN LAYOUT: GOALS CONTENT (LEFT) + SIDEBAR (RIGHT) */}
-        <div className="flex flex-col xl:flex-row gap-6 items-start w-full">
-
-          {/* LEFT MAIN AREA (FLEX-1 FULL REMAINING WIDTH) */}
-          <div className="flex-1 min-w-0 space-y-6 w-full">
-
-            {/* STATS OVERVIEW CARDS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">OVERALL COMPLETION</span>
-                  <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
-                    <Award className="w-4 h-4" />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">{overallCompletionRate}%</div>
-                  <span className="text-[11px] text-slate-400 font-mono block mt-1">{totalTrackedHours.toFixed(1)}h of {totalTargetHours.toFixed(1)}h tracked</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ACTIVE PRIORITIES</span>
-                  <div className="p-2 rounded-xl bg-orange-50 text-orange-600 border border-orange-100">
-                    <Target className="w-4 h-4" />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">{activeGoalsCount}</div>
-                  <span className="text-[11px] text-slate-400 font-medium block mt-1">Focus objectives currently active</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">COMPLETED MILESTONES</span>
-                  <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">{completedGoals}</div>
-                  <span className="text-[11px] text-slate-400 font-medium block mt-1">Out of {totalGoals} total goals</span>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">HOURS TRACKED THIS WEEK</span>
-                  <div className="p-2 rounded-xl bg-purple-50 text-purple-600 border border-purple-100">
-                    <Clock className="w-4 h-4" />
-                  </div>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">26.5h</div>
-                  <span className="text-[11px] text-slate-400 font-medium block mt-1">Average 8.8h per goal</span>
-                </div>
-              </div>
-            </div>
-
-            {/* SEARCH AND FILTERS BAR */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs">
-              <div className="flex bg-slate-100 rounded-xl p-1 w-full sm:w-auto">
-                {(['all', 'active', 'completed'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer capitalize ${activeTab === tab ? 'bg-[#09090b] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3 w-full sm:w-auto flex-1 justify-end">
-                <div className="relative w-full sm:max-w-xs">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search goals..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition-all"
-                  />
-                </div>
-
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="bg-white border border-slate-200 text-xs rounded-xl px-3 py-2 font-semibold text-slate-700 focus:outline-none cursor-pointer"
-                >
-                  <option value="all">All Categories</option>
-                  <option value="Development">Development</option>
-                  <option value="Design">Design</option>
-                  <option value="Documentation">Documentation</option>
-                  <option value="Research">Research</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-
-            {/* GOALS GRID */}
-            {loading ? (
-              <div className="flex h-64 items-center justify-center bg-white rounded-2xl border border-slate-200">
-                <Clock className="h-6 w-6 text-slate-400 animate-spin" />
-                <span className="ml-3 text-xs font-mono text-slate-500 uppercase tracking-wider">Loading goals...</span>
-              </div>
-            ) : filteredGoals.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredGoals.map((goal) => {
-                  const color = getCategoryColor(goal.category);
-                  const progressPercentage = Math.min(100, Math.round((goal.currentHours / goal.targetHours) * 100));
-                  const daysInfo = getDaysRemaining(goal.deadline);
-
-                  return (
-                    <div
-                      key={goal.id}
-                      className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${color.bg}`}>
-                            {goal.category}
-                          </span>
-
-                          <button 
-                            onClick={() => handleToggleStatus(goal.id)}
-                            className="text-slate-400 hover:text-emerald-500 transition cursor-pointer p-0.5"
-                          >
-                            {goal.status === 'completed' ? (
-                              <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                            ) : (
-                              <Circle className="w-5 h-5 text-slate-300" />
-                            )}
-                          </button>
-                        </div>
-
-                        <div>
-                          <h3 className={`font-bold text-sm text-slate-900 ${goal.status === 'completed' ? 'line-through text-slate-400' : ''}`}>
-                            {goal.title}
-                          </h3>
-                          <p className="text-xs text-slate-500 font-medium mt-1 line-clamp-2 leading-relaxed">
-                            {goal.description || "No description provided."}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="space-y-3 pt-2">
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            <span>PROGRESS</span>
-                            <span>{goal.currentHours.toFixed(1)}h / {goal.targetHours}h ({progressPercentage}%)</span>
-                          </div>
-                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div 
-                              style={{ width: `${progressPercentage}%` }}
-                              className={`h-full rounded-full transition-all duration-500 ${color.bar}`}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] pt-1 text-slate-500 font-medium border-t border-slate-100">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                            <span className={daysInfo.type === 'due-today' ? "text-amber-600 font-bold" : "text-slate-500"}>
-                              {daysInfo.text}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
-                              <BarChart2 className="w-3 h-3" />
-                              {goal.priority || "High Priority"}
-                            </span>
-                            <button
-                              onClick={() => handleDeleteGoal(goal.id)}
-                              className="p-1 text-slate-300 hover:text-rose-500 transition cursor-pointer"
-                              title="Delete Goal"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4">
-                <div className="p-3 bg-slate-50 rounded-full w-fit mx-auto text-slate-400 border border-slate-200">
-                  <Target className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">No focus goals found</h3>
-                  <p className="text-xs text-slate-500 mt-1">Create a new focus goal to start tracking your targets.</p>
-                </div>
-                <button 
-                  onClick={() => setIsModalOpen(true)}
-                  className="px-4 py-2 bg-[#09090b] text-white text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Create Goal
-                </button>
-              </div>
-            )}
-
-          </div>
-
-          {/* RIGHT SIDEBAR (320px FIXED WIDTH) */}
-          <div className="w-full xl:w-[320px] 2xl:w-[340px] shrink-0 space-y-6">
-
-            {/* RECENT ACTIVITY & DEMO LOGS CARD */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5 shadow-2xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center space-x-4 text-xs font-bold">
-                  <button 
-                    onClick={() => setSidebarTab('recent')}
-                    className={`pb-1 border-b-2 transition-all cursor-pointer ${sidebarTab === 'recent' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                  >
-                    RECENT ACTIVITY
-                  </button>
-                  <button 
-                    onClick={() => setSidebarTab('demo')}
-                    className={`pb-1 border-b-2 transition-all cursor-pointer ${sidebarTab === 'demo' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                  >
-                    DEMO LOGS
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                      <Code className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-slate-900">Core API Optimization</h5>
-                      <span className="text-[10px] text-slate-400 font-medium block">Tracked 1.5h</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">2m ago</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                      <Layers className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-slate-900">Design System Migration</h5>
-                      <span className="text-[10px] text-slate-400 font-medium block">Tracked 2.0h</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">5m ago</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                      <FileText className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-slate-900">Write Architecture Docs</h5>
-                      <span className="text-[10px] text-slate-400 font-medium block">Tracked 1.0h</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">1h ago</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
-                      <CheckCircle className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-slate-900">Focus session completed</h5>
-                      <span className="text-[10px] text-slate-400 font-medium block">2.5h logged</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-mono">2h ago</span>
-                </div>
-              </div>
-
-              <button className="w-full py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-1.5 transition-all cursor-pointer">
-                <span>View all activity</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            {/* NEED A CUSTOM GOAL TYPE? CARD */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-2xs">
-              <div>
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
-                  NEED A CUSTOM GOAL TYPE?
-                </h4>
-                <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
-                  Don't see a goal type that fits your workflow? Request a custom goal category for your team.
-                </p>
-              </div>
-
-              <button 
-                onClick={() => setIsModalOpen(true)}
-                className="w-full py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-slate-900 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+        {/* SEARCH AND FILTERS BAR */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-2xs">
+          <div className="flex bg-slate-100 rounded-xl p-1 w-full sm:w-auto">
+            {(['all', 'active', 'completed'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer capitalize ${activeTab === tab ? 'bg-[#09090b] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
               >
-                <Plus className="h-4 w-4" />
-                <span>Request Goal Type</span>
+                {tab}
               </button>
-            </div>
-
-            {/* TIPS FOR SUCCESS CARD */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-3 shadow-2xs">
-              <div className="flex items-center space-x-2 text-slate-900">
-                <Lightbulb className="h-4 w-4 text-amber-500" />
-                <h4 className="text-xs font-bold uppercase tracking-wider">TIPS FOR SUCCESS</h4>
-              </div>
-              <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                Break large goals into smaller focus sessions for better results.
-              </p>
-            </div>
-
+            ))}
           </div>
 
+          <div className="flex items-center gap-3 w-full sm:w-auto flex-1 justify-end">
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search goals..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder-slate-400 focus:outline-none focus:bg-white focus:border-slate-400 transition-all"
+              />
+            </div>
+
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="bg-white border border-slate-200 text-xs rounded-xl px-3 py-2 font-semibold text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="all">All Categories</option>
+              <option value="Development">Development</option>
+              <option value="Design">Design</option>
+              <option value="Documentation">Documentation</option>
+              <option value="Research">Research</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
         </div>
+
+        {/* GOALS GRID */}
+        {loading ? (
+          <div className="flex h-64 items-center justify-center bg-white rounded-2xl border border-slate-200">
+            <Clock className="h-6 w-6 text-slate-400 animate-spin" />
+            <span className="ml-3 text-xs font-mono text-slate-500 uppercase tracking-wider">Loading goals...</span>
+          </div>
+        ) : filteredGoals.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredGoals.map((goal) => {
+              const color = getCategoryColor(goal.category);
+              const isCompleted = goal.status === 'completed' || (goal.status as string) === 'COMPLETED';
+              const progressPercentage = Math.min(100, Math.round((goal.currentHours / goal.targetHours) * 100));
+              const daysInfo = getDaysRemaining(goal.deadline);
+              const isVerified = isCompleted || goal.integrationLinks?.[0]?.verificationStatus === 'VERIFIED';
+
+              return (
+                <div
+                  key={goal.id}
+                  className="bg-white rounded-2xl border border-slate-200 p-5 space-y-4 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${color.bg}`}>
+                          {goal.category}
+                        </span>
+
+                        {goal.externalProvider === 'GITHUB' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-900 text-white flex items-center gap-1">
+                            <GitBranch className="w-2.5 h-2.5 text-emerald-400" />
+                            GitHub
+                          </span>
+                        )}
+                      </div>
+
+                      <button 
+                        onClick={() => handleToggleStatus(goal.id)}
+                        className="text-slate-400 hover:text-emerald-500 transition cursor-pointer p-0.5"
+                      >
+                        {isCompleted ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                        ) : (
+                          <Circle className="w-5 h-5 text-slate-300" />
+                        )}
+                      </button>
+                    </div>
+
+                    <div>
+                      <h3 className={`font-bold text-sm text-slate-900 ${isCompleted ? 'line-through text-slate-400' : ''}`}>
+                        {goal.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium mt-1 line-clamp-2 leading-relaxed">
+                        {goal.description || "No description provided."}
+                      </p>
+                    </div>
+
+                    {/* GITHUB INTEGRATION SPECIFICS */}
+                    {goal.externalProvider === 'GITHUB' && (
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 font-mono text-[11px]">
+                        <div className="flex items-center justify-between text-slate-700">
+                          <span className="font-semibold text-slate-500">Repository:</span>
+                          <span className="font-bold truncate max-w-[170px] text-slate-900" title={goal.externalRepository || "All repositories"}>
+                            {goal.externalRepository || "All Repositories"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-700">
+                          <span className="font-semibold text-slate-500">Verification:</span>
+                          <span className="font-bold text-indigo-600">
+                            {getCriteriaLabel(goal.verificationCriteria)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3 pt-2">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono">
+                        <span>PROGRESS</span>
+                        <span>{goal.currentHours.toFixed(1)}h / {goal.targetHours}h ({progressPercentage}%)</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          style={{ width: `${progressPercentage}%` }}
+                          className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-emerald-500' : color.bar}`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* STATUS VERIFICATION TAG */}
+                    <div className="flex items-center justify-between text-[10px] font-medium pt-1">
+                      {isVerified ? (
+                        <span className="text-emerald-600 font-bold flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          Verified from GitHub activity
+                        </span>
+                      ) : goal.externalProvider === 'GITHUB' ? (
+                        <span className="text-indigo-600 font-semibold flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-indigo-500 animate-pulse" />
+                          Waiting for matching GitHub activity
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-medium">Manually tracked</span>
+                      )}
+
+                      {goal.externalProvider === 'GITHUB' && !isCompleted && (
+                        <button
+                          onClick={() => handleManualVerify(goal.id)}
+                          disabled={verifyingGoalId === goal.id}
+                          className="text-[10px] font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer hover:underline disabled:opacity-50"
+                          title="Trigger manual GitHub activity evaluation"
+                        >
+                          <RefreshCw className={`w-2.5 h-2.5 ${verifyingGoalId === goal.id ? 'animate-spin' : ''}`} />
+                          <span>Verify</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] pt-2 text-slate-500 font-medium border-t border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span className={daysInfo.type === 'due-today' ? "text-amber-600 font-bold" : "text-slate-500"}>
+                          {daysInfo.text}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                          <BarChart2 className="w-3 h-3" />
+                          {goal.priority || "High Priority"}
+                        </span>
+                        <button
+                          onClick={() => handleDeleteGoal(goal.id)}
+                          className="p-1 text-slate-300 hover:text-rose-500 transition cursor-pointer"
+                          title="Delete Goal"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center space-y-4">
+            <div className="p-3 bg-slate-50 rounded-full w-fit mx-auto text-slate-400 border border-slate-200">
+              <Target className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-bold text-sm text-slate-900">No focus goals found</h3>
+              <p className="text-xs text-slate-500 mt-1">Create a new focus goal to start tracking your targets.</p>
+            </div>
+            <button 
+              onClick={() => {
+                fetchGitHubResources();
+                setIsModalOpen(true);
+              }}
+              className="px-4 py-2 bg-[#09090b] text-white text-xs font-bold rounded-xl cursor-pointer"
+            >
+              Create Goal
+            </button>
+          </div>
+        )}
+
       </div>
 
       {/* CREATE GOAL MODAL */}
@@ -616,7 +661,7 @@ export function GoalsDashboard() {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white w-full max-w-md rounded-2xl border border-slate-200 shadow-2xl p-6 relative z-10 space-y-5"
+              className="bg-white w-full max-w-lg rounded-2xl border border-slate-200 shadow-2xl p-6 relative z-10 space-y-5 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -643,7 +688,7 @@ export function GoalsDashboard() {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Core API Optimization"
+                    placeholder="e.g. Implement Authentication Module"
                     value={newTitle}
                     onChange={(e) => setNewTitle(e.target.value)}
                     className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all"
@@ -656,7 +701,7 @@ export function GoalsDashboard() {
                     placeholder="Describe your goal..."
                     value={newDescription}
                     onChange={(e) => setNewDescription(e.target.value)}
-                    rows={3}
+                    rows={2}
                     className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all resize-none"
                   />
                 </div>
@@ -667,7 +712,7 @@ export function GoalsDashboard() {
                     <select
                       value={newCategory}
                       onChange={(e) => setNewCategory(e.target.value)}
-                      className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all font-medium"
+                      className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all font-medium cursor-pointer"
                     >
                       <option value="Development">Development</option>
                       <option value="Design">Design</option>
@@ -688,6 +733,84 @@ export function GoalsDashboard() {
                       className="w-full border border-slate-200 bg-slate-50 focus:bg-white px-3 py-2 rounded-xl text-xs focus:outline-none focus:border-slate-400 transition-all font-medium font-mono"
                     />
                   </div>
+                </div>
+
+                {/* LINK EXTERNAL APPLICATION SECTION */}
+                <div className="pt-2 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-amber-500" /> Link External Application
+                    </label>
+                    <input
+                      type="checkbox"
+                      checked={linkIntegration}
+                      onChange={(e) => setLinkIntegration(e.target.checked)}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
+                    />
+                  </div>
+
+                  {linkIntegration && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                      {!isGitHubConnected ? (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium space-y-1">
+                          <p className="font-bold flex items-center gap-1">
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                            GitHub is not connected
+                          </p>
+                          <p className="text-[11px] leading-relaxed">
+                            Connect GitHub in My Integrations to enable automatic verification.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Application</label>
+                            <select
+                              value={selectedProvider}
+                              onChange={(e) => setSelectedProvider(e.target.value)}
+                              className="w-full border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                            >
+                              <option value="GITHUB">GitHub</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Repository</label>
+                            <select
+                              value={selectedRepoId}
+                              onChange={(e) => setSelectedRepoId(e.target.value)}
+                              className="w-full border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium font-mono cursor-pointer"
+                            >
+                              {repositories.map((repo) => (
+                                <option key={repo.id} value={repo.id}>
+                                  {repo.identifier || repo.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Verification Criteria</label>
+                            <select
+                              value={selectedCriteria}
+                              onChange={(e) => setSelectedCriteria(e.target.value)}
+                              className="w-full border border-slate-200 bg-white px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                            >
+                              <option value="PULL_REQUEST_MERGED">Pull Request Merged</option>
+                              <option value="PULL_REQUEST_OPENED">Pull Request Opened</option>
+                              <option value="PULL_REQUEST_CLOSED">Pull Request Closed</option>
+                              <option value="COMMIT_CREATED">Commit Created</option>
+                              <option value="ISSUE_CREATED">Issue Created</option>
+                              <option value="ISSUE_CLOSED">Issue Closed</option>
+                              <option value="REVIEW_SUBMITTED">Review Submitted</option>
+                              <option value="ACTIVITY_COUNT">Activity Count Target</option>
+                              <option value="HOURS_SPENT">Hours Spent Target</option>
+                            </select>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">

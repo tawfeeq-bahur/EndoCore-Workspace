@@ -41,7 +41,7 @@ export const MobileHeader: React.FC<MobileHeaderProps> = ({
               EndoCore
             </span>
             <span className="font-mono text-[8px] uppercase tracking-widest text-[#71717a]">
-              Mobile Workspace
+              Mobile Studio
             </span>
           </div>
         </div>

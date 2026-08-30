@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
-import { io } from "socket.io-client";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { getSocket, disconnectSocket } from "./services/socketManager";
 import {
   LayoutDashboard,
   BarChart3,
@@ -166,6 +166,17 @@ export default function App() {
   const [hubTab, setHubTab] = useState<"timeline" | "rooms">("timeline");
   const groupsRef = useRef<Group[]>([]);
 
+  const userRef = useRef<UserProfile | null>(user);
+  const myActivityRef = useRef<UserActivity | null>(myActivity);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  useEffect(() => {
+    myActivityRef.current = myActivity;
+  }, [myActivity]);
+
   // Intro calibration roll state (triggers on first load, login, or page refresh)
   const [isIntroRolling, setIsIntroRolling] = useState<boolean>(true);
   const [introValues, setIntroValues] = useState<{ focusHours: number; score: number }>({
@@ -282,14 +293,14 @@ export default function App() {
     groupsRef.current = groups;
   }, [groups]);
 
-  const getAuthHeaders = () => {
+  const getAuthHeaders = useCallback(() => {
     return {
       "Content-Type": "application/json",
       ...(token ? { "Authorization": `Bearer ${token}` } : {})
     };
-  };
+  }, [token]);
 
-  async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const apiFetch = useCallback(async (input: RequestInfo | URL, init?: RequestInit) => {
     const headers = {
       ...getAuthHeaders(),
       ...(init?.headers || {})
@@ -300,7 +311,7 @@ export default function App() {
       throw new Error("Session expired. Please log in again.");
     }
     return res;
-  }
+  }, [getAuthHeaders]);
 
   const fetchDevices = async () => {
     try {
@@ -440,11 +451,11 @@ export default function App() {
       });
     }, 1000);
 
-    // Initialize Socket.io connection
-    const socket = io({
-      auth: { token }
-    });
+    // Initialize Socket.io connection using shared singleton
+    const socket = getSocket();
     socketRef.current = socket;
+
+    if (!socket) return;
 
     socket.on("connect", () => {
       console.log("WebSocket connected");
@@ -632,22 +643,24 @@ export default function App() {
     setIsIntroRolling(true);
     const startTime = performance.now();
     const durationUp = 3000;   // 3 seconds: 0 -> max target (e.g. 6.0 hrs / 100%)
-    const durationHold = 1000; // 1 second: HOLD at max target (6.0 hrs / 100%)
+    const durationHold = 1000; // 1 second: STOP / HOLD at max target (6.0 hrs / 100%)
     const durationDown = 3000; // 3 seconds: max target -> actual initial value
     let animationFrameId: number;
 
     const animateRoll = (now: number) => {
       const elapsed = now - startTime;
-      const targetGoal = user?.productivityGoal || 6;
-      const actualFocusHours = parseFloat((Math.floor((myActivity?.durationSeconds || 0) / 60) * 0.1).toFixed(1));
+      const targetGoal = userRef.current?.productivityGoal || 6;
+      const currentSecs = myActivityRef.current?.durationSeconds || 0;
+      const actualFocusHours = parseFloat((Math.floor(currentSecs / 60) * 0.1).toFixed(1));
       const actualScore = Math.min(100, Math.round((actualFocusHours / targetGoal) * 100));
 
       if (elapsed <= durationUp) {
         // Phase 1: Roll UP from 0 to 100% / goal over 3s
         const p = elapsed / durationUp;
+        const easeP = 1 - Math.pow(1 - p, 2);
         setIntroValues({
-          focusHours: parseFloat((p * targetGoal).toFixed(1)),
-          score: Math.round(p * 100)
+          focusHours: parseFloat((easeP * targetGoal).toFixed(1)),
+          score: Math.round(easeP * 100)
         });
         animationFrameId = requestAnimationFrame(animateRoll);
       } else if (elapsed <= durationUp + durationHold) {
@@ -659,10 +672,15 @@ export default function App() {
         animationFrameId = requestAnimationFrame(animateRoll);
       } else if (elapsed <= durationUp + durationHold + durationDown) {
         // Phase 3: Roll DOWN from 100% / goal to actual initial value over 3s
-        const p = (durationUp + durationHold + durationDown - elapsed) / durationDown;
+        const p = (elapsed - (durationUp + durationHold)) / durationDown;
+        const easeP = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+
+        const currentHours = targetGoal - easeP * (targetGoal - actualFocusHours);
+        const currentScore = 100 - easeP * (100 - actualScore);
+
         setIntroValues({
-          focusHours: parseFloat((actualFocusHours + p * (targetGoal - actualFocusHours)).toFixed(1)),
-          score: Math.round(actualScore + p * (100 - actualScore))
+          focusHours: parseFloat(Math.max(0, currentHours).toFixed(1)),
+          score: Math.max(0, Math.round(currentScore))
         });
         animationFrameId = requestAnimationFrame(animateRoll);
       } else {
@@ -675,7 +693,7 @@ export default function App() {
     return () => {
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
     };
-  }, [user?.productivityGoal]);
+  }, []);
 
   // Sync token and start tracking with Electron desktop agent if available
   useEffect(() => {
@@ -1695,6 +1713,7 @@ export default function App() {
   };
 
   function handleLogout() {
+    disconnectSocket();
     localStorage.removeItem("token");
     setToken(null);
     setUser(null);
@@ -2155,7 +2174,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center space-x-1.5 text-[10px] font-mono text-[#71717a]">
                   <span className={`h-2 w-2 rounded-full ${socketStatus === "connected" && apiStatus === "online" && dbStatus === "connected" ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}></span>
-                  <span>Workstation Pipeline</span>
+                  <span>Pipeline Active</span>
                 </div>
               </motion.div>
             )}
@@ -2229,7 +2248,7 @@ export default function App() {
               title="My Analytics"
             >
               {activeTab === "analytics" && (
-                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
+                <motion.div layoutId="nav-pill-desktop" className="absolute inset-0 bg-[#09090b] rounded-xl pointer-events-none" style={{ zIndex: 0 }} transition={{ type: "spring", stiffness: 350, damping: 30 }} />
               )}
               <span className="relative z-10 flex items-center gap-3 w-full">
                 <BarChart3 className="h-4 w-4 shrink-0" />
@@ -2923,11 +2942,6 @@ export default function App() {
               <Menu className="h-5 w-5 text-black" />
             </button>
 
-            {/* Mobile Brand Tag */}
-            <div className="flex items-center space-x-2 min-w-0 md:hidden">
-              <span className="font-serif italic text-base sm:text-lg font-semibold tracking-tight text-[#D4AF37] shrink-0">EndoCore.</span>
-            </div>
-
             {/* Promoted Greeting Header & Subtitle */}
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center space-x-2">
@@ -3294,11 +3308,16 @@ export default function App() {
                         </div>
                         <div className="space-y-1">
                           <div className="text-2xl font-display font-black text-black">
-                            <NumberTicker 
-                              value={isIntroRolling ? introValues.focusHours : parseFloat((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1).toFixed(1))} 
-                              decimals={1} 
-                              duration={isIntroRolling ? 0.05 : 0.8}
-                            /> <span className="text-xs font-bold text-black">hrs</span>
+                            {isIntroRolling ? (
+                              <span>{introValues.focusHours.toFixed(1)}</span>
+                            ) : (
+                              <NumberTicker 
+                                value={parseFloat((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1).toFixed(1))} 
+                                decimals={1} 
+                                duration={0.8}
+                              />
+                            )}{" "}
+                            <span className="text-xs font-bold text-black">hrs</span>
                           </div>
                           <div className="text-[11px] text-black font-extrabold font-mono">Goal: <NumberTicker value={user?.productivityGoal || 6} /> hrs</div>
                         </div>
@@ -3316,10 +3335,14 @@ export default function App() {
                         </div>
                         <div className="space-y-1">
                           <div className="text-2xl font-display font-black text-black">
-                            <NumberTicker 
-                              value={isIntroRolling ? introValues.score : Math.min(100, Math.round(((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1) / (user?.productivityGoal || 6)) * 100))} 
-                              duration={isIntroRolling ? 0.05 : 0.8}
-                            />%
+                            {isIntroRolling ? (
+                              <span>{introValues.score}</span>
+                            ) : (
+                              <NumberTicker 
+                                value={Math.min(100, Math.round(((Math.floor((activeActivity.durationSeconds || 0) / 60) * 0.1) / (user?.productivityGoal || 6)) * 100))} 
+                                duration={0.8}
+                              />
+                            )}%
                           </div>
                           <div className="text-[11px] text-black font-extrabold">Target achieved</div>
                         </div>
@@ -4250,6 +4273,7 @@ export default function App() {
                                 onExportPdf={() => triggerToast("Room activity report generated as PDF")}
                                 onAskAi={() => triggerToast("Opening AI Room Briefing assistant...")}
                                 onSelectTab={(t) => setRoomTab(t as any)}
+                                apiFetch={apiFetch}
                               />
                             </div>
                           )}

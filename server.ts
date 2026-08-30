@@ -16,7 +16,23 @@ import { createRoomTransactional, recordTrackingConsent } from "./src/services/r
 import { requireRoomRole, requireRoomPermission } from "./src/middleware/roomAuth";
 import { generateMultiAgentBriefing } from "./src/ai/multiAgentEngine";
 import goalRoutes from "./src/routes/goalRoutes.ts";
-import { exec } from "child_process";
+import { githubService } from "./src/services/githubService.js";
+
+/**
+ * EndoCore Privacy Statement:
+ * EndoCore does not monitor local terminal or Git commands.
+ * GitHub activity is ingested exclusively from GitHub Webhooks, GitHub API polling, and reconciliation.
+ */
+import { githubActivityService } from "./src/services/githubActivityService.js";
+import { activityService } from "./src/services/activityService.js";
+import { encryptToken } from "./src/utils/encryption.js";
+import { createOAuthState, validateAndConsumeOAuthState } from "./src/utils/oauthStateStore.js";
+import { goalVerificationService } from "./src/services/goalVerificationService.js";
+import { githubWebhookService } from "./src/services/githubWebhookService.js";
+import { integrationHealthService } from "./src/services/integrationHealthService.js";
+import { integrationManagementService } from "./src/services/integrationManagementService.js";
+import { envConfig, getGitHubConfigStatus, logStartupDiagnostics } from "./src/config/env.js";
+import { integrationProviderRegistry } from "./src/services/providers/integrationProviderRegistry.js";
 
 dotenv.config();
 
@@ -175,11 +191,37 @@ async function syncPresenceToRedis(userId: string, activity: any, userStatus: st
   await setPresence(userId, presencePayload);
 }
 
+function getTodayActiveSeconds(act: any): number {
+  if (!act || act.app === "Offline" || act.isPaused) return 0;
+
+  const now = new Date();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  const startedAt = act.startedAt ? new Date(act.startedAt) : null;
+  if (startedAt && startedAt >= todayStart) {
+    const elapsedSinceStart = Math.max(0, Math.floor((now.getTime() - startedAt.getTime()) / 1000));
+    return Math.min(elapsedSinceStart, act.durationSeconds || elapsedSinceStart);
+  } else {
+    const elapsedToday = Math.max(0, Math.floor((now.getTime() - todayStart.getTime()) / 1000));
+    return Math.min(elapsedToday, act.durationSeconds || elapsedToday);
+  }
+}
+
 async function getUserActiveActivity(userId: string) {
   const cached = await safeRedisGet(`user:active:${userId}`);
+  const todayStart = new Date();
+  todayStart.setHours(0,0,0,0);
+
   if (cached) {
     try {
-      return JSON.parse(cached);
+      const act = JSON.parse(cached);
+      if (act.startedAt && new Date(act.startedAt) < todayStart) {
+        act.startedAt = todayStart.getTime();
+        act.durationSeconds = Math.max(0, Math.floor((Date.now() - todayStart.getTime()) / 1000));
+        await safeRedisSet(`user:active:${userId}`, JSON.stringify(act));
+      }
+      return act;
     } catch (e) {
       console.error("Error parsing user active cache:", e);
     }
@@ -199,6 +241,14 @@ async function getUserActiveActivity(userId: string) {
         durationSeconds: 0,
         isPaused: false,
         startedAt: new Date()
+      }
+    });
+  } else if (activity.startedAt < todayStart) {
+    activity = await prisma.activity.update({
+      where: { id: activity.id },
+      data: {
+        startedAt: todayStart,
+        durationSeconds: Math.max(0, Math.floor((Date.now() - todayStart.getTime()) / 1000))
       }
     });
   }
@@ -260,7 +310,13 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    }
+  })
+);
 app.use("/uploads", express.static(path.join(process.cwd(), "public/uploads")));
 
 // Mount Goal Routes
@@ -299,7 +355,7 @@ const userSockets = new Map<string, string>();
 // Auth Middleware
 function authenticateToken(req: any, res: any, next: any) {
   const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
+  const token = (authHeader && authHeader.split(" ")[1]) || (req.query && req.query.token);
   
   if (!token) return res.status(401).json({ error: "Access token missing" });
   
@@ -634,7 +690,7 @@ async function broadcastActivityUpdate(userId: string) {
 
     // Add current active session seconds (if online and not paused)
     if (currentAct.app !== "Offline" && !currentAct.isPaused) {
-      totalTodaySeconds += currentAct.durationSeconds;
+      totalTodaySeconds += getTodayActiveSeconds(currentAct);
     }
 
     const hours = parseFloat((totalTodaySeconds / 3600).toFixed(1));
@@ -685,6 +741,9 @@ async function broadcastActivityUpdate(userId: string) {
 // 1. Ticker for Redis active activities (runs every 5 seconds)
 setInterval(async () => {
   try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     const keys = await safeRedisKeys("user:active:*");
     for (const key of keys) {
       const userId = key.split(":").pop();
@@ -695,6 +754,13 @@ setInterval(async () => {
 
       const act = JSON.parse(data);
       let changed = false;
+
+      // Handle 1-day cycle rollover at midnight
+      if (act.startedAt && new Date(act.startedAt) < todayStart) {
+        act.startedAt = todayStart.getTime();
+        act.durationSeconds = Math.max(0, Math.floor((Date.now() - todayStart.getTime()) / 1000));
+        changed = true;
+      }
 
       // Agent stays active continuously unless user explicitly pauses tracking or sets app to Offline
       if (!act.isPaused && act.app && act.app !== "Offline") {
@@ -757,7 +823,7 @@ setInterval(async () => {
       });
 
       if (act.app !== "Offline" && !act.isPaused) {
-        totalTodaySeconds += act.durationSeconds;
+        totalTodaySeconds += getTodayActiveSeconds(act);
       }
 
       const userRec = await prisma.user.findUnique({ where: { id: userId } });
@@ -794,6 +860,102 @@ setInterval(async () => {
     console.error("PostgreSQL sync worker error:", error);
   }
 }, 60000);
+
+// 3. Periodic GitHub External Activity Synchronization Ticker
+const activeGitHubSyncs = new Set<string>();
+const GITHUB_SYNC_INTERVAL_MINUTES = parseInt(process.env.GITHUB_SYNC_INTERVAL_MINUTES || "15", 10) || 15;
+const GITHUB_SYNC_INTERVAL_MS = GITHUB_SYNC_INTERVAL_MINUTES * 60 * 1000;
+
+// Helper to broadcast goal progress updates via Socket.io
+function broadcastGoalProgressUpdate(payload: any) {
+  try {
+    io.emit("goal-progress-update", payload);
+  } catch (err) {
+    console.warn("Failed to broadcast goal-progress-update via Socket.io:", err);
+  }
+}
+
+// Helper to broadcast new external activities via Socket.io
+function broadcastNewExternalActivity(newAct: any) {
+  try {
+    // 1. Run Goal Verification Engine against newly persisted activity
+    goalVerificationService.verifyActivityAgainstGoals(newAct, broadcastGoalProgressUpdate).catch((err) => {
+      console.warn("Error running goal verification engine on new activity:", err);
+    });
+
+    let parsedMeta: any = null;
+    if (newAct.metadata) {
+      try {
+        parsedMeta = typeof newAct.metadata === "string" ? JSON.parse(newAct.metadata) : newAct.metadata;
+      } catch {
+        parsedMeta = null;
+      }
+    }
+
+    let summary = parsedMeta?.what;
+    if (!summary) {
+      if (parsedMeta?.commitMessage) {
+        summary = `Committed '${parsedMeta.commitMessage.split("\n")[0]}'`;
+      } else if (parsedMeta?.prTitle) {
+        summary = `Pull Request '${parsedMeta.prTitle}'`;
+      } else if (parsedMeta?.issueTitle) {
+        summary = `Issue '${parsedMeta.issueTitle}'`;
+      } else {
+        summary = `${newAct.activityType} in ${newAct.resourceIdentifier || newAct.resourceName || "Repository"}`;
+      }
+    }
+
+    const activityItem = {
+      id: newAct.id,
+      userId: newAct.userId,
+      source: "EXTERNAL",
+      provider: newAct.provider,
+      activityType: newAct.activityType,
+      application: newAct.provider === "GITHUB" ? "GitHub" : newAct.provider,
+      project: newAct.resourceIdentifier || newAct.resourceName || "Repository",
+      summary,
+      occurredAt: newAct.occurredAt ? new Date(newAct.occurredAt).toISOString() : new Date().toISOString(),
+      durationSeconds: null,
+      externalUrl: newAct.externalUrl,
+      metadata: parsedMeta,
+      resourceId: newAct.resourceId
+    };
+
+    io.emit("activity-external-update", {
+      userId: newAct.userId,
+      activity: activityItem
+    });
+  } catch (err) {
+    console.warn("Failed to broadcast activity-external-update via Socket.io:", err);
+  }
+}
+
+setInterval(async () => {
+  try {
+    const connectedIntegrations = await prisma.userIntegration.findMany({
+      where: {
+        provider: "GITHUB",
+        isConnected: true
+      }
+    });
+
+    for (const integration of connectedIntegrations) {
+      if (activeGitHubSyncs.has(integration.userId)) continue;
+
+      activeGitHubSyncs.add(integration.userId);
+      githubActivityService
+        .syncUserGitHubActivity(integration.userId, "POLLING", broadcastNewExternalActivity)
+        .catch((err) => {
+          console.warn(`Background GitHub activity sync error for user ${integration.userId}:`, err);
+        })
+        .finally(() => {
+          activeGitHubSyncs.delete(integration.userId);
+        });
+    }
+  } catch (error) {
+    console.error("Background GitHub sync ticker error:", error);
+  }
+}, GITHUB_SYNC_INTERVAL_MS);
 
 // -------------------------------------------------------------
 // API Endpoints
@@ -1128,6 +1290,36 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+// GET /api/activity/timeline - Fetch unified activity timeline (Desktop + GitHub external)
+app.get("/api/activity/timeline", authenticateToken, async (req: any, res) => {
+  try {
+    const requestingUserId = req.user.id;
+    const { userId, userIds, page, limit, source, provider, startDate, endDate, roomId } = req.query;
+
+    const parsedUserIds = typeof userIds === "string" ? userIds.split(",").map(u => u.trim()).filter(Boolean) : undefined;
+    const parsedPage = page ? parseInt(String(page), 10) : 1;
+    const parsedLimit = limit ? parseInt(String(limit), 10) : 20;
+
+    const timelineResult = await activityService.getUnifiedTimeline({
+      userId: typeof userId === "string" ? userId : undefined,
+      userIds: parsedUserIds,
+      page: parsedPage,
+      limit: parsedLimit,
+      source: source === "DESKTOP" || source === "EXTERNAL" ? (source as "DESKTOP" | "EXTERNAL") : undefined,
+      provider: typeof provider === "string" ? provider : undefined,
+      startDate: startDate ? new Date(String(startDate)) : undefined,
+      endDate: endDate ? new Date(String(endDate)) : undefined,
+      roomId: typeof roomId === "string" ? roomId : undefined,
+      requestingUserId
+    });
+
+    res.json(timelineResult);
+  } catch (error: any) {
+    console.error("Error fetching unified activity timeline:", error);
+    res.status(500).json({ error: error.message || "Failed to fetch activity timeline" });
+  }
+});
+
 // -------------------------------------------------------------
 // My Integrations & Timesheets Dashboard Endpoints (added)
 // -------------------------------------------------------------
@@ -1175,12 +1367,40 @@ app.get("/api/integrations", authenticateToken, async (req: any, res) => {
         data: dataToCreate
       });
     }
-    
+
     const allIntegrations = await prisma.userIntegration.findMany({
       where: { userId }
     });
-    
-    res.json(allIntegrations);
+
+    const safeIntegrations = await Promise.all(
+      allIntegrations.map(async ({ accessToken, refreshToken, ...rest }) => {
+        let repositoryCount = 0;
+        let activityCount = 0;
+        if (rest.provider === "GITHUB" && rest.isConnected) {
+          [repositoryCount, activityCount] = await Promise.all([
+            prisma.integrationResource.count({
+              where: {
+                integrationId: rest.id,
+                provider: "GITHUB",
+                resourceType: "REPOSITORY"
+              }
+            }),
+            prisma.externalActivity.count({
+              where: {
+                integrationId: rest.id,
+                provider: "GITHUB"
+              }
+            })
+          ]);
+        }
+        return {
+          ...rest,
+          repositoryCount,
+          activityCount
+        };
+      })
+    );
+    res.json(safeIntegrations);
   } catch (error: any) {
     console.error("Error fetching integrations:", error);
     const providers = [
@@ -1209,6 +1429,721 @@ app.get("/api/integrations", authenticateToken, async (req: any, res) => {
       lastSyncedAt: new Date().toISOString()
     }));
     res.json(fallback);
+  }
+});
+
+// GET /api/integrations/:provider/config-status - Return safe diagnostic integration configuration status
+app.get("/api/integrations/:provider/config-status", (req: any, res) => {
+  const providerKey = req.params.provider.toUpperCase();
+  const provider = integrationProviderRegistry.getProvider(providerKey);
+  if (!provider) {
+    return res.status(404).json({ error: `Provider ${providerKey} is not supported` });
+  }
+  return res.json(provider.getConfigStatus());
+});
+
+// GET /api/integrations/github/authorize - Initiate GitHub OAuth Authorization flow
+app.get("/api/integrations/github/authorize", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (!envConfig.isGitHubOAuthConfigured) {
+      return res.status(400).json({
+        error: "GitHub OAuth configuration is incomplete. GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set in the server .env file.",
+        configStatus: getGitHubConfigStatus()
+      });
+    }
+
+    const state = await createOAuthState(userId);
+    const authUrl = githubService.getAuthorizationUrl(state);
+
+    if (req.headers.accept?.includes("application/json") || req.query.json === "true") {
+      return res.json({ url: authUrl });
+    }
+
+    return res.redirect(authUrl);
+  } catch (error: any) {
+    console.error("Error generating GitHub OAuth URL:", error);
+    return res.status(500).json({ error: error.message || "Failed to generate authorization URL" });
+  }
+});
+
+// GET /api/integrations/github/callback - Handle GitHub OAuth Authorization Callback
+app.get("/api/integrations/github/callback", async (req: any, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+
+    if (error) {
+      console.warn("GitHub OAuth user cancelled or denied access:", error_description || error);
+      return res.redirect(`/?integration=github&status=error&message=${encodeURIComponent(String(error_description || error))}`);
+    }
+
+    if (!code || !state) {
+      return res.status(400).json({ error: "Missing required authorization code or state parameter" });
+    }
+
+    const stateValidation = await validateAndConsumeOAuthState(String(state));
+    if (!stateValidation || !stateValidation.userId) {
+      return res.status(400).json({ error: "Invalid, expired, or reused OAuth state" });
+    }
+
+    const userId = stateValidation.userId;
+
+    // Exchange authorization code for GitHub access token
+    const tokenResult = await githubService.exchangeOAuthCode(String(code));
+
+    // Retrieve authenticated GitHub user profile
+    const githubUser = await githubService.getAuthenticatedUser(tokenResult.accessToken);
+
+    // Securely encrypt credentials at rest
+    const encryptedAccessToken = encryptToken(tokenResult.accessToken);
+    const encryptedRefreshToken = tokenResult.refreshToken ? encryptToken(tokenResult.refreshToken) : null;
+
+    // Upsert UserIntegration
+    const integration = await prisma.userIntegration.upsert({
+      where: {
+        userId_provider: {
+          userId,
+          provider: "GITHUB"
+        }
+      },
+      create: {
+        userId,
+        provider: "GITHUB",
+        externalUserId: String(githubUser.id),
+        username: githubUser.login,
+        accountEmail: githubUser.email || null,
+        avatarUrl: githubUser.avatar_url || null,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        tokenExpiresAt: tokenResult.tokenExpiresAt || null,
+        scopes: tokenResult.scope || "read:user user:email repo",
+        isConnected: true,
+        lastSyncedAt: new Date()
+      },
+      update: {
+        externalUserId: String(githubUser.id),
+        username: githubUser.login,
+        accountEmail: githubUser.email || null,
+        avatarUrl: githubUser.avatar_url || null,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        tokenExpiresAt: tokenResult.tokenExpiresAt || null,
+        scopes: tokenResult.scope || "read:user user:email repo",
+        isConnected: true,
+        healthStatus: "HEALTHY",
+        lastSyncStatus: "SUCCESS",
+        lastSyncError: null,
+        rateLimitRemaining: null,
+        rateLimitResetAt: null,
+        lastSyncedAt: new Date()
+      }
+    });
+
+    // Idempotently sync user repositories into IntegrationResource table
+    try {
+      await githubService.syncUserRepositories(userId, integration.id, tokenResult.accessToken);
+    } catch (syncErr) {
+      console.error("Non-fatal error syncing GitHub repositories post-auth:", syncErr);
+    }
+
+    // Emit reconnection event for real-time UI updates
+    try {
+      io.emit("integration-reconnected", {
+        integrationId: integration.id,
+        userId,
+        provider: "GITHUB",
+        healthStatus: "HEALTHY",
+        timestamp: new Date().toISOString()
+      });
+      io.emit("integration-health-update", {
+        provider: "GITHUB",
+        userId,
+        health: "HEALTHY"
+      });
+    } catch {}
+
+    // Redirect client browser back to app home with success parameter
+    return res.redirect(`/?integration=github&status=success&username=${encodeURIComponent(githubUser.login)}`);
+  } catch (err: any) {
+    console.error("Error handling GitHub OAuth callback:", err);
+    return res.redirect(`/?integration=github&status=error&message=${encodeURIComponent(err.message || "OAuth exchange failed")}`);
+  }
+});
+
+// GET /api/integrations/github/resources - Get repositories for authenticated GitHub integration
+app.get("/api/integrations/github/resources", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+
+    const integration = await prisma.userIntegration.findUnique({
+      where: {
+        userId_provider: {
+          userId,
+          provider: "GITHUB"
+        }
+      }
+    });
+
+    if (!integration || !integration.isConnected) {
+      return res.status(404).json({ error: "GitHub integration is not connected for this user." });
+    }
+
+    const resources = await prisma.integrationResource.findMany({
+      where: {
+        integrationId: integration.id,
+        provider: "GITHUB",
+        resourceType: "REPOSITORY"
+      },
+      orderBy: { name: "asc" }
+    });
+
+    const safeResources = resources.map((r) => ({
+      id: r.id,
+      name: r.name,
+      identifier: r.identifier,
+      url: r.url,
+      resourceType: r.resourceType,
+      provider: r.provider,
+      metadata: r.metadata ? JSON.parse(r.metadata) : null,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt
+    }));
+
+    res.json(safeResources);
+  } catch (err: any) {
+    console.error("Error fetching GitHub resources:", err);
+    res.status(500).json({ error: err.message || "Failed to fetch GitHub resources" });
+  }
+});
+
+// GET /api/integrations/:provider/resources - Generic provider resources listing
+app.get("/api/integrations/:provider/resources", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = req.params.provider.toUpperCase();
+
+    const integration = await prisma.userIntegration.findUnique({
+      where: {
+        userId_provider: {
+          userId,
+          provider
+        }
+      }
+    });
+
+    if (!integration || !integration.isConnected) {
+      return res.status(404).json({ error: `${provider} integration is not connected for this user.` });
+    }
+
+    const resources = await prisma.integrationResource.findMany({
+      where: {
+        integrationId: integration.id,
+        provider
+      },
+      orderBy: { name: "asc" }
+    });
+
+    const safeResources = resources.map((r) => ({
+      id: r.id,
+      name: r.name,
+      identifier: r.identifier,
+      url: r.url,
+      resourceType: r.resourceType,
+      provider: r.provider,
+      metadata: r.metadata ? JSON.parse(r.metadata) : null,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt
+    }));
+
+    res.json(safeResources);
+  } catch (err: any) {
+    console.error(`Error fetching ${req.params.provider} resources:`, err);
+    res.status(500).json({ error: err.message || "Failed to fetch integration resources" });
+  }
+});
+
+// POST /api/integrations/github/webhook - GitHub Real-Time Webhook Receiver
+app.post("/api/integrations/github/webhook", async (req: any, res) => {
+  try {
+    const signatureHeader = (req.headers["x-hub-signature-256"] || req.headers["X-Hub-Signature-256"]) as string | undefined;
+    const eventType = ((req.headers["x-github-event"] || req.headers["X-GitHub-Event"]) as string) || "ping";
+    const deliveryId = ((req.headers["x-github-delivery"] || req.headers["X-GitHub-Delivery"]) as string) || "";
+
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+
+    if (!secret || !signatureHeader) {
+      return res.status(401).json({ error: "Missing webhook secret configuration or signature header" });
+    }
+
+    const rawBody = req.rawBody || (typeof req.body === "string" ? req.body : JSON.stringify(req.body));
+    const isValid = githubWebhookService.verifySignature(rawBody, signatureHeader, secret);
+
+    if (!isValid) {
+      return res.status(401).json({ error: "Invalid webhook signature" });
+    }
+
+    if (eventType === "ping") {
+      return res.json({ success: true, message: "Webhook ping acknowledged" });
+    }
+
+    const payload = req.body;
+    const result = await githubWebhookService.processWebhookEvent(eventType, deliveryId, payload, {
+      onNewActivity: broadcastNewExternalActivity,
+      onGoalProgressUpdate: broadcastGoalProgressUpdate
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (err: any) {
+    console.error("Error processing GitHub webhook:", err);
+    return res.status(500).json({ error: "Internal server error processing webhook" });
+  }
+});
+
+// GET /api/integrations/:provider/status - Return sanitized integration operational & health status
+app.get("/api/integrations/:provider/status", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = req.params.provider.toUpperCase();
+
+    const status = await integrationHealthService.getIntegrationStatus(userId, provider);
+    return res.json(status);
+  } catch (err: any) {
+    console.error(`Error fetching status for integration ${req.params.provider}:`, err);
+    return res.status(500).json({ error: err.message || "Failed to fetch integration status" });
+  }
+});
+
+// POST /api/integrations/:provider/sync - Manually trigger integration synchronization with locking & observability
+app.post("/api/integrations/:provider/sync", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const providerKey = req.params.provider.toUpperCase();
+
+    const provider = integrationProviderRegistry.getProvider(providerKey);
+    if (!provider) {
+      return res.status(400).json({ error: `Provider ${providerKey} is not currently supported for manual sync` });
+    }
+
+    // Broadcast sync started
+    try {
+      io.emit("integration-sync-started", { provider: providerKey, userId, status: "SYNCING" });
+    } catch {}
+
+    const result = await provider.sync(userId, "MANUAL", broadcastNewExternalActivity);
+
+    if (result.inProgress) {
+      return res.status(409).json({
+        success: false,
+        error: "Synchronization is already in progress for this integration.",
+        inProgress: true
+      });
+    }
+
+    if (!result.success) {
+      try {
+        io.emit("integration-sync-failed", { provider: providerKey, userId, status: "FAILED", error: result.error });
+      } catch {}
+      return res.status(400).json(result);
+    }
+
+    // Broadcast sync completed & health update
+    const updatedStatus = await integrationHealthService.getIntegrationStatus(userId, providerKey);
+    try {
+      io.emit("integration-sync-completed", {
+        provider: providerKey,
+        userId,
+        status: updatedStatus.health,
+        repositories: result.repositories || 0,
+        activities: {
+          created: result.created,
+          updated: result.updated,
+          skipped: result.skipped
+        },
+        lastSyncedAt: result.lastSyncedAt
+      });
+      io.emit("integration-health-update", {
+        provider: providerKey,
+        userId,
+        health: updatedStatus.health,
+        rateLimit: updatedStatus.rateLimit
+      });
+    } catch {}
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error(`Error triggering manual sync for ${req.params.provider}:`, err);
+    try {
+      io.emit("integration-sync-failed", {
+        provider: req.params.provider.toUpperCase(),
+        userId: req.user?.id,
+        status: "FAILED",
+        error: err.message || "Sync execution exception"
+      });
+    } catch {}
+
+    return res.status(500).json({
+      success: false,
+      synced: 0,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      repositories: 0,
+      lastSyncedAt: new Date().toISOString(),
+      error: err.message || "Failed to synchronize integration activity"
+    });
+  }
+});
+
+// GET /api/integrations/:provider/sync-history - Paginated synchronization execution logs
+app.get("/api/integrations/:provider/sync-history", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = req.params.provider.toUpperCase();
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+    const status = req.query.status as string | undefined;
+
+    const history = await integrationHealthService.getSyncHistory(userId, provider, { page, limit, status });
+    return res.json(history);
+  } catch (err: any) {
+    console.error(`Error fetching sync history for ${req.params.provider}:`, err);
+    return res.status(500).json({ error: err.message || "Failed to fetch synchronization history" });
+  }
+});
+
+// -------------------------------------------------------------
+// STEP 9: Integration Management, Recovery & Production Readiness
+// -------------------------------------------------------------
+
+// GET /api/integrations/:provider/details - Comprehensive sanitized integration report
+app.get("/api/integrations/:provider/details", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = req.params.provider.toUpperCase();
+    const details = await integrationManagementService.getIntegrationDetails(userId, provider);
+    return res.json(details);
+  } catch (err: any) {
+    console.error(`Error fetching integration details for ${req.params.provider}:`, err);
+    return res.status(500).json({ error: err.message || "Failed to fetch integration details" });
+  }
+});
+
+// POST /api/integrations/:provider/reconnect - Initiate OAuth reconnection flow
+app.post("/api/integrations/:provider/reconnect", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user?.id;
+    const providerKey = req.params.provider.toUpperCase();
+
+    if (providerKey === "GITHUB" && !envConfig.isGitHubOAuthConfigured) {
+      return res.status(400).json({
+        error: "GitHub OAuth configuration is incomplete. GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be set in the server .env file.",
+        configStatus: getGitHubConfigStatus()
+      });
+    }
+
+    const provider = integrationProviderRegistry.getProvider(providerKey);
+    if (!provider) {
+      return res.status(400).json({ error: `Reconnection is not currently supported for ${providerKey}` });
+    }
+
+    // Generate secure OAuth state bound to this user
+    const state = await createOAuthState(userId);
+    const authUrl = await provider.getAuthorizationUrl(state);
+
+    return res.json({ url: authUrl, provider: providerKey, state: "generated" });
+  } catch (err: any) {
+    console.error(`Error initiating reconnection for ${req.params.provider}:`, err);
+    return res.status(500).json({ error: err.message || "Failed to initiate reconnection" });
+  }
+});
+
+// POST /api/integrations/:provider/reconcile - Full reconciliation: repos + activity + goals
+app.post("/api/integrations/:provider/reconcile", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = req.params.provider.toUpperCase();
+
+    if (provider !== "GITHUB") {
+      return res.status(400).json({ error: `Reconciliation is not currently supported for ${provider}` });
+    }
+
+    // Check for existing sync lock
+    const integration = await prisma.userIntegration.findUnique({
+      where: { userId_provider: { userId, provider } }
+    });
+
+    if (!integration || !integration.isConnected) {
+      return res.status(400).json({ error: `${provider} integration is not connected.` });
+    }
+
+    // Repository reconciliation
+    let repoResult = { added: 0, updated: 0, unchanged: 0, missing: 0 };
+    try {
+      repoResult = await integrationManagementService.reconcileRepositories(userId, provider);
+    } catch (err: any) {
+      console.warn("Repository reconciliation error:", err.message);
+    }
+
+    // Activity catch-up reconciliation
+    let activityResult = { synced: 0, created: 0, skipped: 0 };
+    try {
+      activityResult = await integrationManagementService.reconcileActivity(userId, provider);
+    } catch (err: any) {
+      console.warn("Activity reconciliation error:", err.message);
+    }
+
+    // Goal reverification
+    let goalResult = { reverified: 0, completed: 0, updated: 0 };
+    try {
+      goalResult = await integrationManagementService.reverifyGoals(userId, provider, (payload: any) => {
+        try {
+          io.emit("goal-progress-update", payload);
+          if (payload.status === "completed") {
+            io.emit("goal:completed", payload);
+          } else {
+            io.emit("goal:updated", payload);
+          }
+        } catch {}
+      });
+    } catch (err: any) {
+      console.warn("Goal reverification error:", err.message);
+    }
+
+    // Update lastReconciledAt
+    const now = new Date();
+    await prisma.userIntegration.update({
+      where: { id: integration.id },
+      data: { lastReconciledAt: now }
+    });
+
+    // Emit reconciliation events
+    try {
+      io.emit("integration-reconciled", {
+        integrationId: integration.id,
+        userId,
+        provider,
+        repositories: repoResult,
+        activities: activityResult,
+        goals: goalResult,
+        timestamp: now.toISOString()
+      });
+      const updatedHealth = integrationHealthService.deriveHealthStatus(integration);
+      io.emit("integration-health-update", {
+        provider,
+        userId,
+        health: updatedHealth
+      });
+    } catch {}
+
+    return res.json({
+      success: true,
+      repositories: repoResult,
+      activities: activityResult,
+      goals: goalResult,
+      lastReconciledAt: now.toISOString()
+    });
+  } catch (err: any) {
+    console.error(`Error during reconciliation for ${req.params.provider}:`, err);
+    return res.status(500).json({ error: err.message || "Failed to reconcile integration" });
+  }
+});
+
+// POST /api/integrations/:provider/reset-error - Clear transient errors
+app.post("/api/integrations/:provider/reset-error", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const provider = req.params.provider.toUpperCase();
+
+    const result = await integrationManagementService.resetTransientError(userId, provider);
+
+    if (result.success) {
+      try {
+        io.emit("integration-health-update", {
+          provider,
+          userId,
+          health: result.healthStatus
+        });
+      } catch {}
+    }
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error(`Error resetting error for ${req.params.provider}:`, err);
+    return res.status(500).json({ error: err.message || "Failed to reset error" });
+  }
+});
+
+// GET /api/activity/timeline - Unified Activity Timeline (Desktop + External GitHub)
+app.get("/api/activity/timeline", authenticateToken, async (req: any, res) => {
+  try {
+    const requestingUserId = req.user?.id;
+    const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const source = req.query.source as "DESKTOP" | "EXTERNAL" | undefined;
+    const provider = req.query.provider as string | undefined;
+    const roomId = req.query.roomId as string | undefined;
+    const userId = req.query.userId as string | undefined;
+
+    const timeline = await activityService.getUnifiedTimeline({
+      requestingUserId,
+      userId: userId || (roomId ? undefined : requestingUserId),
+      page,
+      limit,
+      source,
+      provider,
+      roomId
+    });
+
+    return res.json(timeline);
+  } catch (err: any) {
+    console.error("Error retrieving activity timeline:", err);
+    return res.status(500).json({ error: err.message || "Failed to retrieve activity timeline" });
+  }
+});
+
+// GET /api/integrations/github/activity - Read authenticated user's external GitHub activity stream
+app.get("/api/integrations/github/activity", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const { repository, activityType, startDate, endDate } = req.query;
+
+    const where: any = {
+      userId,
+      provider: "GITHUB"
+    };
+
+    if (repository) {
+      where.OR = [
+        { resourceId: String(repository) },
+        { resourceIdentifier: String(repository) },
+        { resourceName: String(repository) }
+      ];
+    }
+
+    if (activityType) {
+      where.activityType = String(activityType);
+    }
+
+    if (startDate || endDate) {
+      where.occurredAt = {};
+      if (startDate) where.occurredAt.gte = new Date(String(startDate));
+      if (endDate) where.occurredAt.lte = new Date(String(endDate));
+    }
+
+    const [total, activities] = await Promise.all([
+      prisma.externalActivity.count({ where }),
+      prisma.externalActivity.findMany({
+        where,
+        orderBy: { occurredAt: "desc" },
+        skip,
+        take: limit
+      })
+    ]);
+
+    const safeActivities = activities.map((act) => ({
+      id: act.id,
+      provider: act.provider,
+      externalActivityId: act.externalActivityId,
+      activityType: act.activityType,
+      resourceType: act.resourceType,
+      resourceName: act.resourceName,
+      resourceIdentifier: act.resourceIdentifier,
+      externalUrl: act.externalUrl,
+      metadata: act.metadata ? JSON.parse(act.metadata) : null,
+      occurredAt: act.occurredAt,
+      receivedAt: act.receivedAt,
+      source: act.source
+    }));
+
+    res.json({
+      data: safeActivities,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err: any) {
+    console.error("Error fetching GitHub activity stream:", err);
+    res.status(500).json({ error: err.message || "Failed to fetch GitHub activity stream" });
+  }
+});
+
+// GET /api/activity/timeline - Retrieve normalized unified activity timeline (Desktop + External)
+app.get("/api/activity/timeline", authenticateToken, async (req: any, res) => {
+  try {
+    const requestingUserId = req.user.id;
+    const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
+
+    const { source, provider, startDate, endDate, roomId } = req.query;
+
+    const validatedSource = (source === "DESKTOP" || source === "EXTERNAL") ? source : undefined;
+    const parsedStartDate = startDate ? new Date(String(startDate)) : undefined;
+    const parsedEndDate = endDate ? new Date(String(endDate)) : undefined;
+
+    const result = await activityService.getUnifiedTimeline({
+      requestingUserId,
+      userId: requestingUserId,
+      page,
+      limit,
+      source: validatedSource,
+      provider: provider ? String(provider) : undefined,
+      startDate: parsedStartDate && !isNaN(parsedStartDate.getTime()) ? parsedStartDate : undefined,
+      endDate: parsedEndDate && !isNaN(parsedEndDate.getTime()) ? parsedEndDate : undefined,
+      roomId: roomId ? String(roomId) : undefined
+    });
+
+    return res.json(result);
+  } catch (err: any) {
+    console.error("Error fetching unified activity timeline:", err);
+    return res.status(500).json({ error: err.message || "Failed to fetch unified activity timeline" });
+  }
+});
+
+// POST /api/integrations/github/disconnect - Disconnect GitHub integration and invalidate stored tokens
+app.post("/api/integrations/github/disconnect", authenticateToken, async (req: any, res) => {
+  try {
+    const userId = req.user.id;
+
+    const integration = await prisma.userIntegration.findUnique({
+      where: {
+        userId_provider: {
+          userId,
+          provider: "GITHUB"
+        }
+      }
+    });
+
+    if (!integration) {
+      return res.status(404).json({ error: "GitHub integration record not found." });
+    }
+
+    const updated = await prisma.userIntegration.update({
+      where: { id: integration.id },
+      data: {
+        isConnected: false,
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiresAt: null,
+        lastSyncedAt: new Date()
+      }
+    });
+
+    const { accessToken, refreshToken, ...safeUpdated } = updated as any;
+    res.json(safeUpdated);
+  } catch (err: any) {
+    console.error("Error disconnecting GitHub integration:", err);
+    res.status(500).json({ error: err.message || "Failed to disconnect GitHub integration" });
   }
 });
 
@@ -1241,7 +2176,8 @@ app.post("/api/integrations/:provider/connect", authenticateToken, async (req: a
       }
     });
     
-    res.json(updated);
+    const { accessToken, refreshToken, ...safeUpdated } = updated as any;
+    res.json(safeUpdated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1270,11 +2206,15 @@ app.post("/api/integrations/:provider/disconnect", authenticateToken, async (req
       where: { id: integration.id },
       data: {
         isConnected: false,
+        accessToken: null,
+        refreshToken: null,
+        tokenExpiresAt: null,
         lastSyncedAt: new Date()
       }
     });
     
-    res.json(updated);
+    const { accessToken, refreshToken, ...safeUpdated } = updated as any;
+    res.json(safeUpdated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1309,7 +2249,8 @@ app.patch("/api/integrations/:provider", authenticateToken, async (req: any, res
       }
     });
     
-    res.json(updated);
+    const { accessToken, refreshToken, ...safeUpdated } = updated as any;
+    res.json(safeUpdated);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1397,35 +2338,38 @@ app.post("/api/timesheets", authenticateToken, async (req: any, res) => {
   }
 });
 
-// GET /api/commits - Fetch active git history dynamically using shell execution
+// GET /api/commits - Fetch GitHub commit activities exclusively from the backend ingestion pipeline (Webhooks, API Polling, Reconciliation)
 app.get("/api/commits", authenticateToken, async (req: any, res) => {
-  exec("git log -n 5 --pretty=format:\"%h|%an|%ar|%s\"", (error: any, stdout: string, stderr: any) => {
-    if (error || stderr) {
-      // No mock commits for real users — return empty array
-      return res.json([]);
-    }
-    
-    const lines = stdout.split("\n").filter(Boolean);
-    const commits = lines.map(line => {
-      const parts = line.split("|");
-      const hash = parts[0];
-      const author = parts[1];
-      const time = parts[2];
-      const message = parts[3];
-      
-      const additions = Math.floor(Math.random() * 150) + 5;
-      const deletions = Math.floor(Math.random() * 50) + 1;
+  try {
+    const userId = req.user.id;
+    const activities = await prisma.externalActivity.findMany({
+      where: {
+        userId,
+        provider: "GITHUB"
+      },
+      orderBy: { occurredAt: "desc" },
+      take: 5
+    });
+
+    const commits = activities.map((act) => {
+      let meta: any = {};
+      try {
+        meta = typeof act.metadata === "string" ? JSON.parse(act.metadata) : (act.metadata || {});
+      } catch {}
+
       return {
-        hash: hash || "unknown",
-        author: author || "Developer",
-        time: time || "recently",
-        message: message || "Workstation sync commit",
-        stats: `+${additions} -${deletions}`
+        hash: (act.externalActivityId || "").split(":").pop() || "unknown",
+        author: act.resourceIdentifier || "GitHub Developer",
+        time: act.occurredAt ? new Date(act.occurredAt).toLocaleDateString() : "Recently",
+        message: meta.what || meta.commitMessage || act.resourceName || "GitHub activity",
+        stats: "GitHub Synced"
       };
     });
-    
+
     res.json(commits);
-  });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Multi-Agent GenAI Scrum & Welfare Briefing Endpoint
@@ -4085,26 +5029,43 @@ Output ONLY a single, valid raw JSON object matching this exact schema:
 app.get("/api/analytics/v2/dashboard", authenticateToken, async (req: any, res) => {
   console.log(">>> /api/analytics/v2/dashboard Hit! range=", req.query.range);
   try {
-    const range = req.query.range || "30D"; // 7D, 30D, 90D, 1Y
+    const range = req.query.range || "30D"; // 1D, 7D, 30D, 90D, 1Y
     let days = 30;
+    if (range === "1D") days = 1;
     if (range === "7D") days = 7;
     if (range === "90D") days = 90;
     if (range === "1Y") days = 365;
 
     const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    startDate.setHours(0,0,0,0);
+    if (range === "1D") {
+      startDate.setHours(0,0,0,0);
+    } else {
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0,0,0,0);
+    }
 
     const prevStartDate = new Date(startDate);
-    prevStartDate.setDate(prevStartDate.getDate() - days);
+    if (range === "1D") {
+      prevStartDate.setDate(prevStartDate.getDate() - 1);
+    } else {
+      prevStartDate.setDate(prevStartDate.getDate() - days);
+    }
 
     const userId = req.user.id;
 
     let currentLogs;
     try {
-      currentLogs = await prisma.activityLog.findMany({
-        where: { userId, timestamp: { gte: startDate } }
-      });
+      if (range === "1D") {
+        const endDate = new Date(startDate);
+        endDate.setHours(23, 59, 59, 999);
+        currentLogs = await prisma.activityLog.findMany({
+          where: { userId, timestamp: { gte: startDate, lte: endDate } }
+        });
+      } else {
+        currentLogs = await prisma.activityLog.findMany({
+          where: { userId, timestamp: { gte: startDate } }
+        });
+      }
     } catch (e: any) {
       console.log("Failed at currentLogs");
       throw new Error("currentLogs failed: " + e.message);
@@ -4139,7 +5100,7 @@ app.get("/api/analytics/v2/dashboard", authenticateToken, async (req: any, res) 
          appCounts[log.app] = (appCounts[log.app] || 0) + sec;
       });
 
-      const activeDays = activeDaysSet.size;
+      const activeDays = Math.max(1, activeDaysSet.size);
       const expectedTotalSeconds = numDays * goalSeconds;
       const goalAchievement = expectedTotalSeconds > 0 ? Math.min(100, Math.round((totalFocusSeconds / expectedTotalSeconds) * 100)) : 0;
       const avgFocusSession = logs.length > 0 ? Math.round(totalFocusSeconds / logs.length) : 0;
@@ -4151,47 +5112,78 @@ app.get("/api/analytics/v2/dashboard", authenticateToken, async (req: any, res) 
     let currentKpi = calcKpi(currentLogs, days);
     let prevKpi = calcKpi(prevLogs, days);
 
-    // Heatmap & Trend (group by day)
-    const dailyMap: Record<string, any> = {};
-    for (let i = 0; i < days; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const dStr = d.toISOString().split("T")[0];
-      dailyMap[dStr] = { date: dStr, focusSeconds: 0, goalSeconds, sessions: 0 };
-    }
-
-    currentLogs.forEach(log => {
-      const dStr = new Date(log.timestamp).toISOString().split("T")[0];
-      if (dailyMap[dStr]) {
-        dailyMap[dStr].focusSeconds += parseDurationText(log.durationText);
-        dailyMap[dStr].sessions += 1;
+    // Heatmap & Trend
+    let trend: any[] = [];
+    if (range === "1D") {
+      // Group by hour for today (8 AM to 7 PM)
+      const hourlyMap: Record<number, any> = {};
+      for (let h = 8; h <= 20; h++) {
+        const periodStr = `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}`;
+        hourlyMap[h] = { date: periodStr, focusSeconds: 0, goalSeconds: 2700, sessions: 0 };
       }
-    });
+
+      currentLogs.forEach(log => {
+        const h = new Date(log.timestamp).getHours();
+        if (hourlyMap[h]) {
+          hourlyMap[h].focusSeconds += parseDurationText(log.durationText);
+          hourlyMap[h].sessions += 1;
+        }
+      });
+
+      trend = Object.values(hourlyMap).map((t: any) => ({
+        ...t,
+        goalAchieved: Math.min(100, Math.round((t.focusSeconds / t.goalSeconds) * 100)) || 0
+      }));
+    } else {
+      // Heatmap & Trend (group by day)
+      const dailyMap: Record<string, any> = {};
+      for (let i = 0; i < days; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dStr = d.toISOString().split("T")[0];
+        dailyMap[dStr] = { date: dStr, focusSeconds: 0, goalSeconds, sessions: 0 };
+      }
+
+      currentLogs.forEach(log => {
+        const dStr = new Date(log.timestamp).toISOString().split("T")[0];
+        if (dailyMap[dStr]) {
+          dailyMap[dStr].focusSeconds += parseDurationText(log.durationText);
+          dailyMap[dStr].sessions += 1;
+        }
+      });
+
+      trend = Object.values(dailyMap).sort((a: any, b: any) => a.date.localeCompare(b.date));
+      trend.forEach((t: any) => {
+         t.goalAchieved = Math.min(100, Math.round((t.focusSeconds / t.goalSeconds) * 100)) || 0;
+      });
+    }
 
     // Also include today's active tracker if valid
     const currentAct = await getUserActiveActivity(userId);
-    if (currentAct && currentAct.app !== "Offline" && !currentAct.isPaused && currentAct.durationSeconds > 0) {
-       currentKpi.totalFocusTime += currentAct.durationSeconds;
-       const todayStr = new Date().toISOString().split("T")[0];
-       if (dailyMap[todayStr]) {
-         dailyMap[todayStr].focusSeconds += currentAct.durationSeconds;
-         dailyMap[todayStr].sessions += 1;
+    const todayActiveSec = getTodayActiveSeconds(currentAct);
+    if (currentAct && currentAct.app !== "Offline" && !currentAct.isPaused && todayActiveSec > 0) {
+       currentKpi.totalFocusTime += todayActiveSec;
+       currentKpi.appCounts[currentAct.app] = (currentKpi.appCounts[currentAct.app] || 0) + todayActiveSec;
+       if (range === "1D") {
+         const currentHour = new Date().getHours();
+         const hObj = trend.find((t: any) => {
+           const h = currentHour % 12 === 0 ? 12 : currentHour % 12;
+           const ampm = currentHour >= 12 ? 'PM' : 'AM';
+           return t.date === `${h} ${ampm}`;
+         });
+         if (hObj) {
+           hObj.focusSeconds += todayActiveSec;
+           hObj.sessions += 1;
+         }
        }
-       currentKpi.appCounts[currentAct.app] = (currentKpi.appCounts[currentAct.app] || 0) + currentAct.durationSeconds;
     }
 
-    let trend = Object.values(dailyMap).sort((a: any, b: any) => a.date.localeCompare(b.date));
-    
-    trend.forEach((t: any) => {
-       t.goalAchieved = Math.min(100, Math.round((t.focusSeconds / t.goalSeconds) * 100)) || 0;
-    });
-
     let timeDistribution = Object.entries(currentKpi.appCounts)
-      .map(([category, seconds]) => ({
+      .map(([category, seconds], idx) => ({
          category, 
          seconds, 
          percentage: currentKpi.totalFocusTime > 0 ? Math.round(((seconds as number) / currentKpi.totalFocusTime) * 100) : 0,
-         color: getCategoryColor(category)
+         color: getCategoryColor(category, idx)
       }))
       .sort((a: any, b: any) => (b.seconds as number) - (a.seconds as number))
       .slice(0, 7);
@@ -4199,59 +5191,116 @@ app.get("/api/analytics/v2/dashboard", authenticateToken, async (req: any, res) 
     // Only inject showcase analytics for the dedicated demo account
     const isShowcaseUser = req.user?.email === "showcase@endocore.io" || user?.username === "showcase";
     if (isShowcaseUser) {
-      currentKpi = {
-        totalFocusTime: 152280, // 42h 18m
-        activeDays: 18,
-        goalAchievement: 84,
-        avgFocusSession: 3120, // 52m
-        productivityScore: 82,
-        appCounts: {
-          "Antigravity IDE": 94413,
-          "Chrome": 36547,
-          "Terminal": 18273,
-          "Other": 3047
+      if (range === "1D") {
+        currentKpi = {
+          totalFocusTime: 32400, // 9h 0m focus time today
+          activeDays: 1,
+          goalAchievement: 100,
+          avgFocusSession: 3600,
+          productivityScore: 92,
+          appCounts: {
+            "Electron": 13284,
+            "Google Chrome": 11016,
+            "Antigravity": 6156,
+            "Windows Explorer": 1944
+          }
+        };
+
+        prevKpi = {
+          totalFocusTime: 27000, // 7h 30m yesterday
+          activeDays: 1,
+          goalAchievement: 83,
+          avgFocusSession: 3000,
+          productivityScore: 78,
+          appCounts: {}
+        };
+
+        const hourlyData = [
+          { hourLabel: "8 AM", sec: 1800, sessions: 1 },
+          { hourLabel: "9 AM", sec: 2700, sessions: 2 },
+          { hourLabel: "10 AM", sec: 3400, sessions: 3 },
+          { hourLabel: "11 AM", sec: 3600, sessions: 3 },
+          { hourLabel: "12 PM", sec: 1800, sessions: 1 },
+          { hourLabel: "1 PM", sec: 2400, sessions: 2 },
+          { hourLabel: "2 PM", sec: 3200, sessions: 3 },
+          { hourLabel: "3 PM", sec: 3500, sessions: 3 },
+          { hourLabel: "4 PM", sec: 2900, sessions: 2 },
+          { hourLabel: "5 PM", sec: 2500, sessions: 2 },
+          { hourLabel: "6 PM", sec: 2400, sessions: 2 },
+          { hourLabel: "7 PM", sec: 2200, sessions: 1 }
+        ];
+
+        trend = hourlyData.map(h => ({
+          date: h.hourLabel,
+          focusSeconds: h.sec,
+          goalSeconds: 2700, // 45m hourly goal
+          sessions: h.sessions,
+          goalAchieved: Math.min(100, Math.round((h.sec / 2700) * 100))
+        }));
+
+        timeDistribution = [
+          { category: "Antigravity", seconds: 26160, percentage: 36, color: "#5850EC" },
+          { category: "Electron", seconds: 20340, percentage: 28, color: "#A855F7" },
+          { category: "ChatGPT Client", seconds: 13080, percentage: 18, color: "#EC4899" },
+          { category: "SnippingTool", seconds: 7260, percentage: 10, color: "#06B6D4" },
+          { category: "Google Chrome", seconds: 5820, percentage: 8, color: "#10B981" }
+        ];
+      } else {
+        currentKpi = {
+          totalFocusTime: 152280, // 42h 18m
+          activeDays: range === "7D" ? 6 : range === "90D" ? 54 : range === "1Y" ? 210 : 18,
+          goalAchievement: 84,
+          avgFocusSession: 3120, // 52m
+          productivityScore: 82,
+          appCounts: {
+            "Antigravity": 54820,
+            "Electron": 42638,
+            "ChatGPT Client": 27410,
+            "SnippingTool": 15228,
+            "Google Chrome": 12184
+          }
+        };
+
+        prevKpi = {
+          totalFocusTime: 133345, // ~37h (growth of ~14.2%)
+          activeDays: range === "7D" ? 5 : range === "90D" ? 48 : range === "1Y" ? 190 : 16,
+          goalAchievement: 78,
+          avgFocusSession: 2700, // 45m
+          productivityScore: 76, // growth of ~8%
+          appCounts: {}
+        };
+
+        // Populate rich daily trend data
+        trend = [];
+        const today = new Date();
+        for (let i = days - 1; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          const dStr = d.toISOString().split("T")[0];
+          const dayOfWeek = d.getDay();
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+          const focusSec = isWeekend 
+            ? Math.floor(Math.random() * 7200) 
+            : Math.floor(18000 + Math.random() * 12600); // 5h - 8.5h
+          
+          trend.push({
+            date: dStr,
+            focusSeconds: focusSec,
+            goalSeconds: 21600, // 6h goal
+            sessions: isWeekend ? Math.floor(Math.random() * 2) : Math.floor(4 + Math.random() * 4),
+            goalAchieved: Math.min(100, Math.round((focusSec / 21600) * 100))
+          });
         }
-      };
 
-      prevKpi = {
-        totalFocusTime: 133345, // ~37h (growth of ~14.2%)
-        activeDays: 16, // growth of 2 days
-        goalAchievement: 78,
-        avgFocusSession: 2700, // 45m
-        productivityScore: 76, // growth of ~8%
-        appCounts: {}
-      };
-
-      // Populate rich daily trend data
-      trend = [];
-      const today = new Date();
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(today.getDate() - i);
-        const dStr = d.toISOString().split("T")[0];
-        const dayOfWeek = d.getDay();
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-        // Weekday: 5 to 8.5 hrs, Weekend: 0 to 2 hrs
-        const focusSec = isWeekend 
-          ? Math.floor(Math.random() * 7200) 
-          : Math.floor(18000 + Math.random() * 12600); // 5h - 8.5h
-        
-        trend.push({
-          date: dStr,
-          focusSeconds: focusSec,
-          goalSeconds: 21600, // 6h goal
-          sessions: isWeekend ? Math.floor(Math.random() * 2) : Math.floor(4 + Math.random() * 4),
-          goalAchieved: Math.min(100, Math.round((focusSec / 21600) * 100))
-        });
+        timeDistribution = [
+          { category: "Antigravity", seconds: 54820, percentage: 36, color: "#5850EC" },
+          { category: "Electron", seconds: 42638, percentage: 28, color: "#A855F7" },
+          { category: "ChatGPT Client", seconds: 27410, percentage: 18, color: "#EC4899" },
+          { category: "SnippingTool", seconds: 15228, percentage: 10, color: "#06B6D4" },
+          { category: "Google Chrome", seconds: 12184, percentage: 8, color: "#10B981" }
+        ];
       }
-
-      timeDistribution = [
-        { category: "Antigravity IDE", seconds: 94413, percentage: 62, color: "#6366f1" },
-        { category: "Chrome", seconds: 36547, percentage: 24, color: "#10b981" },
-        { category: "Terminal", seconds: 18273, percentage: 14, color: "#f59e0b" },
-        { category: "Other", seconds: 3047, percentage: 2, color: "#94a3b8" }
-      ];
     }
 
     // Focus Quality Mock (derive from app type)
@@ -4331,17 +5380,36 @@ app.get("/api/analytics/v2/dashboard", authenticateToken, async (req: any, res) 
   }
 });
 
-function getCategoryColor(app: string) {
-  const colors: Record<string, string> = {
-    "VS Code": "#4f46e5", // indigo-600
-    "IntelliJ": "#4f46e5",
-    "Figma": "#ec4899", // pink-500
-    "Chrome": "#10b981", // emerald-500
-    "Terminal": "#64748b", // slate-500
-    "Slack": "#f59e0b", // amber-500
-    "Google Meet": "#f43f5e" // rose-500
-  };
-  return colors[app] || "#8b5cf6"; // violet-500
+function getCategoryColor(category: string, idx: number = 0): string {
+  if (!category) return "#5850EC";
+  const name = String(category).toLowerCase();
+
+  // 1. Antigravity -> Royal Indigo
+  if (name.includes("antigravity")) return "#5850EC";
+
+  // 2. ChatGPT / OpenAI -> Hot Pink
+  if (name.includes("chatgpt") || name.includes("gpt") || name.includes("openai")) return "#EC4899";
+
+  // 3. Electron -> Vivid Purple
+  if (name.includes("electron")) return "#A855F7";
+
+  // 4. SnippingTool / Snipping -> Electric Cyan
+  if (name.includes("snip") || name.includes("snipping") || name.includes("screenshot")) return "#06B6D4";
+
+  // 5. Chrome / Browser -> Emerald Green
+  if (name.includes("chrome") || name.includes("browser")) return "#10B981";
+
+  // 6. VS Code / Code -> Sky Blue
+  if (name.includes("code") || name.includes("vscode") || name.includes("visual studio")) return "#3B82F6";
+
+  // 7. Terminal / CMD / PowerShell -> Amber Gold
+  if (name.includes("term") || name.includes("cmd") || name.includes("powershell") || name.includes("bash")) return "#F59E0B";
+
+  // 8. Windows / Explorer / System -> Lime Green
+  if (name.includes("explorer") || name.includes("windows") || name.includes("system")) return "#84CC16";
+
+  const fallbackPalette = ["#5850EC", "#EC4899", "#A855F7", "#06B6D4", "#10B981", "#F59E0B", "#3B82F6", "#84CC16"];
+  return fallbackPalette[idx % fallbackPalette.length];
 }
 
 app.get("/api/analytics/v2/day/:date", authenticateToken, async (req: any, res) => {
@@ -4435,6 +5503,7 @@ async function startServer() {
     });
   }
 
+  logStartupDiagnostics();
   listenOnPort(PORT);
 }
 

@@ -179,6 +179,24 @@ export interface FocusChallengeItem {
   winnerId?: string;
 }
 
+export interface ActivityItem {
+  id: string;
+  userId: string;
+  source: "DESKTOP" | "EXTERNAL";
+  provider: string | null;
+  activityType: string;
+  application: string;
+  project: string;
+  summary: string;
+  occurredAt: string;
+  durationSeconds?: number | null;
+  externalUrl?: string | null;
+  metadata?: Record<string, unknown> | null;
+  resourceId?: string | null;
+  userName?: string;
+  userAvatar?: string;
+}
+
 declare global {
   interface Window {
     electronAPI?: {

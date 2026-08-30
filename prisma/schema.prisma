@@ -10,84 +10,86 @@ datasource db {
 }
 
 model User {
-  id                         String         @id @default(uuid())
+  id                         String   @id @default(uuid())
   name                       String
-  email                      String         @unique
+  email                      String   @unique
   passwordHash               String
-  avatarUrl                  String         @default("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80")
-  activeGroup                String         @default("Engineering Group")
-  privacyMode                String         @default("Public")
-  deviceConnected            String         @default("WS-WORKSTATION-11")
-  productivityGoal           Int            @default(6)
-  customStatus               String         @default("")
-  theme                      String         @default("endocore-dark")
-  friendUpdatesNotification  Boolean        @default(true)
-  breakRemindersNotification Boolean        @default(true)
-  aiNudgesNotification       Boolean        @default(true)
-  createdAt                  DateTime       @default(now())
-  status                     String         @default("online") // online, busy, away, focus, offline
-  role                       String         @default("Software Developer")
-  broadcastGroups            String         @default("Engineering Group")
-  lastHeartbeat              DateTime       @default(now())
-  distractionsCount          Int            @default(0)
-  focusStreak                Int            @default(0)
-  lastFocusDate              String         @default("")
+  avatarUrl                  String   @default("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80")
+  activeGroup                String   @default("Engineering Group")
+  privacyMode                String   @default("Public")
+  deviceConnected            String   @default("WS-WORKSTATION-11")
+  productivityGoal           Int      @default(6)
+  customStatus               String   @default("")
+  theme                      String   @default("endocore-dark")
+  friendUpdatesNotification  Boolean  @default(true)
+  breakRemindersNotification Boolean  @default(true)
+  aiNudgesNotification       Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  status                     String   @default("online") // online, busy, away, focus, offline
+  role                       String   @default("Software Developer")
+  broadcastGroups            String   @default("Engineering Group")
+  lastHeartbeat              DateTime @default(now())
+  distractionsCount          Int      @default(0)
+  focusStreak                Int      @default(0)
+  lastFocusDate              String   @default("")
 
   // New Fields for Connections
-  username                   String         @unique @default(uuid())
-  headline                   String         @default("Software Developer")
+  username String @unique @default(uuid())
+  headline String @default("Software Developer")
 
   // Privacy preferences
-  presenceVisibility         String         @default("connections")    // everyone, connections, room_members, nobody
-  activityVisibility         String         @default("status_only")    // status_only, app_category, app_name
-  showDailyFocusTime         Boolean        @default(false)
-  showCurrentRoom            Boolean        @default(false)
-  allowFocusInvites          Boolean        @default(true)
-  allowRoomInvites           Boolean        @default(true)
-  allowJoinRequests          Boolean        @default(true)
+  presenceVisibility String  @default("connections") // everyone, connections, room_members, nobody
+  activityVisibility String  @default("status_only") // status_only, app_category, app_name
+  showDailyFocusTime Boolean @default(false)
+  showCurrentRoom    Boolean @default(false)
+  allowFocusInvites  Boolean @default(true)
+  allowRoomInvites   Boolean @default(true)
+  allowJoinRequests  Boolean @default(true)
 
   // Relations
-  activities                 Activity[]
-  memberships                GroupMember[]
-  activityLogs               ActivityLog[]
-  dailySummaries             DailySummary[]
-  focusSessions              FocusSession[]
+  activities     Activity[]
+  memberships    GroupMember[]
+  activityLogs   ActivityLog[]
+  dailySummaries DailySummary[]
+  focusSessions  FocusSession[]
 
   // Room intelligence relations
-  roomMemberships            RoomMember[]
-  roomInvitationsSent        RoomInvitation[] @relation("InvitedByRelation")
+  roomMemberships     RoomMember[]
+  roomInvitationsSent RoomInvitation[] @relation("InvitedByRelation")
 
   // Connections relations
-  sentConnections            Connection[]   @relation("ConnectionRequester")
-  connectionsA               Connection[]   @relation("ConnectionUserA")
-  connectionsB               Connection[]   @relation("ConnectionUserB")
-  blocksSent                 UserBlock[]    @relation("UserBlocker")
-  blocksReceived             UserBlock[]    @relation("UserBlocked")
+  sentConnections Connection[] @relation("ConnectionRequester")
+  connectionsA    Connection[] @relation("ConnectionUserA")
+  connectionsB    Connection[] @relation("ConnectionUserB")
+  blocksSent      UserBlock[]  @relation("UserBlocker")
+  blocksReceived  UserBlock[]  @relation("UserBlocked")
 
   // Group join requests & invitations
-  joinRequests               GroupJoinRequest[]
-  sentGroupInvites           GroupInvitation[] @relation("GroupInviter")
-  receivedGroupInvites       GroupInvitation[] @relation("GroupInvitee")
+  joinRequests         GroupJoinRequest[]
+  sentGroupInvites     GroupInvitation[]  @relation("GroupInviter")
+  receivedGroupInvites GroupInvitation[]  @relation("GroupInvitee")
 
   // Focus challenges
-  challengesCreated          FocusChallenge[] @relation("ChallengeCreator")
-  challengesInvited          FocusChallenge[] @relation("ChallengeInvited")
+  challengesCreated FocusChallenge[] @relation("ChallengeCreator")
+  challengesInvited FocusChallenge[] @relation("ChallengeInvited")
 
   // Devices
-  devices                    UserDevice[]
+  devices UserDevice[]
 
   // Integrations & Timesheets
-  integrations               UserIntegration[]
-  timesheets                 Timesheet[]
+  integrations       UserIntegration[]
+  timesheets         Timesheet[]
+  goals              Goal[]
+  externalActivities ExternalActivity[]
 }
 
 model Group {
-  id          String        @id @default(uuid())
-  name        String        @unique
-  description String
-  createdAt   DateTime      @default(now())
-  accessType  String        @default("PUBLIC") // PUBLIC, PRIVATE, REQUIRE_APPROVAL, INVITE_ONLY
-  members     GroupMember[]
+  id           String             @id @default(uuid())
+  name         String             @unique
+  description  String
+  createdAt    DateTime           @default(now())
+  accessType   String             @default("PUBLIC") // PUBLIC, PRIVATE, REQUIRE_APPROVAL, INVITE_ONLY
+  members      GroupMember[]
   joinRequests GroupJoinRequest[]
   invitations  GroupInvitation[]
 }
@@ -134,12 +136,12 @@ model ChatMessage {
 }
 
 model DailySummary {
-  id                String   @id @default(uuid())
+  id                String @id @default(uuid())
   userId            String
-  date              String   // YYYY-MM-DD
-  totalFocusSeconds Int      @default(0)
-  productivityScore Int      @default(0)
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date              String // YYYY-MM-DD
+  totalFocusSeconds Int    @default(0)
+  productivityScore Int    @default(0)
+  user              User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, date])
 }
@@ -162,23 +164,23 @@ enum ConnectionStatus {
 }
 
 model Connection {
-  id            String           @id @default(uuid())
-  pairKey       String           @unique // canonical form: userAId:userBId where userAId < userBId
+  id      String @id @default(uuid())
+  pairKey String @unique // canonical form: userAId:userBId where userAId < userBId
 
   userAId       String
   userBId       String
   requestedById String
 
-  status        ConnectionStatus @default(PENDING)
+  status ConnectionStatus @default(PENDING)
 
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  respondedAt   DateTime?
-  acceptedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  respondedAt DateTime?
+  acceptedAt  DateTime?
 
-  userA         User @relation("ConnectionUserA", fields: [userAId], references: [id], onDelete: Cascade)
-  userB         User @relation("ConnectionUserB", fields: [userBId], references: [id], onDelete: Cascade)
-  requester     User @relation("ConnectionRequester", fields: [requestedById], references: [id], onDelete: Cascade)
+  userA     User @relation("ConnectionUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB     User @relation("ConnectionUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  requester User @relation("ConnectionRequester", fields: [requestedById], references: [id], onDelete: Cascade)
 
   @@index([userAId, status])
   @@index([userBId, status])
@@ -191,8 +193,8 @@ model UserBlock {
   blockedId String
   createdAt DateTime @default(now())
 
-  blocker   User     @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
-  blocked   User     @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  blocker User @relation("UserBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("UserBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
 
   @@unique([blockerId, blockedId])
   @@index([blockedId])
@@ -209,28 +211,28 @@ enum FocusChallengeStatus {
 }
 
 model FocusChallenge {
-  id               String               @id @default(uuid())
-  createdById      String
-  invitedUserId    String
+  id            String @id @default(uuid())
+  createdById   String
+  invitedUserId String
 
   durationMinutes  Int
-  challengeMode    String               @default("co_focus") // "co_focus", "sprint", "accountability"
-  creatorObjective String               @default("")
-  invitedObjective String               @default("")
-  creatorStatus    String               @default("pending") // "pending", "completed", "partial", "failed"
-  invitedStatus    String               @default("pending")
+  challengeMode    String @default("co_focus") // "co_focus", "sprint", "accountability"
+  creatorObjective String @default("")
+  invitedObjective String @default("")
+  creatorStatus    String @default("pending") // "pending", "completed", "partial", "failed"
+  invitedStatus    String @default("pending")
 
-  status           FocusChallengeStatus @default(PENDING)
+  status FocusChallengeStatus @default(PENDING)
 
-  createdAt        DateTime             @default(now())
-  expiresAt        DateTime
-  respondedAt      DateTime?
-  startAt          DateTime?
-  endAt            DateTime?
-  completedAt      DateTime?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
+  respondedAt DateTime?
+  startAt     DateTime?
+  endAt       DateTime?
+  completedAt DateTime?
 
-  creator          User                 @relation("ChallengeCreator", fields: [createdById], references: [id], onDelete: Cascade)
-  invited          User                 @relation("ChallengeInvited", fields: [invitedUserId], references: [id], onDelete: Cascade)
+  creator User @relation("ChallengeCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  invited User @relation("ChallengeInvited", fields: [invitedUserId], references: [id], onDelete: Cascade)
 
   @@index([createdById, status])
   @@index([invitedUserId, status])
@@ -243,23 +245,23 @@ model GroupJoinRequest {
   status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
   createdAt DateTime @default(now())
 
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId])
 }
 
 model GroupInvitation {
-  id         String   @id @default(uuid())
-  groupId    String
-  inviterId  String
-  inviteeId  String
-  status     String   @default("PENDING") // PENDING, ACCEPTED, DECLINED
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  groupId   String
+  inviterId String
+  inviteeId String
+  status    String   @default("PENDING") // PENDING, ACCEPTED, DECLINED
+  createdAt DateTime @default(now())
 
-  group      Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  inviter    User     @relation("GroupInviter", fields: [inviterId], references: [id], onDelete: Cascade)
-  invitee    User     @relation("GroupInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  group   Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviter User  @relation("GroupInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee User  @relation("GroupInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, inviteeId])
 }
@@ -297,18 +299,18 @@ enum DevicePlatform {
 }
 
 model UserDevice {
-  id          String         @id @default(uuid())
-  userId      String
-  platform    DevicePlatform @default(WINDOWS)
-  pushToken   String         @unique
-  deviceName  String?
-  enabled     Boolean        @default(true)
-  lastSeenAt  DateTime       @default(now())
-  revokedAt   DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  id         String         @id @default(uuid())
+  userId     String
+  platform   DevicePlatform @default(WINDOWS)
+  pushToken  String         @unique
+  deviceName String?
+  enabled    Boolean        @default(true)
+  lastSeenAt DateTime       @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, enabled])
 }
@@ -377,59 +379,59 @@ enum TaskSource {
 }
 
 model Room {
-  id                     String        @id @default(uuid())
-  ownerId                String
-  name                   String        @unique
-  description            String
-  iconEmoji              String        @default("🚀")
-  category               String        @default("Development") // Development, Design, Research, Study, Custom
-  timezone               String        @default("UTC")
-  accessMode             AccessMode    @default(APPROVAL_REQUIRED)
-  deadline               DateTime?
-  status                 String        @default("active")
+  id          String     @id @default(uuid())
+  ownerId     String
+  name        String     @unique
+  description String
+  iconEmoji   String     @default("🚀")
+  category    String     @default("Development") // Development, Design, Research, Study, Custom
+  timezone    String     @default("UTC")
+  accessMode  AccessMode @default(APPROVAL_REQUIRED)
+  deadline    DateTime?
+  status      String     @default("active")
 
   // Versioned Settings & Policies
-  aiPolicy               Json
-  aiPolicyVersion        Int           @default(1)
-  privacyPolicy          Json
-  privacyPolicyVersion   Int           @default(1)
+  aiPolicy             Json
+  aiPolicyVersion      Int  @default(1)
+  privacyPolicy        Json
+  privacyPolicyVersion Int  @default(1)
 
-  allowAdminInvites      Boolean       @default(true)
-  linkExpiryDays         Int           @default(7)
-  maxMemberCount         Int           @default(50)
-  requireVerifiedAccount  Boolean       @default(false)
-  defaultMemberRole      MemberRole    @default(MEMBER)
-  idempotencyKey         String?       @unique
+  allowAdminInvites      Boolean    @default(true)
+  linkExpiryDays         Int        @default(7)
+  maxMemberCount         Int        @default(50)
+  requireVerifiedAccount Boolean    @default(false)
+  defaultMemberRole      MemberRole @default(MEMBER)
+  idempotencyKey         String?    @unique
 
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  members                RoomMember[]
-  invitations            RoomInvitation[]
-  memberTargets          MemberWorkTarget[]
-  teamTargets            TeamTarget[]
-  scheduleExceptions     MemberScheduleException[]
-  tasks                  Task[]
-  activitySessions       ActivitySession[]
-  dailyRollups           DailyMemberRollup[]
-  aiInsights             AiInsight[]
-  alertEscalations       AlertEscalation[]
-  consentRecords         TrackingConsent[]
+  members            RoomMember[]
+  invitations        RoomInvitation[]
+  memberTargets      MemberWorkTarget[]
+  teamTargets        TeamTarget[]
+  scheduleExceptions MemberScheduleException[]
+  tasks              Task[]
+  activitySessions   ActivitySession[]
+  dailyRollups       DailyMemberRollup[]
+  aiInsights         AiInsight[]
+  alertEscalations   AlertEscalation[]
+  consentRecords     TrackingConsent[]
 
   @@index([ownerId])
   @@index([status])
 }
 
 model RoomMember {
-  roomId               String
-  userId               String
-  role                 MemberRole       @default(MEMBER)
-  membershipStatus     MembershipStatus @default(ACTIVE)
-  joinedAt             DateTime         @default(now())
+  roomId           String
+  userId           String
+  role             MemberRole       @default(MEMBER)
+  membershipStatus MembershipStatus @default(ACTIVE)
+  joinedAt         DateTime         @default(now())
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([roomId, userId])
   @@index([roomId, membershipStatus])
@@ -437,21 +439,21 @@ model RoomMember {
 }
 
 model RoomInvitation {
-  id                   String           @id @default(uuid())
-  roomId               String
-  invitedById          String
-  invitedUserId        String?
-  email                String?
-  tokenHash            String           @unique
-  status               InvitationStatus @default(PENDING)
-  expiresAt            DateTime
-  acceptedByUserId     String?
-  usedAt               DateTime?
-  revokedAt            DateTime?
-  createdAt            DateTime         @default(now())
+  id               String           @id @default(uuid())
+  roomId           String
+  invitedById      String
+  invitedUserId    String?
+  email            String?
+  tokenHash        String           @unique
+  status           InvitationStatus @default(PENDING)
+  expiresAt        DateTime
+  acceptedByUserId String?
+  usedAt           DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime         @default(now())
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  invitedBy            User             @relation("InvitedByRelation", fields: [invitedById], references: [id], onDelete: Cascade)
+  room      Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  invitedBy User @relation("InvitedByRelation", fields: [invitedById], references: [id], onDelete: Cascade)
 
   @@index([roomId, status])
   @@index([email])
@@ -459,134 +461,134 @@ model RoomInvitation {
 }
 
 model MemberWorkTarget {
-  id                   String           @id @default(uuid())
-  roomId               String
-  userId               String
-  focusMinutes         Int              @default(360)
-  taskTarget           Int              @default(5)
-  workingDays          String           @default("Mon,Tue,Wed,Thu,Fri")
-  workStart            String           @default("09:00")
-  workEnd              String           @default("17:00")
-  breakAllowanceMins   Int              @default(60)
-  deepWorkTargetMins   Int              @default(180)
-  minCheckinFreq       String           @default("Daily")
-  effectiveFrom        DateTime         @default(now())
-  effectiveUntil       DateTime?
-  createdById          String
-  createdAt            DateTime         @default(now())
-  changeReason         String?
+  id                 String    @id @default(uuid())
+  roomId             String
+  userId             String
+  focusMinutes       Int       @default(360)
+  taskTarget         Int       @default(5)
+  workingDays        String    @default("Mon,Tue,Wed,Thu,Fri")
+  workStart          String    @default("09:00")
+  workEnd            String    @default("17:00")
+  breakAllowanceMins Int       @default(60)
+  deepWorkTargetMins Int       @default(180)
+  minCheckinFreq     String    @default("Daily")
+  effectiveFrom      DateTime  @default(now())
+  effectiveUntil     DateTime?
+  createdById        String
+  createdAt          DateTime  @default(now())
+  changeReason       String?
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, userId, effectiveFrom])
 }
 
 model TeamTarget {
-  id                    String           @id @default(uuid())
+  id                    String    @id @default(uuid())
   roomId                String
-  focusMinutes          Int              @default(2400)
-  taskPoints            Int              @default(50)
+  focusMinutes          Int       @default(2400)
+  taskPoints            Int       @default(50)
   deadline              DateTime?
-  reportingPeriod       String           @default("Weekly")
-  requiredCoverageHours String           @default("09:00-17:00 UTC")
-  milestonesJson        Json             @default("[]")
-  effectiveFrom         DateTime         @default(now())
+  reportingPeriod       String    @default("Weekly")
+  requiredCoverageHours String    @default("09:00-17:00 UTC")
+  milestonesJson        Json      @default("[]")
+  effectiveFrom         DateTime  @default(now())
   effectiveUntil        DateTime?
   createdById           String
-  createdAt             DateTime         @default(now())
+  createdAt             DateTime  @default(now())
   changeReason          String?
 
-  room                  Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, effectiveFrom])
 }
 
 model MemberScheduleException {
-  id                   String           @id @default(uuid())
-  roomId               String
-  userId               String
-  type                 ScheduleExceptionType
-  startsAt             DateTime
-  endsAt               DateTime
-  reason               String?
-  approvedById         String?
-  createdAt            DateTime         @default(now())
+  id           String                @id @default(uuid())
+  roomId       String
+  userId       String
+  type         ScheduleExceptionType
+  startsAt     DateTime
+  endsAt       DateTime
+  reason       String?
+  approvedById String?
+  createdAt    DateTime              @default(now())
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, userId, startsAt, endsAt])
 }
 
 model ActivitySession {
-  id                   String           @id @default(uuid())
-  roomId               String
-  userId               String
-  appCategory          String
-  appName              String
-  startedAt            DateTime
-  endedAt              DateTime
-  activeSeconds        Int
-  idleSeconds          Int              @default(0)
-  contextSwitches      Int              @default(0)
-  isDeepWork           Boolean          @default(false)
-  source               String           @default("DESKTOP_AGENT")
+  id              String   @id @default(uuid())
+  roomId          String
+  userId          String
+  appCategory     String
+  appName         String
+  startedAt       DateTime
+  endedAt         DateTime
+  activeSeconds   Int
+  idleSeconds     Int      @default(0)
+  contextSwitches Int      @default(0)
+  isDeepWork      Boolean  @default(false)
+  source          String   @default("DESKTOP_AGENT")
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, startedAt])
   @@index([userId, startedAt])
 }
 
 model Task {
-  id                   String           @id @default(uuid())
-  roomId               String
-  assigneeId           String?
-  title                String
-  description          String?
-  points               Int              @default(1)
-  status               String           @default("TODO") // TODO, IN_PROGRESS, COMPLETED
-  source               TaskSource       @default(NATIVE)
-  externalId           String?
-  externalUrl          String?
-  lastSyncedAt         DateTime?
-  dueAt                DateTime?
-  completedAt          DateTime?
-  createdAt            DateTime         @default(now())
+  id           String     @id @default(uuid())
+  roomId       String
+  assigneeId   String?
+  title        String
+  description  String?
+  points       Int        @default(1)
+  status       String     @default("TODO") // TODO, IN_PROGRESS, COMPLETED
+  source       TaskSource @default(NATIVE)
+  externalId   String?
+  externalUrl  String?
+  lastSyncedAt DateTime?
+  dueAt        DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime   @default(now())
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, status])
   @@index([assigneeId])
 }
 
 model DailyMemberRollup {
-  id                   String           @id @default(uuid())
+  id                   String @id @default(uuid())
   roomId               String
   userId               String
-  date                 String           // YYYY-MM-DD
-  focusMinutes         Int              @default(0)
-  activeMinutes        Int              @default(0)
-  idleMinutes          Int              @default(0)
-  tasksCompleted       Int              @default(0)
-  storyPointsCompleted Int              @default(0)
-  contextSwitches      Int              @default(0)
+  date                 String // YYYY-MM-DD
+  focusMinutes         Int    @default(0)
+  activeMinutes        Int    @default(0)
+  idleMinutes          Int    @default(0)
+  tasksCompleted       Int    @default(0)
+  storyPointsCompleted Int    @default(0)
+  contextSwitches      Int    @default(0)
 
   // Calculated Metrics (Capped for scoring, original stored)
-  effortProgress       Float            @default(0)
-  deliveryProgress     Float            @default(0)
-  contributionShare    Float            @default(0)
-  consistencyScore     Float            @default(0)
-  focusQualityScore    Float            @default(0)
-  contributionScore    Float            @default(0)
+  effortProgress    Float @default(0)
+  deliveryProgress  Float @default(0)
+  contributionShare Float @default(0)
+  consistencyScore  Float @default(0)
+  focusQualityScore Float @default(0)
+  contributionScore Float @default(0)
 
   // Audit Metadata for Explainability
-  formulaVersion       Int              @default(1)
-  weightDistribution   Json
-  dataLimitations      Json
-  confidenceScore      Float            @default(1.0)
-  createdAt            DateTime         @default(now())
+  formulaVersion     Int      @default(1)
+  weightDistribution Json
+  dataLimitations    Json
+  confidenceScore    Float    @default(1.0)
+  createdAt          DateTime @default(now())
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@unique([roomId, userId, date])
   @@index([roomId, date])
@@ -594,12 +596,12 @@ model DailyMemberRollup {
 }
 
 model AlertEscalation {
-  id                  String           @id @default(uuid())
+  id                  String     @id @default(uuid())
   roomId              String
   userId              String?
   alertType           AlertType
-  currentLevel        AlertLevel       @default(LEVEL_1_PRIVATE_NUDGE)
-  firstDetectedAt     DateTime         @default(now())
+  currentLevel        AlertLevel @default(LEVEL_1_PRIVATE_NUDGE)
+  firstDetectedAt     DateTime   @default(now())
   privateNudgeSentAt  DateTime?
   ownerAdvisorySentAt DateTime?
   criticalAlertSentAt DateTime?
@@ -607,50 +609,192 @@ model AlertEscalation {
   resolvedAt          DateTime?
   evidenceJson        Json
 
-  room                Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, userId, alertType, resolvedAt])
 }
 
 model TrackingConsent {
-  id                  String           @id @default(uuid())
-  roomId              String
-  userId              String
-  policyVersion       Int
-  acceptedAt          DateTime         @default(now())
-  revokedAt           DateTime?
+  id            String    @id @default(uuid())
+  roomId        String
+  userId        String
+  policyVersion Int
+  acceptedAt    DateTime  @default(now())
+  revokedAt     DateTime?
 
-  room                Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, userId, policyVersion])
 }
 
 model AiInsight {
-  id                   String           @id @default(uuid())
-  roomId               String
-  insightType          String
-  severity             String           @default("INFO") // INFO, WARNING, CRITICAL
-  confidence           Float            @default(1.0)
-  evidenceJson         Json
-  generatedAt          DateTime         @default(now())
-  expiresAt            DateTime?
+  id           String    @id @default(uuid())
+  roomId       String
+  insightType  String
+  severity     String    @default("INFO") // INFO, WARNING, CRITICAL
+  confidence   Float     @default(1.0)
+  evidenceJson Json
+  generatedAt  DateTime  @default(now())
+  expiresAt    DateTime?
 
-  room                 Room             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@index([roomId, generatedAt])
 }
 
 model UserIntegration {
-  id                 String   @id @default(uuid())
-  userId             String
-  provider           String   // GITHUB, JIRA, LINEAR, GOOGLE_CALENDAR
-  username           String?  // Linked profile name
-  isConnected        Boolean  @default(false)
-  autoPauseCalendar  Boolean  @default(false)
-  lastSyncedAt       DateTime @default(now())
-  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String                @id @default(uuid())
+  userId                String
+  provider              String // GITHUB, JIRA, LINEAR, GOOGLE_CALENDAR
+  externalUserId        String?
+  username              String? // Linked profile name
+  accountEmail          String?
+  avatarUrl             String?
+  isConnected           Boolean               @default(false)
+  autoPauseCalendar     Boolean               @default(false)
+  accessToken           String? // Encrypted
+  refreshToken          String? // Encrypted
+  tokenExpiresAt        DateTime?
+  scopes                String?
+  configJson            String? // Provider configuration / metadata JSON
+  healthStatus          String                @default("HEALTHY") // HEALTHY, WARNING, RATE_LIMITED, AUTH_REQUIRED, DISCONNECTED, ERROR
+  lastSyncStatus        String? // SUCCESS, FAILED, RUNNING, RATE_LIMITED, AUTH_REQUIRED
+  lastSyncError         String?
+  rateLimitRemaining    Int?
+  rateLimitResetAt      DateTime?
+  lastWebhookReceivedAt DateTime?
+  lastWebhookStatus     String? // PROCESSED, DUPLICATE, IGNORED, REJECTED, FAILED
+  lastReconciledAt      DateTime?
+  lastSyncedAt          DateTime              @default(now())
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @default(now()) @updatedAt
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resources             IntegrationResource[]
+  externalActivities    ExternalActivity[]
+  goalLinks             GoalIntegrationLink[]
+  syncLogs              IntegrationSyncLog[]
 
   @@unique([userId, provider])
+}
+
+model IntegrationSyncLog {
+  id              String          @id @default(uuid())
+  integrationId   String
+  provider        String
+  syncType        String // MANUAL, POLLING, WEBHOOK
+  status          String // RUNNING, SUCCESS, FAILED, RATE_LIMITED, AUTH_REQUIRED, SKIPPED
+  itemsIngested   Int             @default(0)
+  errorMessage    String?
+  durationMs      Int?
+  startedAt       DateTime        @default(now())
+  completedAt     DateTime?
+  userIntegration UserIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, startedAt])
+  @@index([provider, startedAt])
+  @@index([status])
+}
+
+model IntegrationResource {
+  id                 String                @id @default(uuid())
+  integrationId      String
+  provider           String
+  resourceType       String // REPOSITORY, ISSUE, PULL_REQUEST, PROJECT
+  externalId         String
+  name               String
+  identifier         String? // e.g. "owner/repo", "PROJ-123"
+  url                String?
+  metadata           String? // JSON metadata
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  userIntegration    UserIntegration       @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  externalActivities ExternalActivity[]
+  goalLinks          GoalIntegrationLink[]
+
+  @@unique([integrationId, resourceType, externalId])
+  @@index([integrationId])
+  @@index([provider, resourceType])
+}
+
+model ExternalActivity {
+  id                 String                @id @default(uuid())
+  userId             String
+  integrationId      String?
+  resourceId         String?
+  provider           String // GITHUB, JIRA, LINEAR
+  externalActivityId String // Commit SHA, PR event ID, Issue event ID
+  activityType       String // COMMIT, PULL_REQUEST_OPENED, PULL_REQUEST_MERGED, ISSUE_CLOSED
+  resourceType       String? // REPOSITORY, ISSUE, PULL_REQUEST
+  resourceName       String?
+  resourceIdentifier String?
+  externalUrl        String?
+  metadata           String? // JSON metadata
+  occurredAt         DateTime              @default(now())
+  receivedAt         DateTime              @default(now())
+  source             String                @default("WEBHOOK") // WEBHOOK, POLLING, MANUAL
+  confidence         Float                 @default(1.0)
+  createdAt          DateTime              @default(now())
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integration        UserIntegration?      @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  resource           IntegrationResource?  @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  verifiedGoalLinks  GoalIntegrationLink[]
+
+  @@unique([integrationId, externalActivityId])
+  @@index([userId])
+  @@index([integrationId])
+  @@index([resourceId])
+  @@index([provider])
+  @@index([occurredAt])
+  @@index([externalActivityId])
+}
+
+model Goal {
+  id                   String                @id @default(uuid())
+  userId               String
+  title                String
+  description          String?
+  category             String
+  targetHours          Float
+  currentHours         Float                 @default(0)
+  status               String                @default("active") // active, completed, archived
+  deadline             String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  externalProvider     String?
+  externalResourceId   String?
+  externalRepository   String?
+  verificationCriteria String?
+  autoVerifyEnabled    Boolean               @default(false)
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrationLinks     GoalIntegrationLink[]
+
+  @@index([userId])
+  @@index([userId, status])
+}
+
+model GoalIntegrationLink {
+  id                     String               @id @default(uuid())
+  goalId                 String
+  integrationId          String?
+  resourceId             String?
+  externalResourceType   String?
+  externalResourceId     String?
+  completionCriteria     String? // e.g. "COMMIT_COUNT >= 5", "PR_MERGED"
+  verificationStatus     String               @default("PENDING") // PENDING, VERIFIED, FAILED
+  verificationActivityId String?
+  verifiedAt             DateTime?
+  completionSource       String? // GITHUB_WEBHOOK, MANUAL, POLLING
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  goal                   Goal                 @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  integration            UserIntegration?     @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  resource               IntegrationResource? @relation(fields: [resourceId], references: [id], onDelete: SetNull)
+  verificationActivity   ExternalActivity?    @relation(fields: [verificationActivityId], references: [id], onDelete: SetNull)
+
+  @@index([goalId])
+  @@index([integrationId])
+  @@index([resourceId])
+  @@index([verificationActivityId])
 }
 
 model Timesheet {
@@ -661,9 +805,8 @@ model Timesheet {
   billableHours    Float
   nonBillableHours Float    @default(0.0)
   hourlyRate       Float    @default(120.0)
-  period           String   // e.g. "Current Week"
+  period           String // e.g. "Current Week"
   status           String   @default("Approved") // Approved, Pending
   createdAt        DateTime @default(now())
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-

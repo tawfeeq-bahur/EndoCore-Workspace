@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { getSocket } from "../services/socketManager";
 import { 
   Search, 
   Settings, 
@@ -13,6 +14,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from "lucide-react";
+import { ActivityItem } from "../types";
 
 interface IntegrationItem {
   id: string;
@@ -21,6 +23,8 @@ interface IntegrationItem {
   isConnected: boolean;
   autoPauseCalendar: boolean;
   lastSyncedAt: string;
+  repositoryCount?: number;
+  activityCount?: number;
 }
 
 interface MyIntegrationsProps {
@@ -173,8 +177,161 @@ export default function MyIntegrations({
   const [customToolDesc, setCustomToolDesc] = useState("");
   const [customLoading, setCustomLoading] = useState(false);
 
-  // Simulated activity state to allow real-time response when connecting tools
-  const [extraSimulatedLogs, setExtraSimulatedLogs] = useState<Array<{provider: string, action: string, time: string}>>([]);
+  const [syncingGitHub, setSyncingGitHub] = useState(false);
+  const [realExternalActivities, setRealExternalActivities] = useState<ActivityItem[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+
+  // Step 8: Integration Health & Sync History states
+  const [githubStatus, setGithubStatus] = useState<any>(null);
+  const [showSyncHistoryModal, setShowSyncHistoryModal] = useState(false);
+  const [syncHistoryLogs, setSyncHistoryLogs] = useState<any[]>([]);
+  const [syncHistoryLoading, setSyncHistoryLoading] = useState(false);
+
+  // Step 9: Integration Management, Recovery & Details states
+  const [reconcilingGitHub, setReconcilingGitHub] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [integrationDetails, setIntegrationDetails] = useState<any>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  const loadGitHubStatus = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/status");
+      if (res.ok) {
+        const data = await res.json();
+        setGithubStatus(data);
+      }
+    } catch (err) {
+      console.error("Error loading GitHub status:", err);
+    }
+  }, [apiFetch]);
+
+  const loadSyncHistory = useCallback(async () => {
+    setSyncHistoryLoading(true);
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/sync-history?limit=20");
+      if (res.ok) {
+        const data = await res.json();
+        setSyncHistoryLogs(data.items || []);
+      }
+    } catch (err) {
+      console.error("Error loading sync history:", err);
+    } finally {
+      setSyncHistoryLoading(false);
+    }
+  }, [apiFetch]);
+
+  const loadRecentActivities = useCallback(async () => {
+    setLoadingActivities(true);
+    try {
+      const res = await apiFetch("/api/activity/timeline?source=EXTERNAL&provider=GITHUB&limit=10");
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.items)) {
+          setRealExternalActivities(json.items);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching external activity timeline:", err);
+    } finally {
+      setLoadingActivities(false);
+    }
+  }, [apiFetch]);
+
+  const handleManualGitHubSync = async () => {
+    setSyncingGitHub(true);
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.status === 409 || data.inProgress) {
+        triggerToast("⏳ Synchronization is already in progress.");
+      } else if (res.ok && data.success) {
+        triggerToast(`🔄 GitHub sync complete: ${data.created} new activities, ${data.updated} updated from ${data.repositories || 0} repos.`);
+        loadIntegrations();
+        loadGitHubStatus();
+        loadRecentActivities();
+        if (showSyncHistoryModal) loadSyncHistory();
+      } else {
+        triggerToast(`⚠️ Sync notice: ${data.error || data.warning || "Sync incomplete"}`);
+        loadGitHubStatus();
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerToast(err.message || "Error communicating with server during GitHub sync.");
+    } finally {
+      setSyncingGitHub(false);
+    }
+  };
+
+  // Step 9: Reconnect GitHub via OAuth
+  const handleReconnectGitHub = async () => {
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/reconnect", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+      } else {
+        triggerToast(`❌ ${data.error || "Could not generate reconnection URL."}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerToast(err.message || "Error initiating GitHub reconnection.");
+    }
+  };
+
+  // Step 9: Reconcile & Refresh
+  const handleReconcile = async () => {
+    setReconcilingGitHub(true);
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/reconcile", { method: "POST" });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        triggerToast(`✅ Reconciled: ${data.repositories?.added || 0} new repos, ${data.activities?.created || 0} activities, ${data.goals?.reverified || 0} goals reverified.`);
+        loadIntegrations();
+        loadGitHubStatus();
+        loadRecentActivities();
+      } else {
+        triggerToast(`⚠️ Reconciliation: ${data.error || "Incomplete"}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      triggerToast(err.message || "Error during reconciliation.");
+    } finally {
+      setReconcilingGitHub(false);
+    }
+  };
+
+  // Step 9: Reset Transient Errors
+  const handleResetError = async () => {
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/reset-error", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        triggerToast("✅ Transient errors cleared.");
+        loadGitHubStatus();
+      } else {
+        triggerToast(`⚠️ Cannot reset: ${data.healthStatus || "unknown state"}`);
+      }
+    } catch (err) {
+      console.error(err);
+      triggerToast("Error resetting errors.");
+    }
+  };
+
+  // Step 9: Load Integration Details
+  const loadIntegrationDetails = async () => {
+    setDetailsLoading(true);
+    try {
+      const res = await apiFetch("/api/integrations/GITHUB/details");
+      if (res.ok) {
+        const data = await res.json();
+        setIntegrationDetails(data);
+      }
+    } catch (err) {
+      console.error("Error loading integration details:", err);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
 
   const loadIntegrations = async () => {
     try {
@@ -192,7 +349,104 @@ export default function MyIntegrations({
 
   useEffect(() => {
     loadIntegrations();
-  }, []);
+    loadGitHubStatus();
+    loadRecentActivities();
+  }, [loadIntegrations, loadGitHubStatus, loadRecentActivities]);
+
+  useEffect(() => {
+    // Attach Socket.io listener for real-time external activity & sync status pushes
+    const socket = getSocket();
+    if (socket) {
+      const handleExternalActivity = (data: { userId: string; activity: ActivityItem }) => {
+        if (data && data.activity) {
+          setRealExternalActivities((prev) => {
+            if (prev.some((item) => item.id === data.activity.id)) {
+              return prev;
+            }
+            return [data.activity, ...prev].slice(0, 10);
+          });
+        }
+      };
+
+      const handleSyncStarted = (data: any) => {
+        if (data.provider === "GITHUB") {
+          setSyncingGitHub(true);
+        }
+      };
+
+      const handleSyncCompleted = (data: any) => {
+        if (data.provider === "GITHUB") {
+          setSyncingGitHub(false);
+          loadGitHubStatus();
+          loadRecentActivities();
+        }
+      };
+
+      const handleSyncFailed = (data: any) => {
+        if (data.provider === "GITHUB") {
+          setSyncingGitHub(false);
+          loadGitHubStatus();
+        }
+      };
+
+      const handleHealthUpdate = (data: any) => {
+        if (data.provider === "GITHUB") {
+          loadGitHubStatus();
+        }
+      };
+
+      const handleReconnected = (data: any) => {
+        if (data.provider === "GITHUB") {
+          loadGitHubStatus();
+          loadIntegrations();
+          triggerToast("🔌 GitHub account reconnected successfully!");
+        }
+      };
+
+      const handleReconciled = (data: any) => {
+        if (data.provider === "GITHUB") {
+          loadGitHubStatus();
+          loadIntegrations();
+          loadRecentActivities();
+        }
+      };
+
+      socket.on("activity-external-update", handleExternalActivity);
+      socket.on("integration-sync-started", handleSyncStarted);
+      socket.on("integration-sync-completed", handleSyncCompleted);
+      socket.on("integration-sync-failed", handleSyncFailed);
+      socket.on("integration-health-update", handleHealthUpdate);
+      socket.on("integration-reconnected", handleReconnected);
+      socket.on("integration-reconciled", handleReconciled);
+
+      // Handle OAuth Callback return URL parameters
+      const urlParams = new URLSearchParams(window.location.search);
+      const integrationParam = urlParams.get("integration");
+      const statusParam = urlParams.get("status");
+      const messageParam = urlParams.get("message");
+      const usernameParam = urlParams.get("username");
+
+      if (integrationParam === "github") {
+        if (statusParam === "success") {
+          triggerToast(`🔌 Connected GitHub account ${usernameParam ? `@${usernameParam}` : ""} successfully!`);
+          loadGitHubStatus();
+        } else if (statusParam === "error") {
+          triggerToast(`❌ GitHub OAuth error: ${messageParam || "Authorization failed"}`);
+        }
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
+      return () => {
+        socket.off("activity-external-update", handleExternalActivity);
+        socket.off("integration-sync-started", handleSyncStarted);
+        socket.off("integration-sync-completed", handleSyncCompleted);
+        socket.off("integration-sync-failed", handleSyncFailed);
+        socket.off("integration-health-update", handleHealthUpdate);
+        socket.off("integration-reconnected", handleReconnected);
+        socket.off("integration-reconciled", handleReconciled);
+      };
+    }
+  }, [loadGitHubStatus, loadIntegrations, loadRecentActivities, triggerToast]);
 
   const getProviderName = (provider: string) => {
     switch (provider) {
@@ -259,7 +513,13 @@ export default function MyIntegrations({
   const getProviderConnectedDetails = (item: IntegrationItem) => {
     if (!item.isConnected) return "";
     switch (item.provider) {
-      case "GITHUB": return "Last synced 2 min ago";
+      case "GITHUB": {
+        const repoStr = item.repositoryCount ? `${item.repositoryCount} repos` : "";
+        const actStr = item.activityCount !== undefined ? `${item.activityCount} activities` : "";
+        if (repoStr && actStr) return `${repoStr} • ${actStr} synced`;
+        if (repoStr) return `${repoStr} synced`;
+        return item.username ? `@${item.username}` : "Connected to GitHub";
+      }
       case "JIRA": return "24 tasks synced";
       case "GOOGLE_CALENDAR": return "Next sync in 1 min";
       case "LINEAR": return "12 issues active";
@@ -292,12 +552,6 @@ export default function MyIntegrations({
         const updated = await res.json();
         setIntegrations(prev => prev.map(item => item.id === updated.id ? updated : item));
         triggerToast(`🔌 Connected ${getProviderName(updated.provider)} successfully!`);
-        
-        // Add a temporary simulated activity log
-        setExtraSimulatedLogs(prev => [
-          { provider: updated.provider, action: "Connected account signals", time: "Just now" },
-          ...prev
-        ]);
 
         setShowConnectModal(false);
         setWorkspaceId("");
@@ -388,8 +642,22 @@ export default function MyIntegrations({
   };
 
   // Trigger modal triggers
-  const openConnectDialog = (item: IntegrationItem) => {
+  const openConnectDialog = async (item: IntegrationItem) => {
     setSelectedIntegration(item);
+    if (item.provider === "GITHUB") {
+      try {
+        const res = await apiFetch("/api/integrations/github/authorize?json=true");
+        const data = await res.json();
+        if (res.ok && data.url) {
+          window.location.href = data.url;
+        } else {
+          triggerToast(`❌ GitHub OAuth: ${data.error || "Failed to generate authorization URL"}`);
+        }
+      } catch (err: any) {
+        triggerToast(`❌ ${err.message || "Error initiating GitHub connection"}`);
+      }
+      return;
+    }
     setWorkspaceId(item.username || "");
     setShowConnectModal(true);
   };
@@ -436,35 +704,6 @@ export default function MyIntegrations({
     color: "status-dot-emerald"
   }));
 
-  // Simulated activity logger combining default mock values and dynamic links
-  const getRecentActivities = () => {
-    const list = [...extraSimulatedLogs];
-    
-    if (integrations.find(i => i.provider === "GITHUB" && i.isConnected)) {
-      list.push({ provider: "GITHUB", action: "Synced commits", time: "2m ago" });
-    }
-    if (integrations.find(i => i.provider === "JIRA" && i.isConnected)) {
-      list.push({ provider: "JIRA", action: "Synced 6 tasks", time: "5m ago" });
-    }
-    if (integrations.find(i => i.provider === "GOOGLE_CALENDAR" && i.isConnected)) {
-      list.push({ provider: "GOOGLE_CALENDAR", action: "Synced events", time: "1h ago" });
-    }
-    
-    // Add additional connected providers dynamically as demo logs
-    integrations.forEach(i => {
-      if (i.isConnected && !["GITHUB", "JIRA", "GOOGLE_CALENDAR"].includes(i.provider) && !extraSimulatedLogs.some(e => e.provider === i.provider)) {
-        list.push({
-          provider: i.provider,
-          action: `Active signals linked`,
-          time: "Recently"
-        });
-      }
-    });
-
-    return list.slice(0, 5);
-  };
-
-  const recentActivities = getRecentActivities();
   const allDisconnected = integrations.filter(i => !i.isConnected);
 
   return (
@@ -680,18 +919,77 @@ export default function MyIntegrations({
                       </p>
 
                       {/* Status row */}
-                      <div className="flex items-center justify-between pt-1">
+                      <div className="pt-1 space-y-2">
                         {item.isConnected ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                              <span className="text-[10px] font-bold text-emerald-700 font-sans">
-                                Connected
-                              </span>
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`h-2 w-2 rounded-full ${
+                                  (item.provider === "GITHUB" ? githubStatus?.health : "HEALTHY") === "HEALTHY" || !githubStatus ? "bg-emerald-500 animate-pulse" :
+                                  githubStatus?.health === "RATE_LIMITED" ? "bg-amber-500 animate-pulse" :
+                                  githubStatus?.health === "AUTH_REQUIRED" ? "bg-rose-500 animate-bounce" :
+                                  "bg-yellow-500"
+                                }`}></span>
+                                <span className={`text-[10px] font-bold font-sans ${
+                                  (item.provider === "GITHUB" ? githubStatus?.health : "HEALTHY") === "HEALTHY" || !githubStatus ? "text-emerald-700" :
+                                  githubStatus?.health === "RATE_LIMITED" ? "text-amber-700" :
+                                  githubStatus?.health === "AUTH_REQUIRED" ? "text-rose-700" :
+                                  "text-yellow-700"
+                                }`}>
+                                  {item.provider === "GITHUB" && githubStatus ? `Connected (${githubStatus.health})` : "Connected"}
+                                </span>
+                              </div>
+                              {item.provider === "GITHUB" && (
+                                <button
+                                  onClick={() => {
+                                    loadSyncHistory();
+                                    setShowSyncHistoryModal(true);
+                                  }}
+                                  className="text-[10px] text-zinc-500 hover:text-zinc-800 underline font-mono"
+                                >
+                                  Sync History
+                                </button>
+                              )}
                             </div>
+
                             {getProviderConnectedDetails(item) && (
                               <p className="text-[10px] text-zinc-400 font-mono font-medium">
                                 {getProviderConnectedDetails(item)}
+                              </p>
+                            )}
+
+                            {item.provider === "GITHUB" && githubStatus && (
+                              <div className="text-[10px] text-zinc-600 font-mono space-y-0.5 pt-1 bg-zinc-50 p-2 rounded-md border border-zinc-100">
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-400">Repositories:</span>
+                                  <span className="font-semibold text-zinc-800">{githubStatus.repositoryCount} repos</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-zinc-400">Activities:</span>
+                                  <span className="font-semibold text-zinc-800">{githubStatus.activityCount} items</span>
+                                </div>
+                                {githubStatus.lastSyncedAt && (
+                                  <div className="flex justify-between">
+                                    <span className="text-zinc-400">Last Synced:</span>
+                                    <span className="text-zinc-700">{new Date(githubStatus.lastSyncedAt).toLocaleTimeString()}</span>
+                                  </div>
+                                )}
+                                {githubStatus.rateLimit?.limited && (
+                                  <div className="text-amber-600 font-semibold pt-0.5">
+                                    ⚠️ API Rate Limited. Resets at {new Date(githubStatus.rateLimit.resetAt).toLocaleTimeString()}
+                                  </div>
+                                )}
+                                {githubStatus.health === "AUTH_REQUIRED" && (
+                                  <div className="text-rose-600 font-semibold pt-0.5">
+                                    ❌ Credentials expired or revoked. Please reconnect.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {item.provider === "GITHUB" && !githubStatus && (
+                              <p className="text-[10px] text-emerald-600 font-mono font-semibold flex items-center gap-1">
+                                <span>Activity Sync: Real-time & Polling Fallback</span>
                               </p>
                             )}
                           </div>
@@ -707,21 +1005,79 @@ export default function MyIntegrations({
                     </div>
 
                     {/* Action buttons */}
-                    <div className="mt-5 pt-3 border-t border-zinc-100 flex items-center justify-end">
+                    <div className="mt-5 pt-3 border-t border-zinc-100 flex flex-col gap-2">
                       {item.isConnected ? (
-                        <button
-                          onClick={() => openSettingsDialog(item)}
-                          className="btn-secondary py-1 px-3 text-[11px]"
-                        >
-                          Manage
-                        </button>
+                        <>
+                          {item.provider === "GITHUB" ? (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {githubStatus?.health === "AUTH_REQUIRED" ? (
+                                <button
+                                  onClick={handleReconnectGitHub}
+                                  className="btn-secondary py-1 px-2.5 text-[11px] flex items-center gap-1.5 text-rose-700 border-rose-200 hover:bg-rose-50 font-bold"
+                                >
+                                  🔑 Reconnect GitHub
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={handleManualGitHubSync}
+                                    disabled={syncingGitHub}
+                                    className="btn-secondary py-1 px-2.5 text-[11px] flex items-center gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 disabled:opacity-50"
+                                  >
+                                    <RefreshCw className={`h-3 w-3 ${syncingGitHub ? "animate-spin" : ""}`} />
+                                    <span>{syncingGitHub ? "Syncing..." : "Sync"}</span>
+                                  </button>
+                                  <button
+                                    onClick={handleReconcile}
+                                    disabled={reconcilingGitHub}
+                                    className="btn-secondary py-1 px-2.5 text-[11px] flex items-center gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50 disabled:opacity-50"
+                                  >
+                                    <RefreshCw className={`h-3 w-3 ${reconcilingGitHub ? "animate-spin" : ""}`} />
+                                    <span>{reconcilingGitHub ? "Reconciling..." : "Reconcile"}</span>
+                                  </button>
+                                  {(githubStatus?.health === "ERROR" || githubStatus?.health === "WARNING" || githubStatus?.lastSyncError) && (
+                                    <button
+                                      onClick={handleResetError}
+                                      className="btn-secondary py-1 px-2 text-[11px] text-amber-700 border-amber-200 hover:bg-amber-50"
+                                    >
+                                      Reset Errors
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <div></div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            {item.provider === "GITHUB" && (
+                              <button
+                                onClick={() => {
+                                  loadIntegrationDetails();
+                                  setShowDetailsModal(true);
+                                }}
+                                className="text-[10px] text-zinc-500 hover:text-zinc-800 underline font-mono"
+                              >
+                                View Details
+                              </button>
+                            )}
+                            <button
+                              onClick={() => openSettingsDialog(item)}
+                              className="btn-secondary py-1 px-3 text-[11px]"
+                            >
+                              Manage
+                            </button>
+                          </div>
+                        </>
                       ) : (
-                        <button
-                          onClick={() => openConnectDialog(item)}
-                          className="btn-secondary py-1 px-3 text-[11px] text-zinc-900 border-zinc-300 hover:bg-zinc-50 hover:border-zinc-400"
-                        >
-                          Connect
-                        </button>
+                        <div className="w-full flex justify-end">
+                          <button
+                            onClick={() => openConnectDialog(item)}
+                            className="btn-secondary py-1 px-3 text-[11px] text-zinc-900 border-zinc-300 hover:bg-zinc-50 hover:border-zinc-400"
+                          >
+                            Connect
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -779,36 +1135,64 @@ export default function MyIntegrations({
                   <h3 className="text-xs font-bold font-mono tracking-wider uppercase text-zinc-500">
                     Recent Activity
                   </h3>
-                  <p className="text-[9px] text-zinc-400 font-mono tracking-wide uppercase font-bold">Demo Logs</p>
+                  <p className="text-[9px] text-zinc-400 font-mono tracking-wide uppercase font-bold">Synced Live Stream</p>
                 </div>
+                {loadingActivities && (
+                  <RefreshCw className="h-3 w-3 text-zinc-400 animate-spin" />
+                )}
               </div>
 
-              {recentActivities.length === 0 ? (
+              {realExternalActivities.length === 0 ? (
                 <div className="text-center py-8 text-[11px] text-zinc-400 font-sans">
-                  No activity logged. Connect a catalog tool.
+                  No activity logged. Connect GitHub and sync repositories.
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {recentActivities.map((act, idx) => (
-                    <div key={idx} className="flex items-start justify-between gap-3 text-xs leading-tight">
-                      <div className="flex items-start gap-2.5">
+                <div className="space-y-3.5">
+                  {realExternalActivities.map((act) => (
+                    <div key={act.id} className="flex items-start justify-between gap-3 text-xs leading-tight">
+                      <div className="flex items-start gap-2.5 min-w-0">
                         <div className="p-1 rounded bg-zinc-50 border border-zinc-100 shrink-0 mt-0.5">
-                          <IntegrationLogo provider={act.provider} className="h-4.5 w-4.5" />
+                          <IntegrationLogo provider={act.provider || "GITHUB"} className="h-4.5 w-4.5" />
                         </div>
-                        <div>
-                          <span className="font-bold text-zinc-900 block">{getProviderName(act.provider)}</span>
-                          <span className="text-zinc-500 text-[10px] font-sans">{act.action}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-zinc-900">{act.application}</span>
+                            <span className="px-1.5 py-0.2 rounded bg-zinc-100 text-[9px] font-mono text-zinc-600 font-semibold truncate max-w-[120px]">
+                              {act.project}
+                            </span>
+                          </div>
+                          <p className="text-zinc-600 text-[11px] font-sans mt-0.5 truncate" title={act.summary}>
+                            {act.summary}
+                          </p>
                         </div>
                       </div>
-                      <span className="text-[10px] text-zinc-400 font-mono shrink-0">{act.time}</span>
+                      <div className="flex flex-col items-end shrink-0 gap-1">
+                        <span className="text-[9px] text-zinc-400 font-mono">
+                          {act.occurredAt ? new Date(act.occurredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now"}
+                        </span>
+                        {act.externalUrl && (
+                          <a
+                            href={act.externalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-indigo-600 hover:underline flex items-center gap-0.5"
+                          >
+                            <span>Link</span>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              <button className="w-full btn-secondary text-[11px] py-1.5 mt-2 flex items-center justify-center gap-1">
-                <span>View all activity</span>
-                <ExternalLink className="h-3 w-3" />
+              <button 
+                onClick={loadRecentActivities}
+                className="w-full btn-secondary text-[11px] py-1.5 mt-2 flex items-center justify-center gap-1 cursor-pointer"
+              >
+                <span>Refresh activity</span>
+                <RefreshCw className={`h-3 w-3 ${loadingActivities ? "animate-spin" : ""}`} />
               </button>
             </div>
 
@@ -1091,6 +1475,225 @@ export default function MyIntegrations({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: GitHub Synchronization History Log */}
+      {showSyncHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-xs">
+          <div className="w-full max-w-2xl p-6 studio-card shadow-2xl bg-white space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-[#09090b] font-display">
+                    GitHub Synchronization History
+                  </h3>
+                  <p className="text-[10px] font-mono text-zinc-500">
+                    Audit log of synchronization runs, webhook events, and rate-limit details
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSyncHistoryModal(false)}
+                className="btn-icon p-1"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[350px] overflow-y-auto space-y-2 pr-1">
+              {syncHistoryLoading ? (
+                <div className="text-center py-8 text-xs text-zinc-500 font-mono">
+                  Loading sync logs...
+                </div>
+              ) : syncHistoryLogs.length === 0 ? (
+                <div className="text-center py-8 text-xs text-zinc-400 font-mono">
+                  No synchronization history logs found.
+                </div>
+              ) : (
+                syncHistoryLogs.map((log: any) => (
+                  <div
+                    key={log.id}
+                    className="p-3 rounded-lg border border-zinc-200 bg-zinc-50/50 flex flex-col gap-1 text-xs font-mono"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          log.status === "SUCCESS" ? "bg-emerald-100 text-emerald-800" :
+                          log.status === "RATE_LIMITED" ? "bg-amber-100 text-amber-800" :
+                          log.status === "AUTH_REQUIRED" ? "bg-rose-100 text-rose-800" :
+                          log.status === "RUNNING" ? "bg-blue-100 text-blue-800 animate-pulse" :
+                          "bg-zinc-200 text-zinc-700"
+                        }`}>
+                          {log.status}
+                        </span>
+                        <span className="font-semibold text-zinc-800">{log.syncType} SYNC</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400">
+                        {new Date(log.startedAt).toLocaleString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-zinc-600 pt-1">
+                      <span>Items Ingested: <strong className="text-zinc-900">{log.itemsIngested || 0}</strong></span>
+                      {log.durationMs && <span>Duration: {(log.durationMs / 1000).toFixed(2)}s</span>}
+                    </div>
+
+                    {log.errorMessage && (
+                      <div className="text-[10px] text-rose-600 bg-rose-50 p-1.5 rounded border border-rose-100 mt-1">
+                        Error: {log.errorMessage}
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-zinc-100 flex justify-end">
+              <button
+                onClick={() => setShowSyncHistoryModal(false)}
+                className="btn-secondary text-xs px-4 py-1.5"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 9: Integration Details Modal */}
+      {showDetailsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/40 backdrop-blur-xs">
+          <div className="w-full max-w-2xl p-6 studio-card shadow-2xl bg-white space-y-4 animate-in fade-in zoom-in-95 duration-200 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <h3 className="text-sm font-bold text-[#09090b] font-display">GitHub Integration Details</h3>
+                  <p className="text-[10px] font-mono text-zinc-500">Comprehensive integration health and data report</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDetailsModal(false)} className="btn-icon p-1"><X className="h-4 w-4" /></button>
+            </div>
+
+            {detailsLoading ? (
+              <div className="text-center py-8 text-xs text-zinc-500 font-mono">Loading details...</div>
+            ) : integrationDetails ? (
+              <div className="space-y-4 text-xs font-mono">
+                {/* Connection & Health */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold">Connection</div>
+                    <div className={`font-bold mt-1 ${integrationDetails.isConnected ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      {integrationDetails.isConnected ? '✅ Connected' : '❌ Disconnected'}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold">Health</div>
+                    <div className={`font-bold mt-1 ${
+                      integrationDetails.healthStatus === 'HEALTHY' ? 'text-emerald-700' :
+                      integrationDetails.healthStatus === 'RATE_LIMITED' ? 'text-amber-700' :
+                      integrationDetails.healthStatus === 'AUTH_REQUIRED' ? 'text-rose-700' :
+                      'text-yellow-700'
+                    }`}>{integrationDetails.healthStatus}</div>
+                  </div>
+                </div>
+
+                {/* Account */}
+                {integrationDetails.account && (
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold mb-1">Account</div>
+                    <div className="text-zinc-800">@{integrationDetails.account.username || 'unknown'}</div>
+                    {integrationDetails.account.email && <div className="text-zinc-500">{integrationDetails.account.email}</div>}
+                  </div>
+                )}
+
+                {/* Activity Breakdown */}
+                <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                  <div className="text-[10px] text-zinc-400 uppercase font-bold mb-2">Activity Breakdown ({integrationDetails.activityCount} total)</div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center p-2 bg-white rounded border"><div className="text-lg font-bold text-zinc-900">{integrationDetails.activityBreakdown?.commits || 0}</div><div className="text-[9px] text-zinc-500">Commits</div></div>
+                    <div className="text-center p-2 bg-white rounded border"><div className="text-lg font-bold text-zinc-900">{integrationDetails.activityBreakdown?.pullRequests || 0}</div><div className="text-[9px] text-zinc-500">PRs</div></div>
+                    <div className="text-center p-2 bg-white rounded border"><div className="text-lg font-bold text-zinc-900">{integrationDetails.activityBreakdown?.issues || 0}</div><div className="text-[9px] text-zinc-500">Issues</div></div>
+                    <div className="text-center p-2 bg-white rounded border"><div className="text-lg font-bold text-zinc-900">{integrationDetails.activityBreakdown?.reviews || 0}</div><div className="text-[9px] text-zinc-500">Reviews</div></div>
+                  </div>
+                </div>
+
+                {/* Repositories */}
+                <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                  <div className="text-[10px] text-zinc-400 uppercase font-bold mb-2">Repositories ({integrationDetails.repositoryCount})</div>
+                  <div className="max-h-[120px] overflow-y-auto space-y-1">
+                    {integrationDetails.repositories?.map((repo: any) => (
+                      <div key={repo.id} className={`flex items-center justify-between py-1 px-2 rounded ${repo.isMissing ? 'bg-rose-50 border border-rose-100' : 'bg-white border border-zinc-100'}`}>
+                        <span className="text-zinc-800 text-[11px]">{repo.identifier || repo.name}</span>
+                        {repo.isMissing && <span className="text-[9px] text-rose-500 font-bold">MISSING</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Rate Limit & Webhook */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold">Rate Limit</div>
+                    <div className="mt-1">{integrationDetails.rateLimit?.limited ? (
+                      <span className="text-amber-700 font-bold">Limited (resets {integrationDetails.rateLimit.resetAt ? new Date(integrationDetails.rateLimit.resetAt).toLocaleTimeString() : 'soon'})</span>
+                    ) : <span className="text-emerald-700">OK</span>}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold">Webhook</div>
+                    <div className="mt-1 text-zinc-700">{integrationDetails.webhook?.lastStatus || 'N/A'}</div>
+                    {integrationDetails.webhook?.lastReceivedAt && <div className="text-[9px] text-zinc-400">{new Date(integrationDetails.webhook.lastReceivedAt).toLocaleString()}</div>}
+                  </div>
+                </div>
+
+                {/* Sync Info */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold">Last Sync</div>
+                    <div className="mt-1 text-zinc-700">{integrationDetails.lastSyncStatus || 'N/A'}</div>
+                    {integrationDetails.lastSyncedAt && <div className="text-[9px] text-zinc-400">{new Date(integrationDetails.lastSyncedAt).toLocaleString()}</div>}
+                  </div>
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold">Last Reconciled</div>
+                    <div className="mt-1 text-zinc-700">{integrationDetails.lastReconciledAt ? new Date(integrationDetails.lastReconciledAt).toLocaleString() : 'Never'}</div>
+                  </div>
+                </div>
+
+                {/* Linked Goals */}
+                {integrationDetails.linkedGoals?.length > 0 && (
+                  <div className="p-3 rounded-lg bg-zinc-50 border border-zinc-100">
+                    <div className="text-[10px] text-zinc-400 uppercase font-bold mb-2">Linked Goals ({integrationDetails.linkedGoals.length})</div>
+                    <div className="space-y-1">
+                      {integrationDetails.linkedGoals.map((goal: any) => (
+                        <div key={goal.id} className="flex items-center justify-between py-1 px-2 rounded bg-white border border-zinc-100">
+                          <span className="text-zinc-800 text-[11px]">{goal.title}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            goal.status === 'completed' ? 'bg-emerald-100 text-emerald-800' :
+                            goal.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-800' :
+                            'bg-zinc-100 text-zinc-600'
+                          }`}>{goal.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {integrationDetails.lastSyncError && (
+                  <div className="p-3 rounded-lg bg-rose-50 border border-rose-100 text-rose-700 text-[11px]">
+                    ⚠️ Last Error: {integrationDetails.lastSyncError}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-xs text-zinc-400">No details available.</div>
+            )}
+
+            <div className="pt-2 border-t border-zinc-100 flex justify-end">
+              <button onClick={() => setShowDetailsModal(false)} className="btn-secondary text-xs px-4 py-1.5">Close</button>
+            </div>
           </div>
         </div>
       )}
