@@ -773,7 +773,7 @@ export default function App() {
       const res = await apiFetch("/api/user");
       if (res.ok) {
         const data = await res.json();
-        if (data && !data.error) {
+        if (data && !data.error && data.id) {
           setUser(data);
           if (!statusInput) setStatusInput(data.customStatus || "");
           if (!profileNameInput) setProfileNameInput(data.name || "");
@@ -784,15 +784,11 @@ export default function App() {
           return;
         }
       }
-      if (res.status === 401 || res.status === 403) {
-        setToken(null);
-        localStorage.removeItem("token");
-      }
+      // If profile request failed (401, 403, 404, 500), logout to clear stale session
+      handleLogout();
     } catch (e: any) {
-      // apiFetch already handles 401/403 by calling handleLogout().
-      // Only log the error here — don't blindly clear the token on
-      // transient network errors, as that would kick the user out.
       console.error("API Fetch Error (Profile):", e);
+      handleLogout();
     }
   };
 
@@ -2792,6 +2788,12 @@ export default function App() {
               Loading workspace…
             </span>
           </div>
+          <button
+            onClick={() => handleLogout()}
+            className="mt-4 text-xs text-stone-400 hover:text-stone-700 underline font-mono cursor-pointer transition-colors"
+          >
+            Reset Session & Return to Login
+          </button>
         </motion.div>
       </div>
     );

@@ -436,3 +436,67 @@ input::placeholder, textarea::placeholder {
 .tracker-category-card:active {
   transform: translateY(0) scale(0.98);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   GHOST SKELETON LOADING EFFECTS & ETHEREAL SHIMMER
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes ghost-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes ghost-pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.08), inset 0 0 15px rgba(99, 102, 241, 0.03);
+    border-color: rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(99, 102, 241, 0.22), inset 0 0 20px rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.4);
+  }
+}
+
+@keyframes ghost-float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.ghost-skeleton {
+  background: linear-gradient(
+    90deg,
+    #e2e8f0 0%,
+    #f8fafc 50%,
+    #e2e8f0 100%
+  );
+  background-size: 200% 100%;
+  animation: ghost-shimmer 1.6s infinite ease-in-out;
+}
+
+.dark .ghost-skeleton, [data-theme="dark"] .ghost-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(39, 39, 42, 0.4) 0%,
+    rgba(63, 63, 70, 0.95) 50%,
+    rgba(39, 39, 42, 0.4) 100%
+  );
+  background-size: 200% 100%;
+  animation: ghost-shimmer 1.8s infinite ease-in-out;
+}
+
+.ghost-pulse-card {
+  animation: ghost-pulse-glow 3s infinite ease-in-out;
+}
+
+.ghost-float-elem {
+  animation: ghost-float 3s infinite ease-in-out;
+}
+

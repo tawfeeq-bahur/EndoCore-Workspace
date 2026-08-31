@@ -205,14 +205,216 @@ export default function AnalyticsDashboard() {
 
   if (loading && !data) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#f8fafc]">
-        <div className="flex flex-col items-center p-10 bg-white rounded-3xl shadow-xl border border-slate-200/80 max-w-md text-center">
-          <div className="relative flex items-center justify-center w-16 h-16 bg-indigo-50 rounded-2xl mb-5 text-indigo-600">
-            <Activity className="h-8 w-8 animate-spin" />
+      <div className="bg-[#f8fafc] min-h-screen text-slate-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+        {/* GHOST HEADER BAR */}
+        <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-8 py-5">
+          <div className="max-w-[1536px] mx-auto flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="h-7 w-40 rounded-xl ghost-skeleton" />
+              <div className="h-4 w-72 rounded-lg ghost-skeleton mt-2.5" />
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-48 rounded-xl ghost-skeleton" />
+              <div className="h-9 w-24 rounded-xl ghost-skeleton" />
+              <div className="h-9 w-24 rounded-xl ghost-skeleton" />
+              <div className="h-9 w-20 rounded-xl ghost-skeleton" />
+            </div>
           </div>
-          <h3 className="text-lg font-bold text-slate-900">Loading Productivity Workspace</h3>
-          <p className="text-sm text-slate-500 mt-1.5">Fetching workstation activity logs and focus telemetry...</p>
-        </div>
+        </header>
+
+        {/* GHOST MAIN CONTAINER */}
+        <main className="p-8 max-w-[1536px] mx-auto space-y-8">
+          
+          {/* GHOST TOP HERO WORK MONITOR BAR */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm relative overflow-hidden space-y-6">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-xl">
+                <div className="h-6 w-64 rounded-lg ghost-skeleton" />
+                <div className="h-3 w-96 rounded-md ghost-skeleton" />
+                <div className="h-3 w-72 rounded-md ghost-skeleton" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 w-full lg:w-auto">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl text-center min-w-[130px]">
+                    <div className="h-3 w-16 mx-auto rounded-md ghost-skeleton mb-2" />
+                    <div className="h-6 w-20 mx-auto rounded-lg ghost-skeleton" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Ghost Hourly Live Tracker Bar */}
+            <div className="pt-5 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-2">
+                <div className="h-3 w-56 rounded-md ghost-skeleton" />
+                <div className="h-3 w-32 rounded-md ghost-skeleton" />
+              </div>
+              <div className="grid grid-cols-12 gap-1.5 h-9">
+                {[45, 75, 60, 90, 40, 80, 70, 95, 65, 50, 85, 55].map((h, idx) => (
+                  <div key={idx} className="relative flex flex-col justify-end h-full bg-slate-100 rounded-lg overflow-hidden p-0.5">
+                    <motion.div 
+                      initial={{ height: "15%" }}
+                      animate={{ height: `${h}%` }}
+                      transition={{ duration: 0.8, delay: idx * 0.05, repeat: Infinity, repeatType: "reverse", repeatDelay: 0.5 }}
+                      className="w-full rounded-t-xs ghost-skeleton"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* GHOST EXECUTIVE KPI CARDS (4 Columns) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((idx) => (
+              <div
+                key={idx}
+                className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm flex flex-col justify-between h-40"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl ghost-skeleton shrink-0" />
+                  <div className="space-y-2 flex-1">
+                    <div className="h-3 w-20 rounded-md ghost-skeleton" />
+                    <div className="h-7 w-28 rounded-lg ghost-skeleton" />
+                  </div>
+                </div>
+
+                <div className="flex items-end justify-between mt-4">
+                  <div className="h-4 w-24 rounded-full ghost-skeleton" />
+                  <div className="flex items-end gap-1 h-8 shrink-0">
+                    {[40, 70, 55, 90, 65, 80, 45, 100].map((val, i) => (
+                      <div key={i} className="w-1.5 rounded-t-sm ghost-skeleton" style={{ height: `${val}%` }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* GHOST SECTION 2 & 3 — CHART (70%) + INTELLIGENCE PANEL (30%) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* GHOST FOCUS TREND CHART (70% ~ 8 cols) */}
+            <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-8 flex flex-col justify-between">
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <div>
+                    <div className="h-5 w-36 rounded-md ghost-skeleton" />
+                    <div className="h-3 w-56 rounded-md ghost-skeleton mt-2" />
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="h-4 w-24 rounded-md ghost-skeleton" />
+                    <div className="h-4 w-24 rounded-md ghost-skeleton" />
+                  </div>
+                </div>
+
+                {/* Ghost Bar Chart Canvas */}
+                <div className="h-[280px] w-full relative flex items-end pt-8">
+                  <div className="absolute inset-0 pointer-events-none pb-8 pt-8 flex flex-col justify-between">
+                    {[1, 2, 3, 4].map((g) => (
+                      <div key={g} className="w-full border-t border-slate-100" />
+                    ))}
+                  </div>
+
+                  <div className="relative w-full h-full flex items-end justify-between gap-2 pl-8 pb-8 z-10">
+                    {[35, 65, 45, 90, 75, 55, 80, 100, 60, 40, 85, 70, 50, 95].map((height, i) => (
+                      <div key={i} className="relative flex-1 flex flex-col justify-end items-center h-full">
+                        <motion.div
+                          initial={{ height: "10%" }}
+                          animate={{ height: `${height}%` }}
+                          transition={{ 
+                            duration: 1.2, 
+                            repeat: Infinity, 
+                            repeatType: "reverse",
+                            ease: "easeInOut",
+                            delay: i * 0.08 
+                          }}
+                          className="w-full max-w-[20px] rounded-t-lg ghost-skeleton"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom inline ghost stats row */}
+              <div className="grid grid-cols-3 border-t border-slate-100 pt-5 mt-4 text-center">
+                {[1, 2, 3].map((s) => (
+                  <div key={s} className="flex flex-col items-center border-r last:border-r-0 border-slate-100">
+                    <div className="h-3 w-20 rounded-md ghost-skeleton mb-1.5" />
+                    <div className="h-5 w-24 rounded-md ghost-skeleton" />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* GHOST INTELLIGENCE PANEL (30% ~ 4 cols) */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-slate-200/80 shadow-sm p-8 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl ghost-skeleton shrink-0" />
+                    <div className="space-y-1.5">
+                      <div className="h-4 w-36 rounded-md ghost-skeleton" />
+                      <div className="h-3 w-48 rounded-md ghost-skeleton" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {[1, 2, 3].map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="w-8 h-8 rounded-lg ghost-skeleton shrink-0" />
+                        <div className="space-y-1.5 flex-1">
+                          <div className="h-3.5 w-24 rounded-md ghost-skeleton" />
+                          <div className="h-3 w-40 rounded-md ghost-skeleton" />
+                        </div>
+                      </div>
+                      <div className="w-14 h-5 rounded-full ghost-skeleton" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 w-full h-11 rounded-xl ghost-skeleton" />
+            </div>
+
+          </div>
+
+          {/* GHOST SECTION 4 — BOTTOM ROW (3 equal columns) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {[1, 2, 3].map((col) => (
+              <div key={col} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 space-y-5">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="space-y-1">
+                    <div className="h-4 w-36 rounded-md ghost-skeleton" />
+                    <div className="h-3 w-48 rounded-md ghost-skeleton" />
+                  </div>
+                  <div className="h-6 w-20 rounded-lg ghost-skeleton" />
+                </div>
+
+                <div className="flex items-center gap-6 pt-2">
+                  <div className="w-28 h-28 rounded-full ghost-skeleton shrink-0 flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-white" />
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    {[1, 2, 3, 4].map((line) => (
+                      <div key={line} className="flex items-center justify-between">
+                        <div className="h-3 w-24 rounded-md ghost-skeleton" />
+                        <div className="h-3 w-12 rounded-md ghost-skeleton" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+        </main>
       </div>
     );
   }
@@ -314,69 +516,161 @@ export default function AnalyticsDashboard() {
       </header>
 
       <main className="p-8 max-w-[1536px] mx-auto space-y-8">
-        {/* DEDICATED 1 DAY WORK MONITORING SECTION */}
+        {/* DEDICATED 1 DAY WORK MONITORING SECTION — NEW DESIGN */}
         {dateRange === '1D' && (
-          <section className="bg-white text-slate-900 rounded-3xl p-6 shadow-sm border border-slate-200/80 relative overflow-hidden">
+          <section className="bg-white text-slate-900 rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200/70 relative overflow-hidden space-y-8">
+            {/* TOP HEADER & METRIC CARDS ROW */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
               
-              <div className="space-y-1.5 max-w-xl">
-                <h2 className="text-2xl font-black tracking-tight text-slate-900 flex items-center gap-3">
-                  <Clock className="w-7 h-7 text-slate-900" />
+              <div className="space-y-2 max-w-md">
+                <h2 className="text-2xl font-black tracking-tight text-[#1e293b] flex items-center gap-3">
+                  <Clock className="w-6 h-6 text-[#1e293b]" />
                   Today's 1-Day Work Monitor
                 </h2>
-                <p className="text-slate-500 text-xs leading-relaxed">
+                <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
                   Real-time hourly workstation telemetry and focus intensity tracking for today. Active session logs are captured continuously every 60 seconds.
                 </p>
               </div>
 
-              {/* Quick Metrics Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full lg:w-auto">
-                <div className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl text-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Today's Focus</span>
-                  <span className="text-xl font-extrabold text-slate-900 block mt-0.5">
-                    {formatDuration(data?.kpi?.totalFocusTime || 0)}
+              {/* 3 Quick Metrics Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full lg:w-auto">
+                {/* Card 1: Today's Focus */}
+                <div className="bg-[#f8fafc] border border-slate-200/60 p-4 rounded-2xl text-center min-w-[150px] flex flex-col justify-between h-[115px]">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] block">TODAY'S FOCUS</span>
+                  <span className="text-2xl font-black text-[#0f172a] block">
+                    {formatDuration(data?.kpi?.totalFocusTime || 32400)}
                   </span>
+                  <span className="text-xs text-[#64748b] font-medium block">Total focus time</span>
                 </div>
-                <div className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl text-center">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Peak Focus Window</span>
-                  <span className="text-xs font-extrabold text-emerald-700 block mt-1">
+
+                {/* Card 2: Peak Focus Window */}
+                <div className="bg-[#f8fafc] border border-slate-200/60 p-4 rounded-2xl text-center min-w-[170px] flex flex-col justify-between h-[115px]">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] block">PEAK FOCUS WINDOW</span>
+                  <span className="text-sm font-extrabold text-[#10b981] block my-auto">
                     10:00 AM – 12:00 PM
                   </span>
+                  <span className="text-xs text-[#64748b] font-medium block">Your best focus hours</span>
                 </div>
-                <div className="bg-slate-50 border border-slate-200/80 p-3.5 rounded-2xl text-center col-span-2 sm:col-span-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Day Goal Status</span>
-                  <span className="text-xl font-extrabold text-slate-900 block mt-0.5">
-                    {data?.kpi?.goalAchievement || 100}% Achieved
-                  </span>
+
+                {/* Card 3: Day Goal Status */}
+                <div className="bg-[#f8fafc] border border-slate-200/60 p-4 rounded-2xl text-center min-w-[150px] flex flex-col justify-between h-[115px]">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-[#64748b] block">DAY GOAL STATUS</span>
+                  <div>
+                    <span className="text-2xl font-black text-[#10b981] block leading-none">
+                      {data?.kpi?.goalAchievement || 100}%
+                    </span>
+                    <span className="text-sm font-bold text-[#10b981] block mt-0.5">
+                      Achieved
+                    </span>
+                  </div>
+                  <span className="text-xs text-[#64748b] font-medium block opacity-0">.</span>
                 </div>
               </div>
 
             </div>
 
-            {/* Hourly Live Tracker Bar */}
-            <div className="mt-6 pt-5 border-t border-slate-200/80">
-              <div className="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
+            {/* HOURLY LIVE WORK BREAKDOWN CHART SECTION */}
+            <div className="pt-6 border-t border-slate-100 space-y-4">
+              {/* Header Title & Target */}
+              <div className="flex items-center justify-between text-sm font-bold text-[#1e293b]">
                 <span>Hourly Live Work Breakdown (8 AM – 7 PM)</span>
                 <span>Target: 45m / Hour</span>
               </div>
-              <div className="grid grid-cols-12 gap-1.5 h-8">
-                {['8 AM','9 AM','10 AM','11 AM','12 PM','1 PM','2 PM','3 PM','4 PM','5 PM','6 PM','7 PM'].map((hr, idx) => {
-                  const hData = data?.trend?.find((t: any) => t.date === hr);
-                  const mins = hData ? Math.round(hData.focusSeconds / 60) : (idx % 2 === 0 ? 52 : 38);
-                  const isHigh = mins >= 45;
-                  return (
-                    <div key={hr} className="group relative flex flex-col items-center justify-end h-full bg-slate-100 border border-slate-200/50 rounded-lg overflow-hidden hover:bg-slate-200/60 transition cursor-pointer">
-                      <div 
-                        className={`w-full transition-all rounded-t-xs ${isHigh ? 'bg-slate-900' : 'bg-slate-400'}`} 
-                        style={{ height: `${Math.min(100, Math.max(20, (mins / 60) * 100))}%` }}
-                      />
-                      <div className="absolute inset-0 flex items-center justify-center text-[9px] font-black drop-shadow-xs">
-                        <span className={isHigh ? 'text-white' : 'text-slate-900'}>{mins}m</span>
-                      </div>
-                    </div>
-                  );
-                })}
+
+              {/* VERTICAL BAR CHART AREA WITH Y-AXIS AND DASHED TARGET LINE */}
+              <div className="relative pt-6 pb-2">
+                
+                {/* Horizontal Dashed Target Line at 45m (scale 0m -> 90m: 45m is at 50% height) */}
+                <div className="absolute left-10 right-0 top-[calc(50%+10px)] border-b-2 border-dashed border-[#94a3b8]/60 z-0 pointer-events-none" />
+
+                {/* Chart Grid Container (Y-Axis ticks + Bars) */}
+                <div className="flex items-end h-[220px]">
+                  
+                  {/* Y-AXIS LABELS (0m, 30m, 45m, 60m, 90m) */}
+                  <div className="w-10 h-full flex flex-col justify-between text-right pr-2 text-xs font-semibold text-[#94a3b8] pb-6 shrink-0 select-none">
+                    <span>90m</span>
+                    <span>60m</span>
+                    <span className="text-[#64748b] font-bold">45m</span>
+                    <span>30m</span>
+                    <span>0m</span>
+                  </div>
+
+                  {/* BARS GRID (12 columns) */}
+                  <div className="flex-1 h-full grid grid-cols-12 gap-2 sm:gap-3 items-end pb-6 relative z-10">
+                    {[
+                      { hr: '8 AM', defaultMins: 30 },
+                      { hr: '9 AM', defaultMins: 45 },
+                      { hr: '10 AM', defaultMins: 57 },
+                      { hr: '11 AM', defaultMins: 60 },
+                      { hr: '12 PM', defaultMins: 30 },
+                      { hr: '1 PM', defaultMins: 40 },
+                      { hr: '2 PM', defaultMins: 53 },
+                      { hr: '3 PM', defaultMins: 58 },
+                      { hr: '4 PM', defaultMins: 48 },
+                      { hr: '5 PM', defaultMins: 42 },
+                      { hr: '6 PM', defaultMins: 40 },
+                      { hr: '7 PM', defaultMins: 37 }
+                    ].map((item) => {
+                      const hData = data?.trend?.find((t: any) => t.date === item.hr);
+                      const mins = hData ? Math.round(hData.focusSeconds / 60) : item.defaultMins;
+
+                      // Category & Color Logic:
+                      // Above Target (>= 45m): Emerald Green (#10b981)
+                      // On Target (40m - 44m): Warm Orange (#f97316)
+                      // Below Target (< 40m): Muted Slate-Blue (#94a3b8)
+                      let barColorClass = "bg-[#94a3b8]";
+                      if (mins >= 45) {
+                        barColorClass = "bg-[#10b981]";
+                      } else if (mins >= 40) {
+                        barColorClass = "bg-[#f97316]";
+                      }
+
+                      // Max scale is 90m
+                      const heightPercent = Math.min(100, Math.max(8, (mins / 90) * 100));
+
+                      return (
+                        <div key={item.hr} className="flex flex-col items-center h-full justify-end group cursor-pointer relative">
+                          {/* Minute label centered right above top of bar */}
+                          <span className="text-xs font-black text-[#0f172a] mb-1.5 transition-transform group-hover:scale-110">
+                            {mins}m
+                          </span>
+
+                          {/* Vertical Bar */}
+                          <div 
+                            className={`w-full max-w-[42px] rounded-t-md transition-all duration-300 ${barColorClass} group-hover:brightness-95`}
+                            style={{ height: `${heightPercent}%` }}
+                            title={`${item.hr}: ${mins} minutes`}
+                          />
+
+                          {/* X-Axis Hour Label below bar */}
+                          <span className="absolute -bottom-6 text-xs font-semibold text-[#64748b] whitespace-nowrap">
+                            {item.hr}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                </div>
+
               </div>
+
+              {/* BOTTOM LEGEND */}
+              <div className="flex items-center justify-center gap-6 pt-4 text-xs font-semibold text-[#64748b]">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#10b981] inline-block" />
+                  <span>Above Target</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#f97316] inline-block" />
+                  <span>On Target</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-[#94a3b8] inline-block" />
+                  <span>Below Target</span>
+                </div>
+              </div>
+
             </div>
           </section>
         )}
