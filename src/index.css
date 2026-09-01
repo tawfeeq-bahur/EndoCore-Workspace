@@ -12,11 +12,11 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Arctic Slate Canvas Palette (Light Mode) */
-  --bg-app:        #fafafa;
-  --bg-sidebar:    rgba(248, 250, 252, 0.95);
-  --bg-surface:    rgba(255, 255, 255, 0.9);
-  --bg-subtle:     rgba(248, 250, 252, 0.85);
+  /* Clean Pure White Canvas Palette */
+  --bg-app:        #ffffff;
+  --bg-sidebar:    #ffffff;
+  --bg-surface:    #ffffff;
+  --bg-subtle:     #f8fafc;
   --bg-hover:      #f1f5f9;
 
   --border-subtle: #f1f5f9;
@@ -30,10 +30,10 @@
   --text-subtle:   #71717a;
 
   --input-bg:      #ffffff;
-  --card-bg:       rgba(255, 255, 255, 0.88);
-  --panel-bg:      rgba(248, 250, 252, 0.85);
-  --header-bg:     rgba(255, 255, 255, 0.88);
-  --sidebar-bg:    rgba(248, 250, 252, 0.95);
+  --card-bg:       #ffffff;
+  --panel-bg:      #ffffff;
+  --header-bg:     #ffffff;
+  --sidebar-bg:    #ffffff;
 
   --accent-primary: #09090b;
   --accent-indigo:  #4338ca;
@@ -42,35 +42,35 @@
   --accent-rose:    #e11d48;
 }
 
-/* Dark Mode Overrides — Charcoal Glass Aesthetics */
+/* Enforce Pure White Theme (Overriding Dark Mode) */
 .dark, [data-theme="dark"] {
-  --bg-app:        #09090b;
-  --bg-sidebar:    rgba(18, 18, 21, 0.96);
-  --bg-surface:    rgba(24, 24, 27, 0.92);
-  --bg-subtle:     rgba(39, 39, 42, 0.6);
-  --bg-hover:      #27272a;
+  --bg-app:        #ffffff;
+  --bg-sidebar:    #ffffff;
+  --bg-surface:    #ffffff;
+  --bg-subtle:     #f8fafc;
+  --bg-hover:      #f1f5f9;
 
-  --border-subtle: #27272a;
-  --border-main:   #3f3f46;
-  --border-strong: #52525b;
-  --border-active: #f4f4f5;
+  --border-subtle: #f1f5f9;
+  --border-main:   #e2e8f0;
+  --border-strong: #cbd5e1;
+  --border-active: #09090b;
 
-  --text-main:     #f4f4f5;
-  --text-body:     #e4e4e7;
-  --text-muted:    #a1a1aa;
-  --text-subtle:   #a1a1aa;
+  --text-main:     #09090b;
+  --text-body:     #18181b;
+  --text-muted:    #52525b;
+  --text-subtle:   #71717a;
 
-  --input-bg:      #18181b;
-  --card-bg:       rgba(24, 24, 27, 0.9);
-  --panel-bg:      rgba(39, 39, 42, 0.6);
-  --header-bg:     rgba(18, 18, 21, 0.92);
-  --sidebar-bg:    rgba(18, 18, 21, 0.96);
+  --input-bg:      #ffffff;
+  --card-bg:       #ffffff;
+  --panel-bg:      #ffffff;
+  --header-bg:     #ffffff;
+  --sidebar-bg:    #ffffff;
 
-  --accent-primary: #f4f4f5;
-  --accent-indigo:  #818cf8;
-  --accent-emerald: #34d399;
-  --accent-amber:   #fbbf24;
-  --accent-rose:    #f43f5e;
+  --accent-primary: #09090b;
+  --accent-indigo:  #4338ca;
+  --accent-emerald: #059669;
+  --accent-amber:   #d97706;
+  --accent-rose:    #e11d48;
 }
 
 @layer base {

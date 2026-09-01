@@ -42,7 +42,7 @@ export const MobileCompanionShell: React.FC<MobileCompanionShellProps> = ({
   analytics,
   aiInsights,
   connectionsData,
-  themeMode = "dark",
+  themeMode = "light",
   electronTracking = false,
   onToggleTheme,
   onSignOut,

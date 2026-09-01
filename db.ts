@@ -6,6 +6,7 @@ import pg from "pg";
 
 const rawUrl = process.env.DATABASE_URL || "";
 const dbUrl = rawUrl.startsWith("file:") ? rawUrl : "file:./dev.db";
+process.env.DATABASE_URL = dbUrl;
 
 const adapter = new PrismaBetterSqlite3({ url: dbUrl });
 export const prisma = new PrismaClient({ adapter });

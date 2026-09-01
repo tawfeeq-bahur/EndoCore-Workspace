@@ -145,14 +145,7 @@ export default function App() {
   const [pomodoroMode, setPomodoroMode] = useState<"focus" | "break">("focus");
   const [pomodoroSessionCount, setPomodoroSessionCount] = useState<number>(0);
   const [distractionsManualCount, setDistractionsManualCount] = useState<number>(0);
-  const [themeMode, setThemeMode] = useState<"light" | "dark">(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("endocore_theme") as "light" | "dark";
-      if (saved) return saved;
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
-    }
-    return "light";
-  });
+  const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
 
   // Server-state synchronize mirrors
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -1757,19 +1750,16 @@ export default function App() {
   };
 
   const handleManualThemeChange = (newTheme: "dark" | "light") => {
-    setThemeMode(newTheme);
-    localStorage.setItem("endocore_theme", newTheme);
-    triggerToast(`Switched to ${newTheme === "dark" ? "Dark Glass" : "Light Slate"} Theme`);
+    setThemeMode("light");
+    localStorage.setItem("endocore_theme", "light");
+    document.documentElement.classList.remove("dark");
+    document.documentElement.setAttribute("data-theme", "light");
   };
 
   useEffect(() => {
-    if (themeMode === "dark") {
-      document.documentElement.classList.add("dark");
-      document.documentElement.setAttribute("data-theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      document.documentElement.setAttribute("data-theme", "light");
-    }
+    localStorage.setItem("endocore_theme", "light");
+    document.documentElement.classList.remove("dark");
+    document.documentElement.setAttribute("data-theme", "light");
   }, [themeMode]);
 
   // Dynamic status-colored indicator dots for editorial aesthetics
@@ -2452,14 +2442,6 @@ export default function App() {
               )}
 
               <button
-                onClick={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
-                className="p-2 text-black hover:bg-slate-200/60 rounded-xl transition-colors cursor-pointer shrink-0"
-                title={`Switch to ${themeMode === "dark" ? "Light Slate" : "Dark Glass"} Theme`}
-              >
-                {themeMode === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
-              </button>
-
-              <button
                 onClick={handleLogout}
                 className="p-2 text-rose-600 hover:bg-rose-100/80 rounded-xl transition-colors cursor-pointer shrink-0"
                 title="Sign Out of Workspace"
@@ -2482,13 +2464,6 @@ export default function App() {
                   />
                 </button>
               )}
-              <button
-                onClick={() => handleManualThemeChange(themeMode === "dark" ? "light" : "dark")}
-                className="p-1.5 text-[#71717a] hover:text-[#09090b] rounded-lg hover:bg-stone-200/60 transition-colors cursor-pointer"
-                title={`Switch to ${themeMode === "dark" ? "Light Slate" : "Dark Glass"} Theme`}
-              >
-                {themeMode === "dark" ? <Sun className="h-4 w-4 text-amber-400" /> : <Moon className="h-4 w-4 text-slate-700" />}
-              </button>
               <button
                 onClick={handleLogout}
                 className="p-1.5 text-rose-600 hover:bg-rose-100/80 rounded-lg transition-colors cursor-pointer"

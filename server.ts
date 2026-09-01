@@ -5455,6 +5455,16 @@ app.get("/api/analytics/v2/day/:date", authenticateToken, async (req: any, res) 
 
 // Configure Vite middleware and SPA routing
 async function startServer() {
+  // Ensure database schema tables exist before seeding or processing requests
+  try {
+    const { execSync } = await import("child_process");
+    console.log("🔄 Ensuring Prisma database schema is up-to-date...");
+    execSync("npx prisma db push --accept-data-loss --skip-generate", { stdio: "inherit" });
+    console.log("✅ Prisma database schema synchronized successfully.");
+  } catch (dbPushErr) {
+    console.warn("⚠️ Database schema auto-migration warning:", dbPushErr);
+  }
+
   // Ensure database is populated with default seed records
   try {
     await seedDatabase();
